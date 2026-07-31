@@ -28,10 +28,8 @@
   <div id="game-container"></div>
   <script>
     // ============================================================
-    //  ГРИБНОЙ СУМРАК — Spore Survivor  (FIXED)
+    //  ГРИБНОЙ СУМРАК — Spore Survivor  (FINAL STABLE)
     //  Vampire Survivors-like, top-down, рогалик
-    //  ПК: WASD/стрелки — движение, мышь — прицел (авто-огонь)
-    //  Телефон: виртуальный джойстик слева, авто-прицел
     // ============================================================
 
     const GAMEW = 960;
@@ -40,9 +38,6 @@
     const WORLDH = 2000;
     const IS_TOUCH = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 
-    // ============================================================
-    //  ПАЛИТРА
-    // ============================================================
     const COLORS = {
       grass: 0x1a3d2e,
       mushroom: 0x6b2d5c,
@@ -66,9 +61,7 @@
       black: 0x000000,
     };
 
-    // ============================================================
-    //  КЛАСС ИГРОКА
-    // ============================================================
+    // ---------- PLAYER ----------
     class Player extends Phaser.Physics.Arcade.Sprite {
       constructor(scene, x, y) {
         super(scene, x, y, 'hero');
@@ -77,7 +70,6 @@
         this.setCollideWorldBounds(true);
         this.setDepth(10);
         this.setCircle(14);
-
         this.speed = 200;
         this.maxHp = 100;
         this.hp = 100;
@@ -136,9 +128,7 @@
       }
     }
 
-    // ============================================================
-    //  КЛАСС ВРАГА
-    // ============================================================
+    // ---------- ENEMY ----------
     class Enemy extends Phaser.Physics.Arcade.Sprite {
       constructor(scene, x, y) {
         super(scene, x, y, 'enemy');
@@ -151,7 +141,6 @@
         this.setActive(true).setVisible(true);
         this.body.enable = true;
         this.body.reset(x, y);
-
         this.hp = cfg.hp;
         this.maxHp = cfg.hp;
         this.speedVal = cfg.speed;
@@ -163,14 +152,12 @@
         this.setTint(cfg.isBig ? COLORS.enemyBig : COLORS.mushroom);
         this._bloodied = false;
         this.body.setCircle(14);
-
         this.poisoned = false;
         this.poisonTimer = 0;
         this.growing = false;
         this.growTimer = 0;
         this.zigzagTimer = 0;
         this.zigzagDir = 1;
-
         if (this.type === 'mushroom_wolf') {
           this.setTexture('wolf');
           this.body.setCircle(12);
@@ -192,6 +179,12 @@
 
       update(time, delta, player, sporeLevel) {
         if (!this.active) return;
+
+        // Если HP <= 0 – удаляем (защита от "мёртвых" врагов)
+        if (this.hp <= 0) {
+          this.scene.killEnemy(this);
+          return;
+        }
 
         if (this.poisoned && this.poisonTimer > 0) {
           this.poisonTimer -= delta;
@@ -263,9 +256,7 @@
       }
     }
 
-    // ============================================================
-    //  КЛАСС СНАРЯДА
-    // ============================================================
+    // ---------- PROJECTILE ----------
     class Projectile extends Phaser.Physics.Arcade.Sprite {
       constructor(scene, x, y) {
         super(scene, x, y, 'proj');
@@ -277,7 +268,6 @@
         this.setActive(true).setVisible(true);
         this.body.enable = true;
         this.body.reset(x, y);
-
         this.damage = damage;
         this.isExplosive = isExplosive;
         this.isPoison = isPoison;
@@ -295,25 +285,20 @@
       }
     }
 
-    // ============================================================
-    //  СИСТЕМА СПОР
-    // ============================================================
+    // ---------- SPORE SYSTEM ----------
     class SporeSystem {
       constructor(scene) {
         this.scene = scene;
         this.xp = 0;
         this.level = 1;
         this.xpToNext = 8;
-
         this.spores = scene.physics.add.group({ maxSize: 400 });
         this.antidotes = scene.physics.add.group({ maxSize: 50 });
-
         scene.physics.add.overlap(scene.player, this.spores, (player, spore) => {
           if (!spore.active) return;
           spore.disableBody(true, true);
           this.addXp(spore.xpValue);
         });
-
         scene.physics.add.overlap(scene.player, this.antidotes, (player, antidote) => {
           if (!antidote.active) return;
           antidote.disableBody(true, true);
@@ -399,9 +384,7 @@
       }
     }
 
-    // ============================================================
-    //  МЕНЕДЖЕР УЛУЧШЕНИЙ
-    // ============================================================
+    // ---------- UPGRADE MANAGER ----------
     class UpgradeManager {
       constructor(scene) {
         this.scene = scene;
@@ -437,18 +420,14 @@
         const s = this.scene;
         s.isPaused = true;
         s.physics.world.pause();
-
         const W = s.scale.width,
           H = s.scale.height;
         this.container = s.add.container(0, 0).setScrollFactor(0).setDepth(1000);
-
         const dark = s.add.rectangle(W / 2, H / 2, W, H, COLORS.black, 0.8);
         this.container.add(dark);
-
         const vignette = s.add.rectangle(W / 2, H / 2, W - 20, H - 20).setStrokeStyle(4, COLORS.mushroom, 0.6);
         this.container.add(vignette);
         s.tweens.add({ targets: vignette, alpha: { from: 0.3, to: 0.8 }, duration: 1000, yoyo: true, repeat: -1 });
-
         const title = s.add.text(W / 2, 60, '⬆ УРОВЕНЬ ' + s.sporeSystem.level + '!', {
           fontFamily: 'Arial',
           fontSize: '32px',
@@ -456,58 +435,48 @@
           fontStyle: 'bold'
         }).setOrigin(0.5);
         this.container.add(title);
-
         const subtitle = s.add.text(W / 2, 100, 'Выбери улучшение:', {
           fontFamily: 'Arial',
           fontSize: '20px',
           color: '#99ddff'
         }).setOrigin(0.5);
         this.container.add(subtitle);
-
         const cats = ['extract', 'mutation', 'gear'];
         const choices = cats.map(cat => {
           const pool = this.upgrades.filter(u => u.cat === cat);
           return Phaser.Utils.Array.GetRandom(pool);
         });
-
         choices.forEach((up, i) => {
           const bx = W / 2;
           const by = 170 + i * 115;
-
           const btn = s.add.rectangle(bx, by, 460, 100, COLORS.uiBg, 1)
             .setStrokeStyle(3, COLORS.uiBorder)
             .setInteractive({ useHandCursor: true });
-
           const nameText = s.add.text(bx, by - 22, up.name, {
             fontFamily: 'Arial',
             fontSize: '22px',
             color: '#ffffff',
             fontStyle: 'bold'
           }).setOrigin(0.5);
-
           const catText = s.add.text(bx - 200, by - 22, up.cat === 'extract' ? '[Экстракт]' : up.cat === 'mutation' ?
             '[Мутация]' : '[Экипировка]', {
             fontFamily: 'Arial',
             fontSize: '11px',
             color: up.cat === 'extract' ? '#00d4aa' : up.cat === 'mutation' ? '#ff9933' : '#5599ff'
           }).setOrigin(0, 0.5);
-
           const descText = s.add.text(bx, by + 18, up.desc, {
             fontFamily: 'Arial',
             fontSize: '16px',
             color: '#99ddff'
           }).setOrigin(0.5);
-
           btn.on('pointerover', () => { btn.setFillStyle(0x2e5a72);
             btn.setStrokeStyle(3, COLORS.biolum); });
           btn.on('pointerout', () => { btn.setFillStyle(COLORS.uiBg);
             btn.setStrokeStyle(3, COLORS.uiBorder); });
-
           btn.on('pointerdown', () => {
             up.apply(s.player);
             this.hide();
           });
-
           this.container.add([btn, nameText, catText, descText]);
         });
       }
@@ -520,9 +489,7 @@
       }
     }
 
-    // ============================================================
-    //  МЕНЕДЖЕР ВОЛН
-    // ============================================================
+    // ---------- WAVE MANAGER ----------
     class WaveManager {
       constructor(scene) {
         this.scene = scene;
@@ -546,12 +513,10 @@
         const p = s.player;
         let count = 5 + Math.floor(this.wave * 2);
         const isBossWave = this.wave % 5 === 0 && this.wave > 0;
-
         if (isBossWave) {
           this.spawnBoss();
           count = Math.floor(count * 0.5);
         }
-
         for (let i = 0; i < count; i++) {
           const angle = Math.random() * Math.PI * 2;
           const dist = 500 + Math.random() * 300;
@@ -559,16 +524,13 @@
           let y = p.y + Math.sin(angle) * dist;
           x = Phaser.Math.Clamp(x, 50, WORLDW - 50);
           y = Phaser.Math.Clamp(y, 50, WORLDH - 50);
-
           const isBig = Math.random() < 0.1 + this.wave * 0.02;
           const typeRoll = Math.random();
           let type = 'spore_bearer';
-
           if (this.wave >= 3 && typeRoll < 0.2) type = 'mushroom_wolf';
           else if (this.wave >= 5 && typeRoll < 0.35) type = 'fruit_body';
           else if (this.wave >= 7 && typeRoll < 0.45) type = 'tentacle';
           else if (this.wave >= 4 && typeRoll < 0.55) type = 'spore_bat';
-
           const cfg = {
             hp: (20 + this.wave * 6) * (isBig ? 5 : 1) * (type === 'fruit_body' ? 3 : 1),
             speed: Math.min(140, 60 + this.wave * 3 + (type === 'mushroom_wolf' ? 40 : 0) + (type === 'spore_bat' ?
@@ -578,7 +540,6 @@
             isBig: isBig,
             type: type
           };
-
           s.spawnEnemy(x, y, cfg);
         }
       }
@@ -590,7 +551,6 @@
         const x = p.x + Math.cos(angle) * 400;
         const y = p.y + Math.sin(angle) * 400;
         const bossType = (this.wave / 5) % 2 === 1 ? 'mother_cap' : 'mycelium_heart';
-
         const cfg = {
           hp: 500 + this.wave * 100,
           speed: bossType === 'mother_cap' ? 30 : 0,
@@ -599,15 +559,12 @@
           isBig: true,
           type: bossType
         };
-
         s.spawnEnemy(x, y, cfg);
         s.showBossWarning(bossType);
       }
     }
 
-    // ============================================================
-    //  ГЛАВНАЯ СЦЕНА  (ИСПРАВЛЕННАЯ)
-    // ============================================================
+    // ---------- MAIN SCENE ----------
     class GameScene extends Phaser.Scene {
       constructor() {
         super({ key: 'GameScene' });
@@ -615,34 +572,28 @@
 
       preload() {
         const gfx = this.make.graphics();
-
         gfx.clear();
         gfx.fillStyle(COLORS.hero, 1);
         gfx.fillCircle(16, 16, 14);
         gfx.lineStyle(2, COLORS.biolum, 1);
         gfx.strokeCircle(16, 16, 14);
         gfx.generateTexture('hero', 32, 32);
-
         gfx.clear();
         gfx.fillStyle(COLORS.mushroom, 1);
         gfx.fillCircle(16, 16, 14);
         gfx.generateTexture('enemy', 32, 32);
-
         gfx.clear();
         gfx.fillStyle(COLORS.mushroom, 1);
         gfx.fillRect(4, 4, 24, 24);
         gfx.generateTexture('wolf', 32, 32);
-
         gfx.clear();
         gfx.fillStyle(COLORS.mushroom, 1);
         gfx.fillCircle(24, 24, 22);
         gfx.generateTexture('fruit', 48, 48);
-
         gfx.clear();
         gfx.fillStyle(COLORS.toxic, 1);
         gfx.fillCircle(8, 8, 8);
         gfx.generateTexture('tentacle', 16, 16);
-
         gfx.clear();
         gfx.fillStyle(COLORS.mushroom, 1);
         gfx.beginPath();
@@ -652,17 +603,14 @@
         gfx.closePath();
         gfx.fillPath();
         gfx.generateTexture('bat', 32, 32);
-
         gfx.clear();
         gfx.fillStyle(COLORS.projectile, 1);
         gfx.fillCircle(6, 6, 5);
         gfx.generateTexture('proj', 12, 12);
-
         gfx.clear();
         gfx.fillStyle(COLORS.xpBar, 1);
         gfx.fillCircle(8, 8, 6);
         gfx.generateTexture('spore', 16, 16);
-
         gfx.clear();
         gfx.fillStyle(COLORS.antidote, 1);
         gfx.fillCircle(10, 10, 8);
@@ -670,12 +618,10 @@
         gfx.fillRect(8, 4, 4, 12);
         gfx.fillRect(4, 8, 12, 4);
         gfx.generateTexture('antidote', 20, 20);
-
         gfx.clear();
         gfx.fillStyle(COLORS.biolum, 1);
         gfx.fillCircle(2, 2, 2);
         gfx.generateTexture('particle', 4, 4);
-
         gfx.clear();
         gfx.fillStyle(COLORS.grass, 1);
         gfx.fillRect(0, 0, 64, 64);
@@ -687,7 +633,6 @@
           gfx.strokePath();
         }
         gfx.generateTexture('grass', 64, 64);
-
         gfx.clear();
         gfx.fillStyle(COLORS.toxic, 0.6);
         gfx.fillCircle(32, 32, 28);
@@ -698,9 +643,7 @@
         this.isPaused = false;
         this.gameOver = false;
         this.timeSurvived = 0;
-
         this.add.tileSprite(WORLDW / 2, WORLDH / 2, WORLDW, WORLDH, 'grass');
-
         for (let i = 0; i < 15; i++) {
           const x = Phaser.Math.Between(100, WORLDW - 100);
           const y = Phaser.Math.Between(100, WORLDH - 100);
@@ -708,9 +651,7 @@
           this.tweens.add({ targets: pool, alpha: { from: 0.3, to: 0.6 }, duration: 2000 + Math.random() * 2000,
             yoyo: true, repeat: -1 });
         }
-
         this.player = new Player(this, WORLDW / 2, WORLDH / 2);
-
         this.enemies = this.physics.add.group({ maxSize: 200, classType: Enemy });
         this.projectiles = this.physics.add.group({ maxSize: 100, classType: Projectile });
         this.sporeSystem = new SporeSystem(this);
@@ -724,7 +665,6 @@
           quantity: 3,
           emitting: false
         });
-
         this.deathFx = this.add.particles(0, 0, 'particle', {
           speed: { min: 30, max: 100 },
           scale: { start: 1.5, end: 0 },
@@ -733,7 +673,6 @@
           tint: COLORS.mushroom,
           emitting: false
         });
-
         this.boomFx = this.add.particles(0, 0, 'particle', {
           speed: { min: 50, max: 200 },
           scale: { start: 2, end: 0 },
@@ -742,7 +681,6 @@
           tint: COLORS.toxic,
           emitting: false
         });
-
         this.healFx = this.add.particles(0, 0, 'particle', {
           speed: { min: 20, max: 60 },
           scale: { start: 1, end: 0 },
@@ -766,7 +704,6 @@
           left: Phaser.Input.Keyboard.KeyCodes.A,
           right: Phaser.Input.Keyboard.KeyCodes.D
         });
-
         this.input.on('pointermove', pointer => {
           this.mouseX = pointer.worldX;
           this.mouseY = pointer.worldY;
@@ -788,7 +725,6 @@
         false);
         this.joyThumb = this.add.circle(100, H - 100, 25, 0x888888, 0.8).setScrollFactor(0).setDepth(101).setVisible(
           false);
-
         this.input.on('pointerdown', p => {
           if (p.x > W / 2) return;
           this.joy.active = true;
@@ -800,7 +736,6 @@
           this.joyBase.setPosition(p.x, p.y).setVisible(true);
           this.joyThumb.setPosition(p.x, p.y).setVisible(true);
         });
-
         this.input.on('pointermove', p => {
           if (!this.joy.active || p.id !== this.joy.id) return;
           let dx = p.x - this.joy.baseX;
@@ -813,7 +748,6 @@
           this.joy.vecX = dx / max;
           this.joy.vecY = dy / max;
         });
-
         this.input.on('pointerup', p => {
           if (p.id !== this.joy.id) return;
           this.joy.active = false;
@@ -826,22 +760,18 @@
 
       createUI() {
         const W = this.scale.width;
-
         this.hpBarBg = this.add.rectangle(110, 25, 200, 18, 0x333333).setScrollFactor(0).setDepth(50);
         this.hpBar = this.add.rectangle(110, 25, 200, 18, COLORS.hpBar).setScrollFactor(0).setDepth(51);
         this.hpText = this.add.text(110, 25, 'HP', { fontFamily: 'Arial', fontSize: '12px', color: '#fff' }).setOrigin(
           0.5).setScrollFactor(0).setDepth(52);
-
         this.sporeBarBg = this.add.rectangle(110, 50, 200, 14, 0x333333).setScrollFactor(0).setDepth(50);
         this.sporeBar = this.add.rectangle(110, 50, 0, 14, COLORS.sporeBar).setScrollFactor(0).setDepth(51);
         this.sporeText = this.add.text(110, 50, 'СПОРЫ', { fontFamily: 'Arial', fontSize: '10px', color: '#fff' })
           .setOrigin(0.5).setScrollFactor(0).setDepth(52);
-
         this.xpBarBg = this.add.rectangle(W / 2, this.scale.height - 15, W - 40, 12, 0x333333).setScrollFactor(0)
           .setDepth(50);
         this.xpBar = this.add.rectangle(W / 2, this.scale.height - 15, 0, 12, COLORS.xpBar).setScrollFactor(0)
           .setDepth(51);
-
         this.waveText = this.add.text(W - 20, 20, 'Волна: 0', { fontFamily: 'Arial', fontSize: '18px', color: '#aaffcc',
           fontStyle: 'bold' }).setOrigin(1, 0).setScrollFactor(0).setDepth(50);
         this.timeText = this.add.text(W - 20, 45, 'Время: 0:00', { fontFamily: 'Arial', fontSize: '14px',
@@ -861,7 +791,6 @@
             color: '#aaffcc',
             align: 'center'
           }).setOrigin(0.5).setScrollFactor(0).setDepth(200);
-
         this.tweens.add({ targets: hint, alpha: 0, duration: 4000, onComplete: () => hint.destroy() });
       }
 
@@ -873,7 +802,6 @@
           color: '#ff9933',
           fontStyle: 'bold'
         }).setOrigin(0.5).setScrollFactor(0).setDepth(100);
-
         this.tweens.add({
           targets: banner,
           scale: { from: 0.5, to: 1.2 },
@@ -892,7 +820,6 @@
           color: '#ff3333',
           fontStyle: 'bold'
         }).setOrigin(0.5).setScrollFactor(0).setDepth(100);
-
         this.tweens.add({
           targets: warning,
           alpha: { from: 1, to: 0 },
@@ -903,17 +830,13 @@
         this.cameras.main.shake(500, 0.02);
       }
 
-      // ============================================================
-      //  ИСПРАВЛЕННЫЙ update — используем копию массива врагов
-      // ============================================================
+      // ========== ОСНОВНОЙ ЦИКЛ (исправлен) ==========
       update(time, delta) {
         if (this.isPaused || this.gameOver) return;
-
         this.timeSurvived += delta;
 
         let moveX = 0,
           moveY = 0;
-
         if (IS_TOUCH && this.joy.active) {
           moveX = this.joy.vecX;
           moveY = this.joy.vecY;
@@ -923,12 +846,10 @@
           if (this.cursors.up.isDown || this.wasd.up.isDown) moveY = -1;
           if (this.cursors.down.isDown || this.wasd.down.isDown) moveY = 1;
         }
-
         if (moveX !== 0 && moveY !== 0) {
           moveX *= 0.707;
           moveY *= 0.707;
         }
-
         this.player.update(time, delta, moveX, moveY);
 
         if (this.player.sporeLevel > 75) {
@@ -938,7 +859,7 @@
 
         this.handleShooting(time);
 
-        // ★★★★★ ИСПРАВЛЕНИЕ: КОПИРУЕМ МАССИВ ВРАГОВ ★★★★★
+        // ★★★★★ БЕЗОПАСНАЯ ИТЕРАЦИЯ ПО ВРАГАМ ★★★★★
         const enemiesCopy = this.enemies.getChildren().slice();
         for (let i = 0; i < enemiesCopy.length; i++) {
           const enemy = enemiesCopy[i];
@@ -946,7 +867,7 @@
             enemy.update(time, delta, this.player, this.player.sporeLevel);
           }
         }
-        // ★★★★★ КОНЕЦ ИСПРАВЛЕНИЯ ★★★★★
+        // ★★★★★ КОНЕЦ ★★★★★
 
         this.sporeSystem.update();
         this.waveManager.update(delta);
@@ -963,9 +884,7 @@
 
       handleShooting(time) {
         if (time < this.player.lastShot + this.player.fireRate) return;
-
         let targetX, targetY;
-
         if (IS_TOUCH) {
           let nearest = null;
           let minDist = Infinity;
@@ -986,11 +905,9 @@
           targetX = this.mouseX;
           targetY = this.mouseY;
         }
-
         const angle = Phaser.Math.Angle.Between(this.player.x, this.player.y, targetX, targetY);
         const count = this.player.projCount;
         const spread = count > 1 ? 0.15 : 0;
-
         for (let i = 0; i < count; i++) {
           const projAngle = angle + (i - (count - 1) / 2) * spread;
           const proj = this.projectiles.get(this.player.x, this.player.y);
@@ -999,7 +916,6 @@
               .isExplosive, this.player.isPoison);
           }
         }
-
         this.player.lastShot = time;
       }
 
@@ -1021,7 +937,6 @@
       onProjectileHit(proj, enemy) {
         if (!proj.active || !enemy.active) return;
         proj.disableBody(true, true);
-
         if (proj.isExplosive) {
           this.boomFx.explode(10, enemy.x, enemy.y);
           this.enemies.children.iterate(e => {
@@ -1031,12 +946,10 @@
             }
           });
         }
-
         if (proj.isPoison) {
           enemy.poisoned = true;
           enemy.poisonTimer = 3000;
         }
-
         if (enemy.takeDamage(proj.damage)) {
           this.killEnemy(enemy);
         }
@@ -1051,10 +964,8 @@
       }
 
       killEnemy(enemy) {
-        if (!enemy || !enemy.active) return; // защита
-
+        if (!enemy || !enemy.active) return;
         this.deathFx.explode(10, enemy.x, enemy.y);
-
         if (enemy.type === 'spore_bearer') {
           const cloud = this.add.circle(enemy.x, enemy.y, 35, COLORS.spore, 0.4).setDepth(3);
           this.tweens.add({ targets: cloud, alpha: 0, scale: 1.5, duration: 2000, onComplete: () => cloud.destroy() });
@@ -1064,7 +975,6 @@
             this.time.delayedCall(2000, () => { this.player.speed /= 0.8; });
           }
         }
-
         if (enemy.type === 'fruit_body') {
           this.boomFx.explode(25, enemy.x, enemy.y);
           this.cameras.main.shake(200, 0.01);
@@ -1073,12 +983,10 @@
             if (this.player.takeDamage(15, this.time.now)) this.showGameOver();
           }
         }
-
         if (enemy.type === 'mother_cap' || enemy.type === 'mycelium_heart') {
           this.sporeSystem.drop(enemy.x, enemy.y, 0, true);
           this.sporeSystem.drop(enemy.x, enemy.y, 50);
         }
-
         const xpDrop = enemy.xpValue;
         for (let i = 0; i < xpDrop; i++) {
           this.sporeSystem.drop(
@@ -1087,11 +995,9 @@
             1
           );
         }
-
         if (Math.random() < 0.05) {
           this.sporeSystem.drop(enemy.x, enemy.y, 0, true);
         }
-
         enemy.disableBody(true, true);
       }
 
@@ -1100,19 +1006,15 @@
         const hpPercent = Math.max(0, p.hp / p.maxHp);
         this.hpBar.width = 200 * hpPercent;
         this.hpText.setText(Math.ceil(p.hp) + '/' + p.maxHp);
-
         const sporePercent = p.sporeLevel / 100;
         this.sporeBar.width = 200 * sporePercent;
         this.sporeBar.x = 10 + 200 * sporePercent / 2;
-
         if (p.sporeLevel > 75) this.sporeBar.setFillStyle(0xff3333);
         else if (p.sporeLevel > 50) this.sporeBar.setFillStyle(0xff9933);
         else this.sporeBar.setFillStyle(COLORS.sporeBar);
-
         const xpPercent = this.sporeSystem.xp / this.sporeSystem.xpToNext;
         this.xpBar.width = (this.scale.width - 40) * xpPercent;
         this.xpBar.x = 20 + (this.scale.width - 40) * xpPercent / 2;
-
         this.waveText.setText('Волна: ' + this.waveManager.wave);
         const mins = Math.floor(this.timeSurvived / 60000);
         const secs = Math.floor((this.timeSurvived % 60000) / 1000);
@@ -1123,19 +1025,15 @@
       showGameOver() {
         this.gameOver = true;
         this.physics.world.pause();
-
         const W = this.scale.width,
           H = this.scale.height;
-
         const overlay = this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.85).setScrollFactor(0).setDepth(1000);
-
         const title = this.add.text(W / 2, H / 2 - 80, '☠ ИГРА ОКОНЧЕНА ☠', {
           fontFamily: 'Arial',
           fontSize: '36px',
           color: '#ff3333',
           fontStyle: 'bold'
         }).setOrigin(0.5).setScrollFactor(0).setDepth(1001);
-
         const stats = this.add.text(W / 2, H / 2,
           'Волна: ' + this.waveManager.wave + '\n' +
           'Уровень: ' + this.sporeSystem.level + '\n' +
@@ -1145,18 +1043,15 @@
             color: '#aaffcc',
             align: 'center'
           }).setOrigin(0.5).setScrollFactor(0).setDepth(1001);
-
         const restartBtn = this.add.rectangle(W / 2, H / 2 + 100, 200, 50, 0x1e3a4a)
           .setStrokeStyle(3, COLORS.biolum)
           .setInteractive({ useHandCursor: true })
           .setScrollFactor(0).setDepth(1001);
-
         const restartText = this.add.text(W / 2, H / 2 + 100, 'Перезапустить', {
           fontFamily: 'Arial',
           fontSize: '20px',
           color: '#ffffff'
         }).setOrigin(0.5).setScrollFactor(0).setDepth(1002);
-
         restartBtn.on('pointerover', () => restartBtn.setFillStyle(0x2e5a72));
         restartBtn.on('pointerout', () => restartBtn.setFillStyle(0x1e3a4a));
         restartBtn.on('pointerdown', () => {
