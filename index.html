@@ -28,10 +28,9 @@
   <div id="game-container"></div>
   <script>
     // ============================================================
-    //  ГРИБНОЙ СУМРАК — Spore Survivor  (FINAL STABLE)
+    //  ГРИБНОЙ СУМРАК — Spore Survivor  (FINAL STABLE + DEBUG)
     //  Vampire Survivors-like, top-down, рогалик
-    //  ПК: WASD/стрелки — движение, мышь — прицел (авто-огонь)
-    //  Телефон: виртуальный джойстик слева, авто-прицел
+    //  Если игра зависает — смотри консоль (F12)
     // ============================================================
 
     const GAMEW = 960;
@@ -93,7 +92,7 @@
         this.isRicochet = false;
         this.canDash = false;
         this.xpMult = 1;
-        this._dashKeys = {}; // для отслеживания двойных нажатий
+        this._dashKeys = {};
       }
 
       update(time, delta, moveX, moveY) {
@@ -139,7 +138,7 @@
         this.setDepth(5);
         this.setCircle(14);
         this._bloodied = false;
-        this._hitCooldown = 0; // для предотвращения множественных ударов
+        this._hitCooldown = 0;
       }
 
       spawn(x, y, cfg) {
@@ -191,7 +190,6 @@
         }
         if (this._hitCooldown > 0) this._hitCooldown -= delta;
 
-        // Яд
         if (this.poisoned && this.poisonTimer > 0) {
           this.poisonTimer -= delta;
           this.hp -= 3 * delta / 1000;
@@ -279,7 +277,7 @@
         this.isExplosive = isExplosive;
         this.isPoison = isPoison;
         this.isRicochet = isRicochet;
-        this.ricochetCount = 3; // максимум рикошетов
+        this.ricochetCount = 3;
         this.lifespan = 1500;
         this.scene.physics.velocityFromRotation(angle, speed, this.body.velocity);
         this.setRotation(angle);
@@ -579,9 +577,11 @@
     class GameScene extends Phaser.Scene {
       constructor() {
         super({ key: 'GameScene' });
+        this._frameCount = 0;
       }
 
       preload() {
+        console.log('preload started');
         const gfx = this.make.graphics();
         gfx.clear();
         gfx.fillStyle(COLORS.hero, 1);
@@ -648,9 +648,11 @@
         gfx.fillStyle(COLORS.toxic, 0.6);
         gfx.fillCircle(32, 32, 28);
         gfx.generateTexture('toxic_pool', 64, 64);
+        console.log('preload finished');
       }
 
       create() {
+        console.log('create started');
         this.isPaused = false;
         this.gameOver = false;
         this.timeSurvived = 0;
@@ -728,8 +730,8 @@
         this.createUI();
         this.showHint();
 
-        // Для дэша запоминаем время последнего нажатия клавиш
         this._lastKeyPress = {};
+        console.log('create finished');
       }
 
       setupJoystick() {
@@ -844,8 +846,13 @@
         this.cameras.main.shake(500, 0.02);
       }
 
-      // ---------- ОСНОВНОЙ ЦИКЛ (исправлен) ----------
+      // ---------- ОСНОВНОЙ ЦИКЛ (исправлен с отладкой) ----------
       update(time, delta) {
+        this._frameCount++;
+        if (this._frameCount % 60 === 0) {
+          console.log(`Frame ${this._frameCount}, enemies: ${this.enemies.getChildren().length}`);
+        }
+
         if (this.isPaused || this.gameOver) return;
         this.timeSurvived += delta;
 
@@ -865,7 +872,7 @@
           moveY *= 0.707;
         }
 
-        // Дэш (двойное нажатие)
+        // Дэш
         if (this.player.canDash && this.player.dashCooldown <= 0) {
           const keys = ['up', 'down', 'left', 'right'];
           for (let k of keys) {
@@ -875,7 +882,6 @@
               if (!this._lastKeyPress[k] || (now - this._lastKeyPress[k] > 300)) {
                 this._lastKeyPress[k] = now;
               } else {
-                // двойное нажатие
                 const dir = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] } [k];
                 if (dir) {
                   this.player.dashCooldown = 2000;
@@ -995,10 +1001,8 @@
           enemy.poisoned = true;
           enemy.poisonTimer = 3000;
         }
-        // Рикошет
         if (proj.isRicochet && proj.ricochetCount > 0) {
           proj.ricochetCount--;
-          // Найти ближайшего врага, кроме текущего
           let nearest = null;
           let minDist = Infinity;
           this.enemies.children.iterate(e => {
@@ -1016,7 +1020,7 @@
             this.physics.velocityFromRotation(angle, this.player.projSpeed, proj.body.velocity);
             proj.setRotation(angle);
             proj.lifespan = 800;
-            return; // не уничтожаем снаряд
+            return;
           }
         }
 
