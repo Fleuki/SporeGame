@@ -1,0 +1,1203 @@
+
+html_code = '''<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Грибной Сумрак — Spore Survivor</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #0a0a0a; overflow: hidden; height: 100%; }
+  canvas { display: block; }
+  #game-container { width: 100vw; height: 100vh; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
+</head>
+<body>
+<div id="game-container"></div>
+<script>
+// ============================================================
+//  ГРИБНОЙ СУМРАК — Spore Survivor
+//  Vampire Survivors-like, top-down, рогалик
+//  ПК: WASD/стрелки — движение, мышь — прицел (авто-огонь)
+//  Телефон: виртуальный джойстик слева, авто-прицел
+// ============================================================
+
+const GAMEW = 960;
+const GAMEH = 540;
+const WORLDW = 2000;
+const WORLDH = 2000;
+const IS_TOUCH = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+
+// ============================================================
+//  ПАЛИТРА (строго по дизайн-документу)
+// ============================================================
+const COLORS = {
+  grass: 0x1a3d2e,
+  mushroom: 0x6b2d5c,
+  toxic: 0xc4a000,
+  biolum: 0x00d4aa,
+  blood: 0x39ff14,
+  hero: 0x5c3a21,
+  metal: 0x2a2a2a,
+  spore: 0x8a8a8a,
+  sporeBar: 0x6b2d5c,
+  hpBar: 0xff3333,
+  xpBar: 0xffd700,
+  uiBg: 0x1a1a2e,
+  uiBorder: 0x00d4aa,
+  text: 0xaaffcc,
+  textDim: 0x99ddff,
+  enemyBig: 0xff9933,
+  projectile: 0x00d4aa,
+  antidote: 0x39ff14,
+  white: 0xffffff,
+  black: 0x000000,
+};
+
+// ============================================================
+//  КЛАСС ИГРОКА
+// ============================================================
+class Player extends Phaser.Physics.Arcade.Sprite {
+  constructor(scene, x, y) {
+    super(scene, x, y, 'hero');
+    scene.add.existing(this);
+    scene.physics.add.existing(this);
+    this.setCollideWorldBounds(true);
+    this.setDepth(10);
+    this.setCircle(14);
+
+    // Базовые характеристики
+    this.speed = 200;
+    this.maxHp = 100;
+    this.hp = 100;
+    this.damage = 12;
+    this.fireRate = 400;
+    this.projCount = 1;
+    this.projSpeed = 450;
+    this.pickupRadius = 90;
+    this.regen = 0;
+    this.shieldActive = false;
+    this.shieldCooldown = 0;
+    this.dashCooldown = 0;
+    this.lastShot = 0;
+    this.invulnUntil = 0;
+    this.sporeLevel = 0; // 0-100
+    this.sporeGrowthRate = 0.5; // +0.5% в секунду
+  }
+
+  update(time, delta, moveX, moveY) {
+    // Движение
+    this.setVelocity(moveX * this.speed, moveY * this.speed);
+    
+    // Регенерация
+    if (this.regen > 0) {
+      this.hp = Math.min(this.maxHp, this.hp + this.regen * delta / 1000);
+    }
+    
+    // Рост спор
+    this.sporeLevel = Math.min(100, this.sporeLevel + this.sporeGrowthRate * delta / 1000);
+    
+    // Щит перезарядка
+    if (this.shieldCooldown > 0) this.shieldCooldown -= delta;
+    if (this.dashCooldown > 0) this.dashCooldown -= delta;
+    
+    // Мигание при неуязвимости
+    this.setAlpha(time < this.invulnUntil ? 0.5 : 1);
+  }
+
+  takeDamage(dmg, time) {
+    if (time < this.invulnUntil) return false;
+    
+    // Щит блокирует удар
+    if (this.shieldActive) {
+      this.shieldActive = false;
+      this.shieldCooldown = 10000;
+      this.invulnUntil = time + 300;
+      this.scene.cameras.main.shake(80, 0.005);
+      return false;
+    }
+    
+    this.hp -= dmg;
+    this.invulnUntil = time + 600;
+    this.scene.cameras.main.shake(120, 0.008);
+    
+    // Споры растут от получения урона
+    this.sporeLevel = Math.min(100, this.sporeLevel + 3);
+    
+    return this.hp <= 0;
+  }
+
+  heal(amount) {
+    this.hp = Math.min(this.maxHp, this.hp + amount);
+  }
+
+  reduceSpores(amount) {
+    this.sporeLevel = Math.max(0, this.sporeLevel - amount);
+  }
+}
+
+// ============================================================
+//  КЛАСС ВРАГА
+// ============================================================
+class Enemy extends Phaser.Physics.Arcade.Sprite {
+  constructor(scene, x, y) {
+    super(scene, x, y, 'enemy');
+    this.setDepth(5);
+    this.setCircle(14);
+  }
+
+  spawn(x, y, cfg) {
+    this.enableBody(true, x, y, true, true);
+    this.setActive(true).setVisible(true);
+    this.hp = cfg.hp;
+    this.maxHp = cfg.hp;
+    this.speedVal = cfg.speed;
+    this.dmg = cfg.dmg;
+    this.xpValue = cfg.xp;
+    this.isBig = cfg.isBig;
+    this.type = cfg.type || 'spore_bearer';
+    this.setScale(cfg.isBig ? 1.8 : 1);
+    this.setTint(cfg.isBig ? COLORS.enemyBig : COLORS.mushroom);
+    this.body.setCircle(14);
+    
+    // Специальные настройки по типу
+    if (this.type === 'mushroom_wolf') {
+      this.setTexture('wolf');
+      this.body.setCircle(12);
+    } else if (this.type === 'fruit_body') {
+      this.setTexture('fruit');
+      this.body.setCircle(22);
+      this.setScale(cfg.isBig ? 2.2 : 1.3);
+    } else if (this.type === 'tentacle') {
+      this.setTexture('tentacle');
+      this.body.setCircle(10);
+      this.setScale(0.1);
+      this.growing = true;
+      this.growTimer = 0;
+    } else if (this.type === 'spore_bat') {
+      this.setTexture('bat');
+      this.body.setCircle(10);
+      this.zigzagTimer = 0;
+      this.zigzagDir = 1;
+    }
+  }
+
+  update(time, delta, player, sporeLevel) {
+    if (!this.active) return;
+    
+    // Бонус скорости от уровня спор
+    let speedMult = 1;
+    if (sporeLevel > 75) speedMult = 1.5;
+    else if (sporeLevel > 50) speedMult = 1.25;
+    else if (sporeLevel > 25) speedMult = 1.1;
+    
+    // Мутация: красные враги при высоких спорах
+    if (sporeLevel > 50 && !this.isBig) {
+      if (Math.random() < 0.02) {
+        this.setTint(COLORS.blood);
+        this.hp = Math.floor(this.maxHp * 1.5);
+      }
+    }
+    
+    // Движение по типу
+    if (this.type === 'tentacle') {
+      if (this.growing) {
+        this.growTimer += delta;
+        const progress = Math.min(1, this.growTimer / 500);
+        this.setScale(0.1 + progress * 0.9);
+        if (progress >= 1) {
+          this.growing = false;
+          // Хватаем игрока если рядом
+          const d = Phaser.Math.Distance.Between(this.x, this.y, player.x, player.y);
+          if (d < 40) {
+            player.takeDamage(this.dmg, time);
+            player.setVelocity(0, 0);
+            player.body.immovable = true;
+            this.scene.time.delayedCall(1000, () => {
+              if (player.body) player.body.immovable = false;
+            });
+          }
+        }
+      }
+    } else if (this.type === 'spore_bat') {
+      this.zigzagTimer += delta;
+      const angle = Phaser.Math.Angle.Between(this.x, this.y, player.x, player.y);
+      const zigzag = Math.sin(this.zigzagTimer * 0.005) * 0.8;
+      this.scene.physics.velocityFromRotation(angle + zigzag, this.speedVal * speedMult, this.body.velocity);
+    } else {
+      // Обычное преследование
+      const angle = Phaser.Math.Angle.Between(this.x, this.y, player.x, player.y);
+      this.scene.physics.velocityFromRotation(angle, this.speedVal * speedMult, this.body.velocity);
+    }
+    
+    // Волк оставляет след спор
+    if (this.type === 'mushroom_wolf' && Math.random() < 0.05) {
+      this.scene.spawnSporeTrail(this.x, this.y);
+    }
+    
+    // Летучая мышь оставляет токсичный туман
+    if (this.type === 'spore_bat' && Math.random() < 0.03) {
+      this.scene.spawnToxicCloud(this.x, this.y);
+    }
+  }
+
+  takeDamage(dmg) {
+    this.hp -= dmg;
+    this.setTintFill(COLORS.white);
+    this.scene.time.delayedCall(60, () => {
+      if (this.active) {
+        this.setTint(this.isBig ? COLORS.enemyBig : COLORS.mushroom);
+      }
+    });
+    return this.hp <= 0;
+  }
+}
+
+// ============================================================
+//  КЛАСС СНАРЯДА
+// ============================================================
+class Projectile extends Phaser.Physics.Arcade.Sprite {
+  constructor(scene, x, y) {
+    super(scene, x, y, 'proj');
+    this.setDepth(8);
+    this.setCircle(6);
+  }
+
+  fire(x, y, angle, speed, damage, isExplosive = false, isPoison = false) {
+    this.enableBody(true, x, y, true, true);
+    this.setActive(true).setVisible(true);
+    this.damage = damage;
+    this.isExplosive = isExplosive;
+    this.isPoison = isPoison;
+    this.lifespan = 1500;
+    this.scene.physics.velocityFromRotation(angle, speed, this.body.velocity);
+    this.setRotation(angle);
+    
+    // Частицы выстрела
+    this.scene.muzzleFx.explode(5, x, y);
+  }
+
+  preUpdate(time, delta) {
+    if (this.scene.isPaused) return;
+    super.preUpdate(time, delta);
+    this.lifespan -= delta;
+    if (this.lifespan <= 0) this.disableBody(true, true);
+  }
+}
+
+// ============================================================
+//  СИСТЕМА СПОР (опыт и уровни)
+// ============================================================
+class SporeSystem {
+  constructor(scene) {
+    this.scene = scene;
+    this.xp = 0;
+    this.level = 1;
+    this.xpToNext = 8;
+    this.spores = scene.physics.add.group({ maxSize: 400 });
+    this.antidotes = scene.physics.add.group({ maxSize: 50 });
+    
+    // Сбор спор
+    scene.physics.add.overlap(scene.player, this.spores, (player, spore) => {
+      if (!spore.active) return;
+      spore.disableBody(true, true);
+      this.addXp(spore.xpValue);
+    });
+    
+    // Сбор антидотов
+    scene.physics.add.overlap(scene.player, this.antidotes, (player, antidote) => {
+      if (!antidote.active) return;
+      antidote.disableBody(true, true);
+      player.reduceSpores(25);
+      player.heal(10);
+      scene.healFx.explode(8, player.x, player.y);
+    });
+  }
+
+  drop(x, y, value, isAntidote = false) {
+    if (isAntidote) {
+      let antidote = this.antidotes.get(x, y, 'antidote');
+      if (!antidote) return;
+      antidote.enableBody(true, x, y, true, true);
+      antidote.setActive(true).setVisible(true).setDepth(4);
+      this.scene.tweens.add({
+        targets: antidote, scale: { from: 0.7, to: 1.1 },
+        duration: 600, yoyo: true, repeat: -1
+      });
+    } else {
+      let spore = this.spores.get(x, y, 'spore');
+      if (!spore) return;
+      spore.enableBody(true, x, y, true, true);
+      spore.setActive(true).setVisible(true).setDepth(3);
+      spore.xpValue = value;
+      this.scene.tweens.add({
+        targets: spore, scale: { from: 0.6, to: 1.0 },
+        duration: 500, yoyo: true, repeat: -1
+      });
+    }
+  }
+
+  update() {
+    const p = this.scene.player;
+    
+    // Притягивание спор
+    this.spores.children.iterate(spore => {
+      if (!spore || !spore.active) return;
+      const dist = Phaser.Math.Distance.Between(spore.x, spore.y, p.x, p.y);
+      if (dist < p.pickupRadius) {
+        this.scene.physics.moveToObject(spore, p, 350);
+      } else {
+        spore.setVelocity(spore.body.velocity.x * 0.9, spore.body.velocity.y * 0.9);
+      }
+    });
+    
+    // Притягивание антидотов
+    this.antidotes.children.iterate(ant => {
+      if (!ant || !ant.active) return;
+      const dist = Phaser.Math.Distance.Between(ant.x, ant.y, p.x, p.y);
+      if (dist < p.pickupRadius * 1.2) {
+        this.scene.physics.moveToObject(ant, p, 400);
+      }
+    });
+  }
+
+  addXp(v) {
+    // Бонус опыта от уровня спор
+    let mult = 1;
+    const sporeLvl = this.scene.player.sporeLevel;
+    if (sporeLvl > 75) mult = 3;
+    else if (sporeLvl > 50) mult = 2;
+    else if (sporeLvl > 25) mult = 1.5;
+    
+    this.xp += v * mult;
+    this.checkLevel();
+  }
+
+  checkLevel() {
+    if (this.scene.isPaused || this.scene.gameOver) return;
+    if (this.xp >= this.xpToNext) {
+      this.xp -= this.xpToNext;
+      this.level++;
+      this.xpToNext = Math.floor(this.xpToNext * 1.4 + 2);
+      this.scene.upgradeManager.show();
+    }
+  }
+}
+
+// ============================================================
+//  МЕНЕДЖЕР УЛУЧШЕНИЙ
+// ============================================================
+class UpgradeManager {
+  constructor(scene) {
+    this.scene = scene;
+    this.upgrades = [
+      { name: '💥 Урон +25%', desc: 'Снаряды бьют сильнее', cat: 'extract', apply: p => { p.damage = Math.round(p.damage * 1.25); } },
+      { name: '⚡ Скорострельность', desc: 'Стрельба на 20% быстрее', cat: 'extract', apply: p => { p.fireRate = Math.max(80, p.fireRate * 0.8); } },
+      { name: '🔱 +1 снаряд', desc: 'Доп. снаряд (макс 8)', cat: 'extract', apply: p => { p.projCount = Math.min(8, p.projCount + 1); } },
+      { name: '🚀 Быстрые снаряды', desc: 'Скорость снарядов +25%', cat: 'extract', apply: p => { p.projSpeed *= 1.25; } },
+      { name: '💀 Взрывные колбы', desc: 'Снаряды взрываются при попадании', cat: 'extract', apply: p => { p.isExplosive = true; } },
+      { name: '☠️ Ядовитые снаряды', desc: 'DOT урон 3/сек, 3 сек', cat: 'extract', apply: p => { p.isPoison = true; } },
+      { name: '🧬 Адреналин грибов', desc: '+30% урона, +15% к спорам', cat: 'mutation', apply: p => { p.damage = Math.round(p.damage * 1.3); p.sporeGrowthRate *= 1.15; } },
+      { name: '🔄 Быстрый метаболизм', desc: 'Реген +2 HP/с, споры ×2', cat: 'mutation', apply: p => { p.regen += 2; p.sporeGrowthRate *= 2; } },
+      { name: '💰 Споровой сборщик', desc: '+50% опыта, враги +20% скорости', cat: 'mutation', apply: p => { p.xpMult = (p.xpMult || 1) * 1.5; } },
+      { name: '❤️ Здоровье +25', desc: 'Макс HP +25 и лечение', cat: 'gear', apply: p => { p.maxHp += 25; p.hp = Math.min(p.maxHp, p.hp + 25); } },
+      { name: '🛡️ Щит спор', desc: 'Блокирует 1 удар, перезарядка 10с', cat: 'gear', apply: p => { p.shieldActive = true; } },
+      { name: '👟 Скорость +15%', desc: 'Двигаешься быстрее', cat: 'gear', apply: p => { p.speed *= 1.15; } },
+      { name: '🧲 Магнит спор', desc: 'Радиус сбора +40%', cat: 'gear', apply: p => { p.pickupRadius *= 1.4; } },
+      { name: '💨 Рывок', desc: 'Двойное нажатие = рывок', cat: 'gear', apply: p => { p.canDash = true; } },
+    ];
+  }
+
+  show() {
+    const s = this.scene;
+    s.isPaused = true;
+    s.physics.world.pause();
+
+    const W = s.scale.width, H = s.scale.height;
+    this.container = s.add.container(0, 0).setScrollFactor(0).setDepth(1000);
+
+    // Затемнение с виньеткой
+    const dark = s.add.rectangle(W / 2, H / 2, W, H, COLORS.black, 0.8);
+    this.container.add(dark);
+    
+    // Виньетка (пульсирующая рамка)
+    const vignette = s.add.rectangle(W / 2, H / 2, W - 20, H - 20).setStrokeStyle(4, COLORS.mushroom, 0.6);
+    this.container.add(vignette);
+    s.tweens.add({ targets: vignette, alpha: { from: 0.3, to: 0.8 }, duration: 1000, yoyo: true, repeat: -1 });
+
+    // Заголовок
+    const title = s.add.text(W / 2, 60, '⬆ УРОВЕНЬ ' + s.sporeSystem.level + '!', {
+      fontFamily: 'Arial', fontSize: '32px', color: '#aaffcc', fontStyle: 'bold'
+    }).setOrigin(0.5);
+    this.container.add(title);
+    
+    const subtitle = s.add.text(W / 2, 100, 'Выбери улучшение:', {
+      fontFamily: 'Arial', fontSize: '20px', color: '#99ddff'
+    }).setOrigin(0.5);
+    this.container.add(subtitle);
+
+    // Три случайных улучшения (по одному из каждой категории)
+    const cats = ['extract', 'mutation', 'gear'];
+    const choices = cats.map(cat => {
+      const pool = this.upgrades.filter(u => u.cat === cat);
+      return Phaser.Utils.Array.GetRandom(pool);
+    });
+
+    choices.forEach((up, i) => {
+      const bx = W / 2;
+      const by = 170 + i * 115;
+
+      const btn = s.add.rectangle(bx, by, 460, 100, COLORS.uiBg, 1)
+        .setStrokeStyle(3, COLORS.uiBorder)
+        .setInteractive({ useHandCursor: true });
+
+      const nameText = s.add.text(bx, by - 22, up.name, {
+        fontFamily: 'Arial', fontSize: '22px', color: '#ffffff', fontStyle: 'bold'
+      }).setOrigin(0.5);
+
+      const catText = s.add.text(bx - 200, by - 22, up.cat === 'extract' ? '[Экстракт]' : up.cat === 'mutation' ? '[Мутация]' : '[Экипировка]', {
+        fontFamily: 'Arial', fontSize: '11px', color: up.cat === 'extract' ? '#00d4aa' : up.cat === 'mutation' ? '#ff9933' : '#5599ff'
+      }).setOrigin(0, 0.5);
+
+      const descText = s.add.text(bx, by + 18, up.desc, {
+        fontFamily: 'Arial', fontSize: '16px', color: '#99ddff'
+      }).setOrigin(0.5);
+
+      btn.on('pointerover', () => { btn.setFillStyle(0x2e5a72); btn.setStrokeStyle(3, COLORS.biolum); });
+      btn.on('pointerout', () => { btn.setFillStyle(COLORS.uiBg); btn.setStrokeStyle(3, COLORS.uiBorder); });
+      
+      btn.on('pointerdown', () => {
+        up.apply(s.player);
+        this.hide();
+      });
+
+      this.container.add([btn, nameText, catText, descText]);
+    });
+  }
+
+  hide() {
+    this.container.destroy();
+    this.scene.isPaused = false;
+    this.scene.physics.world.resume();
+    this.scene.time.delayedCall(100, () => this.scene.sporeSystem.checkLevel());
+  }
+}
+
+// ============================================================
+//  МЕНЕДЖЕР ВОЛН
+// ============================================================
+class WaveManager {
+  constructor(scene) {
+    this.scene = scene;
+    this.wave = 0;
+    this.timer = 2000;
+    this.waveActive = false;
+  }
+
+  update(delta) {
+    if (this.scene.isPaused || this.scene.gameOver) return;
+    this.timer -= delta;
+    if (this.timer <= 0) {
+      this.wave++;
+      this.spawnWave();
+      this.timer = Math.max(3000, 7000 - this.wave * 150);
+      this.scene.showWaveBanner(this.wave);
+    }
+  }
+
+  spawnWave() {
+    const s = this.scene;
+    const p = s.player;
+    
+    // Базовое количество врагов
+    let count = 5 + Math.floor(this.wave * 2);
+    
+    // Каждая 5-я волна — босс
+    const isBossWave = this.wave % 5 === 0 && this.wave > 0;
+    
+    if (isBossWave) {
+      this.spawnBoss();
+      count = Math.floor(count * 0.5);
+    }
+    
+    // Состав волны
+    for (let i = 0; i < count; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const dist = 500 + Math.random() * 300;
+      let x = p.x + Math.cos(angle) * dist;
+      let y = p.y + Math.sin(angle) * dist;
+      x = Phaser.Math.Clamp(x, 50, WORLDW - 50);
+      y = Phaser.Math.Clamp(y, 50, WORLDH - 50);
+      
+      const isBig = Math.random() < 0.1 + this.wave * 0.02;
+      const typeRoll = Math.random();
+      let type = 'spore_bearer';
+      
+      if (this.wave >= 3 && typeRoll < 0.2) type = 'mushroom_wolf';
+      else if (this.wave >= 5 && typeRoll < 0.35) type = 'fruit_body';
+      else if (this.wave >= 7 && typeRoll < 0.45) type = 'tentacle';
+      else if (this.wave >= 4 && typeRoll < 0.55) type = 'spore_bat';
+      
+      const cfg = {
+        hp: (20 + this.wave * 6) * (isBig ? 5 : 1) * (type === 'fruit_body' ? 3 : 1),
+        speed: Math.min(140, 60 + this.wave * 3 + (type === 'mushroom_wolf' ? 40 : 0) + (type === 'spore_bat' ? 30 : 0)),
+        dmg: 8 + this.wave + (isBig ? 5 : 0),
+        xp: (type === 'fruit_body' ? 3 : 1) * (isBig ? 5 : 1),
+        isBig: isBig,
+        type: type
+      };
+      
+      s.spawnEnemy(x, y, cfg);
+    }
+  }
+  
+  spawnBoss() {
+    const s = this.scene;
+    const p = s.player;
+    const angle = Math.random() * Math.PI * 2;
+    const x = p.x + Math.cos(angle) * 400;
+    const y = p.y + Math.sin(angle) * 400;
+    
+    // Материнская Капля (босс 1) или Мицелиевая Сердцевина (босс 2)
+    const bossType = (this.wave / 5) % 2 === 1 ? 'mother_cap' : 'mycelium_heart';
+    
+    const cfg = {
+      hp: 500 + this.wave * 100,
+      speed: bossType === 'mother_cap' ? 30 : 0,
+      dmg: 20 + this.wave * 2,
+      xp: 50,
+      isBig: true,
+      type: bossType
+    };
+    
+    s.spawnEnemy(x, y, cfg);
+    s.showBossWarning(bossType);
+  }
+}
+
+// ============================================================
+//  ГЛАВНАЯ СЦЕНА
+// ============================================================
+class GameScene extends Phaser.Scene {
+  constructor() {
+    super({ key: 'GameScene' });
+  }
+
+  preload() {
+    // Создаём текстуры программно (placeholder'ы)
+    const gfx = this.make.graphics();
+    
+    // Герой — коричневый круг с голубым ободком
+    gfx.clear();
+    gfx.fillStyle(COLORS.hero, 1);
+    gfx.fillCircle(16, 16, 14);
+    gfx.lineStyle(2, COLORS.biolum, 1);
+    gfx.strokeCircle(16, 16, 14);
+    gfx.generateTexture('hero', 32, 32);
+    
+    // Враг — фиолетовый круг
+    gfx.clear();
+    gfx.fillStyle(COLORS.mushroom, 1);
+    gfx.fillCircle(16, 16, 14);
+    gfx.generateTexture('enemy', 32, 32);
+    
+    // Волк — фиолетовый квадрат
+    gfx.clear();
+    gfx.fillStyle(COLORS.mushroom, 1);
+    gfx.fillRect(4, 4, 24, 24);
+    gfx.generateTexture('wolf', 32, 32);
+    
+    // Плодовое тело — большой фиолетовый круг
+    gfx.clear();
+    gfx.fillStyle(COLORS.mushroom, 1);
+    gfx.fillCircle(24, 24, 22);
+    gfx.generateTexture('fruit', 48, 48);
+    
+    // Щупальце — жёлтое
+    gfx.clear();
+    gfx.fillStyle(COLORS.toxic, 1);
+    gfx.fillCircle(8, 8, 8);
+    gfx.generateTexture('tentacle', 16, 16);
+    
+    // Летучая мышь — фиолетовый треугольник
+    gfx.clear();
+    gfx.fillStyle(COLORS.mushroom, 1);
+    gfx.beginPath();
+    gfx.moveTo(16, 4);
+    gfx.lineTo(28, 28);
+    gfx.lineTo(4, 28);
+    gfx.closePath();
+    gfx.fillPath();
+    gfx.generateTexture('bat', 32, 32);
+    
+    // Снаряд — голубой круг
+    gfx.clear();
+    gfx.fillStyle(COLORS.projectile, 1);
+    gfx.fillCircle(6, 6, 5);
+    gfx.generateTexture('proj', 12, 12);
+    
+    // Спора — золотая
+    gfx.clear();
+    gfx.fillStyle(COLORS.xpBar, 1);
+    gfx.fillCircle(8, 8, 6);
+    gfx.generateTexture('spore', 16, 16);
+    
+    // Антидот — зелёный крест
+    gfx.clear();
+    gfx.fillStyle(COLORS.antidote, 1);
+    gfx.fillCircle(10, 10, 8);
+    gfx.fillStyle(COLORS.grass, 1);
+    gfx.fillRect(8, 4, 4, 12);
+    gfx.fillRect(4, 8, 12, 4);
+    gfx.generateTexture('antidote', 20, 20);
+    
+    // Частицы
+    gfx.clear();
+    gfx.fillStyle(COLORS.biolum, 1);
+    gfx.fillCircle(2, 2, 2);
+    gfx.generateTexture('particle', 4, 4);
+    
+    // Фон травы
+    gfx.clear();
+    gfx.fillStyle(COLORS.grass, 1);
+    gfx.fillRect(0, 0, 64, 64);
+    // Мицелиевые прожилки
+    gfx.lineStyle(1, COLORS.mushroom, 0.3);
+    for (let i = 0; i < 5; i++) {
+      gfx.beginPath();
+      gfx.moveTo(Math.random() * 64, Math.random() * 64);
+      gfx.lineTo(Math.random() * 64, Math.random() * 64);
+      gfx.strokePath();
+    }
+    gfx.generateTexture('grass', 64, 64);
+    
+    // Токсичная лужа
+    gfx.clear();
+    gfx.fillStyle(COLORS.toxic, 0.6);
+    gfx.fillCircle(32, 32, 28);
+    gfx.generateTexture('toxic_pool', 64, 64);
+    
+    // Босс — Материнская Капля
+    gfx.clear();
+    gfx.fillStyle(COLORS.mushroom, 1);
+    gfx.fillCircle(40, 40, 38);
+    gfx.fillStyle(COLORS.toxic, 0.5);
+    gfx.fillCircle(40, 40, 20);
+    gfx.generateTexture('boss_cap', 80, 80);
+    
+    // Босс — Сердцевина
+    gfx.clear();
+    gfx.fillStyle(COLORS.blood, 1);
+    gfx.fillCircle(40, 40, 38);
+    gfx.lineStyle(3, COLORS.mushroom, 1);
+    gfx.strokeCircle(40, 40, 38);
+    gfx.generateTexture('boss_heart', 80, 80);
+  }
+
+  create() {
+    this.isPaused = false;
+    this.gameOver = false;
+    this.timeSurvived = 0;
+    
+    // Фон
+    this.add.tileSprite(WORLDW / 2, WORLDH / 2, WORLDW, WORLDH, 'grass');
+    
+    // Токсичные лужи (декорации)
+    for (let i = 0; i < 15; i++) {
+      const x = Phaser.Math.Between(100, WORLDW - 100);
+      const y = Phaser.Math.Between(100, WORLDH - 100);
+      const pool = this.add.image(x, y, 'toxic_pool').setAlpha(0.4).setDepth(1);
+      this.tweens.add({ targets: pool, alpha: { from: 0.3, to: 0.6 }, duration: 2000 + Math.random() * 2000, yoyo: true, repeat: -1 });
+    }
+    
+    // Игрок
+    this.player = new Player(this, WORLDW / 2, WORLDH / 2);
+    
+    // Группы
+    this.enemies = this.physics.add.group({ maxSize: 200, classType: Enemy });
+    this.projectiles = this.physics.add.group({ maxSize: 100, classType: Projectile });
+    this.sporeSystem = new SporeSystem(this);
+    this.upgradeManager = new UpgradeManager(this);
+    this.waveManager = new WaveManager(this);
+    
+    // Частицы
+    this.muzzleFx = this.add.particles(0, 0, 'particle', {
+      speed: { min: 50, max: 150 },
+      scale: { start: 1, end: 0 },
+      lifespan: 300,
+      quantity: 3,
+      emitting: false
+    });
+    
+    this.deathFx = this.add.particles(0, 0, 'particle', {
+      speed: { min: 30, max: 100 },
+      scale: { start: 1.5, end: 0 },
+      lifespan: 500,
+      quantity: 8,
+      tint: COLORS.mushroom,
+      emitting: false
+    });
+    
+    this.boomFx = this.add.particles(0, 0, 'particle', {
+      speed: { min: 50, max: 200 },
+      scale: { start: 2, end: 0 },
+      lifespan: 600,
+      quantity: 20,
+      tint: COLORS.toxic,
+      emitting: false
+    });
+    
+    this.healFx = this.add.particles(0, 0, 'particle', {
+      speed: { min: 20, max: 60 },
+      scale: { start: 1, end: 0 },
+      lifespan: 400,
+      quantity: 6,
+      tint: COLORS.antidote,
+      emitting: false
+    });
+    
+    // Столкновения
+    this.physics.add.overlap(this.projectiles, this.enemies, this.onProjectileHit, null, this);
+    this.physics.add.overlap(this.player, this.enemies, this.onPlayerHit, null, this);
+    
+    // Камера
+    this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
+    this.cameras.main.setBounds(0, 0, WORLDW, WORLDH);
+    this.physics.world.setBounds(0, 0, WORLDW, WORLDH);
+    
+    // Ввод
+    this.cursors = this.input.keyboard.createCursorKeys();
+    this.wasd = this.input.keyboard.addKeys({
+      up: Phaser.Input.Keyboard.KeyCodes.W,
+      down: Phaser.Input.Keyboard.KeyCodes.S,
+      left: Phaser.Input.Keyboard.KeyCodes.A,
+      right: Phaser.Input.Keyboard.KeyCodes.D
+    });
+    
+    // Мышь
+    this.input.on('pointermove', pointer => {
+      this.mouseX = pointer.worldX;
+      this.mouseY = pointer.worldY;
+    });
+    
+    // Джойстик (телефон)
+    this.joy = { active: false, baseX: 0, baseY: 0, vecX: 0, vecY: 0, id: null };
+    if (IS_TOUCH) {
+      this.setupJoystick();
+    }
+    
+    // UI
+    this.createUI();
+    
+    // Подсказка
+    this.showHint();
+  }
+  
+  setupJoystick() {
+    const W = this.scale.width, H = this.scale.height;
+    this.joyBase = this.add.circle(100, H - 100, 50, 0x333333, 0.5).setScrollFactor(0).setDepth(100).setVisible(false);
+    this.joyThumb = this.add.circle(100, H - 100, 25, 0x888888, 0.8).setScrollFactor(0).setDepth(101).setVisible(false);
+    
+    this.input.on('pointerdown', p => {
+      if (p.x > W / 2) return; // Только левая половина
+      this.joy.active = true;
+      this.joy.id = p.id;
+      this.joy.baseX = p.x;
+      this.joy.baseY = p.y;
+      this.joy.vecX = 0;
+      this.joy.vecY = 0;
+      this.joyBase.setPosition(p.x, p.y).setVisible(true);
+      this.joyThumb.setPosition(p.x, p.y).setVisible(true);
+    });
+    
+    this.input.on('pointermove', p => {
+      if (!this.joy.active || p.id !== this.joy.id) return;
+      let dx = p.x - this.joy.baseX;
+      let dy = p.y - this.joy.baseY;
+      const len = Math.sqrt(dx * dx + dy * dy);
+      const max = 50;
+      if (len > max) { dx = dx / len * max; dy = dy / len * max; }
+      this.joyThumb.setPosition(this.joy.baseX + dx, this.joy.baseY + dy);
+      this.joy.vecX = dx / max;
+      this.joy.vecY = dy / max;
+    });
+    
+    this.input.on('pointerup', p => {
+      if (p.id !== this.joy.id) return;
+      this.joy.active = false;
+      this.joy.vecX = 0;
+      this.joy.vecY = 0;
+      this.joyBase.setVisible(false);
+      this.joyThumb.setVisible(false);
+    });
+  }
+  
+  createUI() {
+    const W = this.scale.width;
+    
+    // HP бар
+    this.hpBarBg = this.add.rectangle(110, 25, 200, 18, 0x333333).setScrollFactor(0).setDepth(50);
+    this.hpBar = this.add.rectangle(110, 25, 200, 18, COLORS.hpBar).setScrollFactor(0).setDepth(51);
+    this.hpText = this.add.text(110, 25, 'HP', { fontFamily: 'Arial', fontSize: '12px', color: '#fff' }).setOrigin(0.5).setScrollFactor(0).setDepth(52);
+    
+    // Spore бар
+    this.sporeBarBg = this.add.rectangle(110, 50, 200, 14, 0x333333).setScrollFactor(0).setDepth(50);
+    this.sporeBar = this.add.rectangle(110, 50, 0, 14, COLORS.sporeBar).setScrollFactor(0).setDepth(51);
+    this.sporeText = this.add.text(110, 50, 'СПОРЫ', { fontFamily: 'Arial', fontSize: '10px', color: '#fff' }).setOrigin(0.5).setScrollFactor(0).setDepth(52);
+    
+    // XP бар (снизу)
+    this.xpBarBg = this.add.rectangle(W / 2, this.scale.height - 15, W - 40, 12, 0x333333).setScrollFactor(0).setDepth(50);
+    this.xpBar = this.add.rectangle(W / 2, this.scale.height - 15, 0, 12, COLORS.xpBar).setScrollFactor(0).setDepth(51);
+    
+    // Волна и время
+    this.waveText = this.add.text(W - 20, 20, 'Волна: 0', { fontFamily: 'Arial', fontSize: '18px', color: '#aaffcc', fontStyle: 'bold' }).setOrigin(1, 0).setScrollFactor(0).setDepth(50);
+    this.timeText = this.add.text(W - 20, 45, 'Время: 0:00', { fontFamily: 'Arial', fontSize: '14px', color: '#99ddff' }).setOrigin(1, 0).setScrollFactor(0).setDepth(50);
+    this.levelText = this.add.text(W - 20, 70, 'Уровень: 1', { fontFamily: 'Arial', fontSize: '14px', color: '#ffdd99' }).setOrigin(1, 0).setScrollFactor(0).setDepth(50);
+  }
+  
+  showHint() {
+    const W = this.scale.width, H = this.scale.height;
+    const hint = this.add.text(W / 2, H / 2, IS_TOUCH 
+      ? 'Используй джойстик слева для движения\\nАвто-стрельба по ближайшему врагу'
+      : 'WASD — движение | Мышь — прицел\\nАвто-стрельба по направлению курсора', {
+      fontFamily: 'Arial', fontSize: '18px', color: '#aaffcc', align: 'center'
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(200);
+    
+    this.tweens.add({ targets: hint, alpha: 0, duration: 4000, onComplete: () => hint.destroy() });
+  }
+  
+  showWaveBanner(wave) {
+    const W = this.scale.width;
+    const banner = this.add.text(W / 2, 100, 'ВОЛНА ' + wave, {
+      fontFamily: 'Arial', fontSize: '36px', color: '#ff9933', fontStyle: 'bold'
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(100);
+    
+    this.tweens.add({
+      targets: banner, scale: { from: 0.5, to: 1.2 }, alpha: { from: 1, to: 0 },
+      duration: 2000, onComplete: () => banner.destroy()
+    });
+  }
+  
+  showBossWarning(type) {
+    const W = this.scale.width;
+    const name = type === 'mother_cap' ? 'МАТЕРИНСКАЯ КАПЛЯ' : 'МИЦЕЛИЕВАЯ СЕРДЦЕВИНА';
+    const warning = this.add.text(W / 2, 150, '⚠ БОСС: ' + name + ' ⚠', {
+      fontFamily: 'Arial', fontSize: '28px', color: '#ff3333', fontStyle: 'bold'
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(100);
+    
+    this.tweens.add({
+      targets: warning, alpha: { from: 1, to: 0 }, scale: { from: 1, to: 1.3 },
+      duration: 3000, onComplete: () => warning.destroy()
+    });
+    this.cameras.main.shake(500, 0.02);
+  }
+
+  update(time, delta) {
+    if (this.isPaused || this.gameOver) return;
+    
+    this.timeSurvived += delta;
+    
+    // Ввод
+    let moveX = 0, moveY = 0;
+    
+    if (IS_TOUCH && this.joy.active) {
+      moveX = this.joy.vecX;
+      moveY = this.joy.vecY;
+    } else {
+      if (this.cursors.left.isDown || this.wasd.left.isDown) moveX = -1;
+      if (this.cursors.right.isDown || this.wasd.right.isDown) moveX = 1;
+      if (this.cursors.up.isDown || this.wasd.up.isDown) moveY = -1;
+      if (this.cursors.down.isDown || this.wasd.down.isDown) moveY = 1;
+    }
+    
+    // Нормализация диагонали
+    if (moveX !== 0 && moveY !== 0) {
+      moveX *= 0.707;
+      moveY *= 0.707;
+    }
+    
+    // Обновление игрока
+    this.player.update(time, delta, moveX, moveY);
+    
+    // Урон от спор при 75%+
+    if (this.player.sporeLevel > 75) {
+      this.player.hp -= 0.5 * delta / 1000;
+      if (this.player.hp <= 0) this.showGameOver();
+    }
+    
+    // Стрельба
+    this.handleShooting(time);
+    
+    // Обновление врагов
+    this.enemies.children.iterate(enemy => {
+      if (enemy && enemy.active) enemy.update(time, delta, this.player, this.player.sporeLevel);
+    });
+    
+    // Споры
+    this.sporeSystem.update();
+    
+    // Волны
+    this.waveManager.update(delta);
+    
+    // UI
+    this.updateUI();
+    
+    // Эффект виньетки при высоких спорах
+    if (this.player.sporeLevel > 75 && !this.vignette) {
+      this.vignette = this.add.rectangle(this.scale.width / 2, this.scale.height / 2, this.scale.width, this.scale.height)
+        .setScrollFactor(0).setDepth(40).setFillStyle(COLORS.mushroom, 0.1);
+    } else if (this.vignette) {
+      this.vignette.setAlpha(0.1 + (this.player.sporeLevel - 75) / 250);
+    }
+  }
+  
+  handleShooting(time) {
+    if (time < this.player.lastShot + this.player.fireRate) return;
+    
+    let targetX, targetY;
+    
+    if (IS_TOUCH) {
+      // На телефоне — в ближайшего врага
+      let nearest = null;
+      let minDist = Infinity;
+      this.enemies.children.iterate(enemy => {
+        if (!enemy || !enemy.active) return;
+        const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, enemy.x, enemy.y);
+        if (d < minDist) { minDist = d; nearest = enemy; }
+      });
+      if (nearest) {
+        targetX = nearest.x;
+        targetY = nearest.y;
+      } else {
+        return; // Нет врагов — не стреляем
+      }
+    } else {
+      // На ПК — в направлении мыши
+      if (!this.mouseX) return;
+      targetX = this.mouseX;
+      targetY = this.mouseY;
+    }
+    
+    const angle = Phaser.Math.Angle.Between(this.player.x, this.player.y, targetX, targetY);
+    
+    // Множественные снаряды (веер)
+    const count = this.player.projCount;
+    const spread = count > 1 ? 0.15 : 0;
+    
+    for (let i = 0; i < count; i++) {
+      const projAngle = angle + (i - (count - 1) / 2) * spread;
+      const proj = this.projectiles.get(this.player.x, this.player.y);
+      if (proj) {
+        proj.fire(this.player.x, this.player.y, projAngle, this.player.projSpeed, this.player.damage, this.player.isExplosive, this.player.isPoison);
+      }
+    }
+    
+    this.player.lastShot = time;
+  }
+  
+  spawnEnemy(x, y, cfg) {
+    const enemy = this.enemies.get(x, y);
+    if (enemy) enemy.spawn(x, y, cfg);
+  }
+  
+  spawnSporeTrail(x, y) {
+    // След от волка — серые точки
+    const trail = this.add.circle(x, y, 3, COLORS.spore, 0.5).setDepth(2);
+    this.tweens.add({ targets: trail, alpha: 0, scale: 0, duration: 2000, onComplete: () => trail.destroy() });
+  }
+  
+  spawnToxicCloud(x, y) {
+    // Токсичный туман от летучей мыши
+    const cloud = this.add.circle(x, y, 20, COLORS.toxic, 0.3).setDepth(2);
+    this.tweens.add({ targets: cloud, alpha: 0, scale: 2, duration: 3000, onComplete: () => cloud.destroy() });
+  }
+  
+  onProjectileHit(proj, enemy) {
+    if (!proj.active || !enemy.active) return;
+    
+    proj.disableBody(true, true);
+    
+    // Взрывные снаряды
+    if (proj.isExplosive) {
+      this.boomFx.explode(10, enemy.x, enemy.y);
+      this.enemies.children.iterate(e => {
+        if (e && e.active && e !== enemy) {
+          const d = Phaser.Math.Distance.Between(enemy.x, enemy.y, e.x, e.y);
+          if (d < 60) e.takeDamage(Math.round(proj.damage * 0.5));
+        }
+      });
+    }
+    
+    // Ядовитые снаряды
+    if (proj.isPoison) {
+      enemy.poisoned = true;
+      enemy.poisonTimer = 3000;
+    }
+    
+    if (enemy.takeDamage(proj.damage)) {
+      this.killEnemy(enemy);
+    }
+  }
+  
+  onPlayerHit(player, enemy) {
+    if (!enemy.active || this.gameOver) return;
+    
+    // Щупальце хватает
+    if (enemy.type === 'tentacle' && enemy.growing) return;
+    
+    if (player.takeDamage(enemy.dmg, this.time.now)) {
+      this.showGameOver();
+    }
+  }
+  
+  killEnemy(enemy) {
+    this.deathFx.explode(10, enemy.x, enemy.y);
+    
+    // Спороносец выпускает облако спор
+    if (enemy.type === 'spore_bearer') {
+      const cloud = this.add.circle(enemy.x, enemy.y, 35, COLORS.spore, 0.4).setDepth(3);
+      this.tweens.add({ targets: cloud, alpha: 0, scale: 1.5, duration: 2000, onComplete: () => cloud.destroy() });
+      // Замедление игрока если в облаке
+      const d = Phaser.Math.Distance.Between(enemy.x, enemy.y, this.player.x, this.player.y);
+      if (d < 35) {
+        this.player.speed *= 0.8;
+        this.time.delayedCall(2000, () => { this.player.speed /= 0.8; });
+      }
+    }
+    
+    // Плодовое тело взрывается
+    if (enemy.type === 'fruit_body') {
+      this.boomFx.explode(25, enemy.x, enemy.y);
+      this.cameras.main.shake(200, 0.01);
+      const d = Phaser.Math.Distance.Between(enemy.x, enemy.y, this.player.x, this.player.y);
+      if (d < 90) {
+        if (this.player.takeDamage(15, this.time.now)) this.showGameOver();
+      }
+    }
+    
+    // Босс дропает антидот
+    if (enemy.type === 'mother_cap' || enemy.type === 'mycelium_heart') {
+      this.sporeSystem.drop(enemy.x, enemy.y, 0, true); // Антидот
+      this.sporeSystem.drop(enemy.x, enemy.y, 50);
+    }
+    
+    // Обычный дроп
+    const xpDrop = enemy.xpValue;
+    for (let i = 0; i < xpDrop; i++) {
+      this.sporeSystem.drop(
+        enemy.x + Phaser.Math.Between(-20, 20),
+        enemy.y + Phaser.Math.Between(-20, 20),
+        1
+      );
+    }
+    
+    // Шанс на антидот
+    if (Math.random() < 0.05) {
+      this.sporeSystem.drop(enemy.x, enemy.y, 0, true);
+    }
+    
+    enemy.disableBody(true, true);
+  }
+  
+  updateUI() {
+    const p = this.player;
+    
+    // HP
+    const hpPercent = Math.max(0, p.hp / p.maxHp);
+    this.hpBar.width = 200 * hpPercent;
+    this.hpText.setText(Math.ceil(p.hp) + '/' + p.maxHp);
+    
+    // Spore
+    const sporePercent = p.sporeLevel / 100;
+    this.sporeBar.width = 200 * sporePercent;
+    this.sporeBar.x = 10 + 200 * sporePercent / 2;
+    
+    // Цвет споровой полоски меняется
+    if (p.sporeLevel > 75) this.sporeBar.setFillStyle(0xff3333);
+    else if (p.sporeLevel > 50) this.sporeBar.setFillStyle(0xff9933);
+    else this.sporeBar.setFillStyle(COLORS.sporeBar);
+    
+    // XP
+    const xpPercent = this.sporeSystem.xp / this.sporeSystem.xpToNext;
+    this.xpBar.width = (this.scale.width - 40) * xpPercent;
+    this.xpBar.x = 20 + (this.scale.width - 40) * xpPercent / 2;
+    
+    // Текст
+    this.waveText.setText('Волна: ' + this.waveManager.wave);
+    const mins = Math.floor(this.timeSurvived / 60000);
+    const secs = Math.floor((this.timeSurvived % 60000) / 1000);
+    this.timeText.setText('Время: ' + mins + ':' + (secs < 10 ? '0' : '') + secs);
+    this.levelText.setText('Уровень: ' + this.sporeSystem.level);
+  }
+  
+  showGameOver() {
+    this.gameOver = true;
+    this.physics.world.pause();
+    
+    const W = this.scale.width, H = this.scale.height;
+    
+    const overlay = this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.85).setScrollFactor(0).setDepth(1000);
+    
+    const title = this.add.text(W / 2, H / 2 - 80, '☠ ИГРА ОКОНЧЕНА ☠', {
+      fontFamily: 'Arial', fontSize: '36px', color: '#ff3333', fontStyle: 'bold'
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(1001);
+    
+    const stats = this.add.text(W / 2, H / 2, 
+      'Волна: ' + this.waveManager.wave + '\\n' +
+      'Уровень: ' + this.sporeSystem.level + '\\n' +
+      'Время: ' + Math.floor(this.timeSurvived / 1000) + ' сек', {
+      fontFamily: 'Arial', fontSize: '20px', color: '#aaffcc', align: 'center'
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(1001);
+    
+    const restartBtn = this.add.rectangle(W / 2, H / 2 + 100, 200, 50, 0x1e3a4a)
+      .setStrokeStyle(3, COLORS.biolum)
+      .setInteractive({ useHandCursor: true })
+      .setScrollFactor(0).setDepth(1001);
+    
+    const restartText = this.add.text(W / 2, H / 2 + 100, 'Перезапустить', {
+      fontFamily: 'Arial', fontSize: '20px', color: '#ffffff'
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(1002);
+    
+    restartBtn.on('pointerover', () => restartBtn.setFillStyle(0x2e5a72));
+    restartBtn.on('pointerout', () => restartBtn.setFillStyle(0x1e3a4a));
+    restartBtn.on('pointerdown', () => {
+      this.scene.restart();
+    });
+  }
+}
+
+// ============================================================
+//  КОНФИГУРАЦИЯ PHASER
+// ============================================================
+const config = {
+  type: Phaser.AUTO,
+  parent: 'game-container',
+  width: GAMEW,
+  height: GAMEH,
+  backgroundColor: '#0a0a0a',
+  scale: {
+    mode: Phaser.Scale.FIT,
+    autoCenter: Phaser.Scale.CENTER_BOTH,
+  },
+  physics: {
+    default: 'arcade',
+    arcade: {
+      gravity: { x: 0, y: 0 },
+      debug: false,
+    }
+  },
+  scene: GameScene,
+};
+
+const game = new Phaser.Game(config);
+</script>
+</body>
+</html>'''
+
+# Save the file
+with open('/mnt/agents/output/index.html', 'w', encoding='utf-8') as f:
+    f.write(html_code)
+
+print("File saved successfully!")
+print(f"Total lines: {len(html_code.splitlines())}")
+print(f"Total characters: {len(html_code)}")
