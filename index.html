@@ -28,7 +28,7 @@
   <div id="game-container"></div>
   <script>
     // ============================================================
-    //  ГРИБНОЙ СУМРАК — Spore Survivor  (FIXED for Phaser 3.60)
+    //  ГРИБНОЙ СУМРАК — Spore Survivor  (FIXED)
     //  Vampire Survivors-like, top-down, рогалик
     //  ПК: WASD/стрелки — движение, мышь — прицел (авто-огонь)
     //  Телефон: виртуальный джойстик слева, авто-прицел
@@ -41,7 +41,7 @@
     const IS_TOUCH = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 
     // ============================================================
-    //  ПАЛИТРА (строго по дизайн-документу)
+    //  ПАЛИТРА
     // ============================================================
     const COLORS = {
       grass: 0x1a3d2e,
@@ -137,23 +137,20 @@
     }
 
     // ============================================================
-    //  КЛАСС ВРАГА  (FIXED: enableBody → Phaser 3 reset)
+    //  КЛАСС ВРАГА
     // ============================================================
     class Enemy extends Phaser.Physics.Arcade.Sprite {
       constructor(scene, x, y) {
         super(scene, x, y, 'enemy');
         this.setDepth(5);
         this.setCircle(14);
-        // custom flag для "окровавленности"
         this._bloodied = false;
       }
 
       spawn(x, y, cfg) {
-        // ---- PHASER 3: правильная активация тела ----
         this.setActive(true).setVisible(true);
         this.body.enable = true;
         this.body.reset(x, y);
-        // ---------------------------------------------
 
         this.hp = cfg.hp;
         this.maxHp = cfg.hp;
@@ -196,7 +193,6 @@
       update(time, delta, player, sporeLevel) {
         if (!this.active) return;
 
-        // Ядовитый DOT
         if (this.poisoned && this.poisonTimer > 0) {
           this.poisonTimer -= delta;
           this.hp -= 3 * delta / 1000;
@@ -211,7 +207,6 @@
         else if (sporeLevel > 50) speedMult = 1.25;
         else if (sporeLevel > 25) speedMult = 1.1;
 
-        // "окровавливание" — используем свой флаг вместо tintTopLeft
         if (sporeLevel > 50 && !this.isBig && !this._bloodied) {
           if (Math.random() < 0.02) {
             this.setTint(COLORS.blood);
@@ -269,7 +264,7 @@
     }
 
     // ============================================================
-    //  КЛАСС СНАРЯДА  (FIXED: enableBody → Phaser 3 reset)
+    //  КЛАСС СНАРЯДА
     // ============================================================
     class Projectile extends Phaser.Physics.Arcade.Sprite {
       constructor(scene, x, y) {
@@ -279,11 +274,9 @@
       }
 
       fire(x, y, angle, speed, damage, isExplosive, isPoison) {
-        // ---- PHASER 3: правильная активация тела ----
         this.setActive(true).setVisible(true);
         this.body.enable = true;
         this.body.reset(x, y);
-        // ---------------------------------------------
 
         this.damage = damage;
         this.isExplosive = isExplosive;
@@ -303,7 +296,7 @@
     }
 
     // ============================================================
-    //  СИСТЕМА СПОР (опыт и уровни)  (FIXED: get() без текстуры)
+    //  СИСТЕМА СПОР
     // ============================================================
     class SporeSystem {
       constructor(scene) {
@@ -312,12 +305,8 @@
         this.level = 1;
         this.xpToNext = 8;
 
-        // группы создаём, текстуру будем ставить в drop()
         this.spores = scene.physics.add.group({ maxSize: 400 });
         this.antidotes = scene.physics.add.group({ maxSize: 50 });
-
-        // переопределяем класс для корректного создания спрайтов с текстурой
-        // на самом деле get() сам создаёт экземпляр, но мы в drop() ставим текстуру
 
         scene.physics.add.overlap(scene.player, this.spores, (player, spore) => {
           if (!spore.active) return;
@@ -338,13 +327,11 @@
         if (isAntidote) {
           let antidote = this.antidotes.get(x, y);
           if (!antidote) return;
-          // ---- PHASER 3: активация ----
           antidote.setTexture('antidote');
           antidote.setActive(true).setVisible(true);
           antidote.body.enable = true;
           antidote.body.reset(x, y);
           antidote.setDepth(4);
-          // -----------------------------
           this.scene.tweens.add({
             targets: antidote,
             scale: { from: 0.7, to: 1.1 },
@@ -355,14 +342,12 @@
         } else {
           let spore = this.spores.get(x, y);
           if (!spore) return;
-          // ---- PHASER 3: активация ----
           spore.setTexture('spore');
           spore.setActive(true).setVisible(true);
           spore.body.enable = true;
           spore.body.reset(x, y);
           spore.setDepth(3);
           spore.xpValue = value;
-          // -----------------------------
           this.scene.tweens.add({
             targets: spore,
             scale: { from: 0.6, to: 1.0 },
@@ -621,7 +606,7 @@
     }
 
     // ============================================================
-    //  ГЛАВНАЯ СЦЕНА
+    //  ГЛАВНАЯ СЦЕНА  (ИСПРАВЛЕННАЯ)
     // ============================================================
     class GameScene extends Phaser.Scene {
       constructor() {
@@ -631,7 +616,6 @@
       preload() {
         const gfx = this.make.graphics();
 
-        // Герой
         gfx.clear();
         gfx.fillStyle(COLORS.hero, 1);
         gfx.fillCircle(16, 16, 14);
@@ -639,31 +623,26 @@
         gfx.strokeCircle(16, 16, 14);
         gfx.generateTexture('hero', 32, 32);
 
-        // Враг
         gfx.clear();
         gfx.fillStyle(COLORS.mushroom, 1);
         gfx.fillCircle(16, 16, 14);
         gfx.generateTexture('enemy', 32, 32);
 
-        // Волк
         gfx.clear();
         gfx.fillStyle(COLORS.mushroom, 1);
         gfx.fillRect(4, 4, 24, 24);
         gfx.generateTexture('wolf', 32, 32);
 
-        // Плодовое тело
         gfx.clear();
         gfx.fillStyle(COLORS.mushroom, 1);
         gfx.fillCircle(24, 24, 22);
         gfx.generateTexture('fruit', 48, 48);
 
-        // Щупальце
         gfx.clear();
         gfx.fillStyle(COLORS.toxic, 1);
         gfx.fillCircle(8, 8, 8);
         gfx.generateTexture('tentacle', 16, 16);
 
-        // Летучая мышь
         gfx.clear();
         gfx.fillStyle(COLORS.mushroom, 1);
         gfx.beginPath();
@@ -674,19 +653,16 @@
         gfx.fillPath();
         gfx.generateTexture('bat', 32, 32);
 
-        // Снаряд
         gfx.clear();
         gfx.fillStyle(COLORS.projectile, 1);
         gfx.fillCircle(6, 6, 5);
         gfx.generateTexture('proj', 12, 12);
 
-        // Спора
         gfx.clear();
         gfx.fillStyle(COLORS.xpBar, 1);
         gfx.fillCircle(8, 8, 6);
         gfx.generateTexture('spore', 16, 16);
 
-        // Антидот
         gfx.clear();
         gfx.fillStyle(COLORS.antidote, 1);
         gfx.fillCircle(10, 10, 8);
@@ -695,13 +671,11 @@
         gfx.fillRect(4, 8, 12, 4);
         gfx.generateTexture('antidote', 20, 20);
 
-        // Частицы
         gfx.clear();
         gfx.fillStyle(COLORS.biolum, 1);
         gfx.fillCircle(2, 2, 2);
         gfx.generateTexture('particle', 4, 4);
 
-        // Трава
         gfx.clear();
         gfx.fillStyle(COLORS.grass, 1);
         gfx.fillRect(0, 0, 64, 64);
@@ -714,7 +688,6 @@
         }
         gfx.generateTexture('grass', 64, 64);
 
-        // Токсичная лужа
         gfx.clear();
         gfx.fillStyle(COLORS.toxic, 0.6);
         gfx.fillCircle(32, 32, 28);
@@ -726,10 +699,8 @@
         this.gameOver = false;
         this.timeSurvived = 0;
 
-        // Фон
         this.add.tileSprite(WORLDW / 2, WORLDH / 2, WORLDW, WORLDH, 'grass');
 
-        // Токсичные лужи
         for (let i = 0; i < 15; i++) {
           const x = Phaser.Math.Between(100, WORLDW - 100);
           const y = Phaser.Math.Between(100, WORLDH - 100);
@@ -738,17 +709,14 @@
             yoyo: true, repeat: -1 });
         }
 
-        // Игрок
         this.player = new Player(this, WORLDW / 2, WORLDH / 2);
 
-        // Группы
         this.enemies = this.physics.add.group({ maxSize: 200, classType: Enemy });
         this.projectiles = this.physics.add.group({ maxSize: 100, classType: Projectile });
         this.sporeSystem = new SporeSystem(this);
         this.upgradeManager = new UpgradeManager(this);
         this.waveManager = new WaveManager(this);
 
-        // Частицы
         this.muzzleFx = this.add.particles(0, 0, 'particle', {
           speed: { min: 50, max: 150 },
           scale: { start: 1, end: 0 },
@@ -784,16 +752,13 @@
           emitting: false
         });
 
-        // Столкновения
         this.physics.add.overlap(this.projectiles, this.enemies, this.onProjectileHit, null, this);
         this.physics.add.overlap(this.player, this.enemies, this.onPlayerHit, null, this);
 
-        // Камера
         this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
         this.cameras.main.setBounds(0, 0, WORLDW, WORLDH);
         this.physics.world.setBounds(0, 0, WORLDW, WORLDH);
 
-        // Ввод
         this.cursors = this.input.keyboard.createCursorKeys();
         this.wasd = this.input.keyboard.addKeys({
           up: Phaser.Input.Keyboard.KeyCodes.W,
@@ -807,13 +772,11 @@
           this.mouseY = pointer.worldY;
         });
 
-        // Джойстик
         this.joy = { active: false, baseX: 0, baseY: 0, vecX: 0, vecY: 0, id: null };
         if (IS_TOUCH) {
           this.setupJoystick();
         }
 
-        // UI
         this.createUI();
         this.showHint();
       }
@@ -940,6 +903,9 @@
         this.cameras.main.shake(500, 0.02);
       }
 
+      // ============================================================
+      //  ИСПРАВЛЕННЫЙ update — используем копию массива врагов
+      // ============================================================
       update(time, delta) {
         if (this.isPaused || this.gameOver) return;
 
@@ -972,15 +938,15 @@
 
         this.handleShooting(time);
 
-        // ---- FIX: итерация по копии массива, чтобы killEnemy не ломал цикл ----
-        const enemiesArray = this.enemies.getChildren();
-        for (let i = 0; i < enemiesArray.length; i++) {
-          const enemy = enemiesArray[i];
+        // ★★★★★ ИСПРАВЛЕНИЕ: КОПИРУЕМ МАССИВ ВРАГОВ ★★★★★
+        const enemiesCopy = this.enemies.getChildren().slice();
+        for (let i = 0; i < enemiesCopy.length; i++) {
+          const enemy = enemiesCopy[i];
           if (enemy && enemy.active) {
             enemy.update(time, delta, this.player, this.player.sporeLevel);
           }
         }
-        // -------------------------------------------------------------------
+        // ★★★★★ КОНЕЦ ИСПРАВЛЕНИЯ ★★★★★
 
         this.sporeSystem.update();
         this.waveManager.update(delta);
@@ -1085,6 +1051,8 @@
       }
 
       killEnemy(enemy) {
+        if (!enemy || !enemy.active) return; // защита
+
         this.deathFx.explode(10, enemy.x, enemy.y);
 
         if (enemy.type === 'spore_bearer') {
