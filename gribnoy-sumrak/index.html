@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Грибной Сумрак</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="ui">
+    <div class="bar-row">
+      <span class="label">HP</span>
+      <div class="bar-bg"><div class="bar-hp" id="hpBar"></div></div>
+      <span id="hpText">100/100</span>
+    </div>
+    <div class="bar-row">
+      <span class="label">Споры</span>
+      <div class="bar-bg"><div class="bar-spore" id="sporeBar"></div></div>
+      <span id="sporeText">0%</span>
+    </div>
+    <div class="stats">
+      LVL <span id="levelDisplay">1</span> |
+      💀 <span id="enemyCount">0</span> |
+      🌊 <span id="waveDisplay">1</span>
+    </div>
+  </div>
+  <canvas id="gameCanvas"></canvas>
+  <div id="upgradeMenu" class="hidden">
+    <h2>ПРОКАЧКА</h2>
+    <div id="upgradeCards"></div>
+  </div>
+  <div id="gameOverScreen" class="hidden">
+    <h1>СПОРЫ ПОБЕДИЛИ</h1>
+    <p>Волна <span id="finalWave">1</span>, Уровень <span id="finalLevel">1</span></p>
+    <p class="hint">R — рестарт</p>
+  </div>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
