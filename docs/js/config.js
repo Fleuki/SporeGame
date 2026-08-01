@@ -13,14 +13,28 @@ export const CONFIG = {
     spriteFrameW: 256, spriteFrameH: 256,
     spriteCols: 4, spriteRows: 4,
     spriteDisplaySize: 56,
+    // === НОВОЕ: анимация атаки ===
+    attackSprite: "assets/images/player_attack/throw.png",
+    attackFrameW: 516, attackFrameH: 512,
+    attackCols: 4, attackRows: 1,
+    attackDisplaySize: 64,
+    attackAnimSpeed: 4,
     color: { body: ["#5c3a21","#3d2616","#2a1a0f"], glow: "#00d4aa", stroke: "#6b2d5c" }
+  },
+  projectile: {
+    // === НОВОЕ: спрайт снаряда ===
+    sprite: "assets/images/projectiles/potion.png",
+    frameW: 516, frameH: 512,
+    cols: 4, rows: 1,
+    displaySize: 32,
+    animSpeed: 5
   },
   sporeSystem: {
     maxSpore: 100,
     thresholds: { safe: 25, warning: 50, danger: 75, critical: 100 },
     effects: {
       warning: { enemySpeedMult: 1.1, lootMult: 1.5, mutateChance: 0 },
-      danger:  { enemySpeedMult: 1.25, lootMult: 2.0, mutateChance: 0.3 },
+      danger: { enemySpeedMult: 1.25, lootMult: 2.0, mutateChance: 0.3 },
       critical:{ enemySpeedMult: 1.5, lootMult: 3.0, mutateChance: 1.0, hpDrain: 1.0 }
     }
   },
@@ -74,5 +88,12 @@ export const CONFIG = {
     baseEnemies: 3, enemyMultiplier: 1.6, spawnIntervalBase: 50,
     spawnIntervalMin: 10, delayBetweenWaves: 60, bossEvery: 10
   },
-  assets: { images: { player: "assets/images/player/hero.png" }, sounds: {} }
+  assets: {
+    images: {
+      player: "assets/images/player/hero.png",
+      playerAttack: "assets/images/player_attack/throw.png",
+      projectile: "assets/images/projectiles/potion.png"
+    },
+    sounds: {}
+  }
 };
