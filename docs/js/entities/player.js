@@ -114,7 +114,8 @@ export class Player {
   draw(renderer){
     // === НОВОЕ: если идёт анимация атаки — рисуем спрайт броска ===
     if(this.isAttacking){
-      const atkImg=renderer.loader?.getImage(CONFIG.player.attackSprite);
+      // ЗДЕСЬ: используем ключ загрузчика (playerAttack), а не путь из CONFIG.player.attackSprite
+      const atkImg=renderer.loader?.getImage("playerAttack");
       if(atkImg){
         renderer.drawSpriteSheet(
           atkImg, this.x, this.y,
@@ -126,7 +127,8 @@ export class Player {
       }
     } else {
       // Обычный спрайт игрока
-      const img=renderer.loader?.getImage(CONFIG.assets.images.player);
+      // ЗДЕСЬ: используем ключ загрузчика 'player' (AssetLoader хранит изображения по ключам из CONFIG.assets.images)
+      const img=renderer.loader?.getImage("player");
       if(img){
         const row=angleToRow(this.angle);
         renderer.drawSpriteSheet(
