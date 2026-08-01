@@ -110,8 +110,8 @@ function update(){
   document.getElementById("sporeText").textContent=Math.floor(player.sporeLevel)+"%";
 
   if(player.hp<=0){ player.hp=0; gameOver=true; document.getElementById("finalWave").textContent=waveSystem.wave; document.getElementById("finalLevel").textContent=player.level; document.getElementById("gameOverScreen").classList.remove("hidden"); }
+  }
 }
-
 function draw(){
   renderer.clear(); renderer.drawMyceliumVeins(CONFIG.screen.width,CONFIG.screen.height); renderer.drawGrid(CONFIG.screen.width,CONFIG.screen.height);
   renderer.playerX=player.x; renderer.playerY=player.y;
