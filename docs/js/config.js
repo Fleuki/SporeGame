@@ -9,10 +9,12 @@ export const CONFIG = {
   player: {
     radius: 16, speed: 3.0, maxHp: 100, damage: 10, attackRate: 14,
     sporeGrowth: 0.08, sporeGrowthOnHit: 3,
-    sprite: "assets/images/player/hero.png",
-    spriteFrameW: 256, spriteFrameH: 256,
+    // Используем новый спрайт алхимика (вы добавите PNG сами)
+    sprite: "assets/images/player/alchemist_purple.png",
+    // Настройки для SpriteSheet (каждый кадр 64x64, 4x4)
+    spriteFrameW: 64, spriteFrameH: 64,
     spriteCols: 4, spriteRows: 4,
-    spriteDisplaySize: 56,
+    spriteDisplaySize: 64,
     // === НОВОЕ: анимация атаки ===
     attackSprite: "assets/images/player_attack/throw.png",
     attackFrameW: 516, attackFrameH: 512,
@@ -90,7 +92,7 @@ export const CONFIG = {
   },
   assets: {
     images: {
-      player: "assets/images/player/hero.png",
+      player: "assets/images/player/alchemist_purple.png",
       playerAttack: "assets/images/player_attack/throw.png",
       projectile: "assets/images/projectiles/potion.png"
     },
