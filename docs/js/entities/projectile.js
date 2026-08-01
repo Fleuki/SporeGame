@@ -13,7 +13,7 @@ export class Projectile {
   }
 
   update(){
-    this.x+=this.vx; this.y+=this.vy; this.life--;
+    addthis.x+=this.vx; this.y+=this.vy; this.life--;
     // === НОВОЕ: крутим анимацию склянки ===
     this.animTimer++;
     if(this.animTimer>=CONFIG.projectile.animSpeed){
