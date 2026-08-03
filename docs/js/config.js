@@ -27,14 +27,39 @@ export const CONFIG = {
     attackAnimSpeed: 3,
     color: { body: ["#5c3a21","#3d2616","#2a1a0f"], glow: "#00d4aa", stroke: "#6b2d5c" }
   },
-  projectile: {
-    // === НОВОЕ: спрайт снаряда ===
-    // Один кадр 256x256, склянка смотрит вправо, искры тянутся назад.
-    sprite: "assets/images/projectiles/potion.png",
-    frameW: 256, frameH: 256,
-    cols: 1, rows: 1,
-    displaySize: 32,
-    animSpeed: 5
+  // ОРУЖИЕ. Все стволы стреляют одновременно, у каждого свой таймер —
+  // как в Vampire Survivors и Brotato. Кнопки огня нет, поэтому
+  // переключение не подошло бы: на мобильных его нечем нажимать.
+  //
+  // Роли разведены дистанцией, темпом и типом урона, чтобы стволы не
+  // дублировали друг друга:
+  //   antidote   — средняя дистанция, частый, одиночная цель
+  //   toxic      — дальний, редкий, лужа с уроном по времени
+  //   incendiary — ближний, самый редкий, мощный взрыв по области
+  //
+  // range: 0 — стреляет по прицелу мыши; иначе сам ищет ближайшую цель
+  // в этом радиусе и молчит, если её нет.
+  weapons: {
+    antidote: {
+      name: "Склянка антидота", desc: "Прямой выстрел по прицелу",
+      sprite: "projectile", frame: 256, display: 32,
+      interval: 14, damage: 1.0, speed: 7, radius: 5, range: 0,
+      burst: { key: "fx_burst_purple", frame: 128, cols: 4, display: 64, speed: 3 }
+    },
+    toxic: {
+      name: "Токсичная склянка", desc: "Лужа спор: 6 ур/сек, 3 сек",
+      sprite: "vial_toxic", frame: 128, display: 30,
+      interval: 46, damage: 0.6, speed: 4.5, radius: 6, range: 320,
+      burst: { key: "fx_burst_toxic", frame: 128, cols: 4, display: 96, speed: 4 },
+      area: { radius: 78, damage: 0.4, dot: { dps: 6, time: 180 } }
+    },
+    incendiary: {
+      name: "Зажигательная склянка", desc: "Взрыв по области вблизи",
+      sprite: "vial_fire", frame: 128, display: 30,
+      interval: 78, damage: 1.2, speed: 5.5, radius: 6, range: 200,
+      burst: { key: "fx_burst_big", frame: 256, cols: 4, display: 170, speed: 4 },
+      area: { radius: 115, damage: 1.7 }
+    }
   },
   sporeSystem: {
     maxSpore: 100,
@@ -120,6 +145,11 @@ export const CONFIG = {
       player: "assets/images/player/alchemist_purple.png",
       playerAttack: "assets/images/player_attack/throw.png",
       projectile: "assets/images/projectiles/potion.png",
+      vial_toxic: "assets/images/projectiles/vial_toxic.png",
+      vial_fire: "assets/images/projectiles/vial_fire.png",
+      fx_burst_purple: "assets/images/effects/burst_purple.png",
+      fx_burst_toxic: "assets/images/effects/burst_toxic.png",
+      fx_burst_big: "assets/images/effects/burst_big.png",
       enemy_spore_bearer: "assets/images/enemies/spore_bearer.png",
       enemy_mushroom_wolf: "assets/images/enemies/mushroom_wolf.png",
       enemy_spore_bat: "assets/images/enemies/spore_bat.png",

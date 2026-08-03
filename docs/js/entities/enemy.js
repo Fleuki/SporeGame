@@ -17,11 +17,26 @@ export class Enemy extends Entity {
     this.abilities=t.abilities||[];
     this.trailTimer=0; this.emergeTimer=t.emergeDelay||0;
     this.grabTimer=0; this.zigzagOffset=0; this.zigzagDir=1;
+    this.dotTime=0; this.dotDps=0;   // урон по времени от токсичной склянки
+  }
+
+  // Урон по времени не складывается стопками, а обновляет длительность
+  // и берёт большую силу — иначе облака перекрывались бы в мгновенную смерть
+  applyDot(dps,time){
+    this.dotDps=Math.max(this.dotDps,dps);
+    this.dotTime=Math.max(this.dotTime,time);
   }
 
   update(dt,ctx){
     this.life++; if(this.dead) return;
     const {player,particles,sporeLevel}=ctx;
+
+    if(this.dotTime>0){
+      this.dotTime--;
+      this.hp-=this.dotDps*dt;
+      if(this.dotTime<=0) this.dotDps=0;
+      else if(this.life%9===0&&particles) particles.emitToxicTrail(this.x,this.y);
+    }
     const sm=sporeLevel>=75?1.5:sporeLevel>=50?1.25:sporeLevel>=25?1.1:1;
     this.speed=this.baseSpeed*sm;
 

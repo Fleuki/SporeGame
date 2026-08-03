@@ -55,8 +55,7 @@ function update(dt){
   player.update(dt,{input,enemies,camera});
   camera.follow(player);
 
-  const proj=player.tryShoot();
-  if(proj) projectiles.push(proj);
+  for(const shot of player.tryShoot(enemies)) projectiles.push(shot);
 
   const waveEvent=waveSystem.update(enemies,player,sporeEffects);
   if(waveEvent&&waveEvent.type==="boss") enemies.push(waveEvent.boss);
@@ -74,7 +73,7 @@ function update(dt){
 function openUpgradeMenu(){
   particles.emit(player.x,player.y,"#00d4aa",25);
   waitingForUpgrade=true; paused=true;
-  upgradeSystem.showMenu(upgradeSystem.generateCards());
+  upgradeSystem.showMenu(upgradeSystem.generateCards(player));
 }
 
 function endGame(){
@@ -108,6 +107,7 @@ function draw(){
   for(const p of projectiles) p.draw(renderer);
   particles.draw(renderer);
   player.draw(renderer);
+  battle.drawEffects(renderer);   // взрывы поверх всего
   renderer.end();
 
   // --- экранный слой: интерфейс и джойстик не ездят вместе с миром ---

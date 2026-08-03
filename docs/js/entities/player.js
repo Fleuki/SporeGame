@@ -1,7 +1,7 @@
 import { angleTo } from "../utils/math.js";
 import { CONFIG } from "../config.js";
 import { Entity } from "./entity.js";
-import { Projectile } from "./projectile.js";
+import { Weapon } from "./weapon.js";
 
 function angleToRow(angle){
   if(angle>=-Math.PI/4 && angle<Math.PI/4) return 2;
@@ -16,8 +16,11 @@ export class Player extends Entity {
     this.speed=CONFIG.player.speed;
     this.maxHp=CONFIG.player.maxHp; this.hp=this.maxHp; this.xp=0; this.level=1; this.xpToNext=10;
     this.damage=CONFIG.player.damage; this.attackCooldown=0; this.attackRate=CONFIG.player.attackRate;
+    // Стволы стреляют одновременно, каждый по своему таймеру.
+    // Остальные выдаются карточками прокачки.
+    this.weapons=[new Weapon(CONFIG.weapons.antidote)];
     this.angle=0; this.color=CONFIG.player.color; this.sporeLevel=0; this.isGrabbed=false;
-    this.shieldActive=false; this.shieldTimer=0; this.dashCooldown=0; this.projectileType="antidote";
+    this.shieldActive=false; this.shieldTimer=0; this.dashCooldown=0;
     this.ricochet=false; this.explosive=false; this.poison=false; this.autoLoot=false; this.lootRadius=40;
     this.canDash=false; this.regen=0; this.xpMult=1; this.lastKeyTime={w:0,a:0,s:0,d:0}; this.lastKey="";
     this.animTimer=0; this.animFrame=0; this.animSpeed=8; this.isMoving=false;
@@ -102,20 +105,25 @@ export class Player extends Entity {
     }
   }
 
-  tryShoot(){
-    if(this.attackCooldown<=0){
+  hasWeapon(key){ return this.weapons.some(w=>w.def===CONFIG.weapons[key]); }
+  addWeapon(key){ if(!this.hasWeapon(key)) this.weapons.push(new Weapon(CONFIG.weapons[key])); }
+
+  // Опрашивает все стволы и возвращает вылетевшие снаряды
+  tryShoot(enemies){
+    const shots=[];
+    for(const w of this.weapons){
+      w.update();
+      const p=w.fire(this,enemies);
+      if(p) shots.push(p);
+    }
+    if(shots.length){
+      // Анимация броска общая: играет, когда выстрелил хоть один ствол
       this.attackCooldown=this.attackRate;
-      // === НОВОЕ: запуск анимации броска ===
       this.isAttacking=true;
       this.attackAnimFrame=0;
       this.attackAnimTimer=0;
-      return new Projectile(
-        this.x+Math.cos(this.angle)*(this.radius+6),
-        this.y+Math.sin(this.angle)*(this.radius+6),
-        this.angle,this.damage,this.projectileType
-      );
     }
-    return null;
+    return shots;
   }
 
   takeDamage(a){

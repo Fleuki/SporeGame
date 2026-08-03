@@ -2,6 +2,7 @@ import { CONFIG } from "../config.js";
 import { Enemy } from "../entities/enemy.js";
 import { Boss } from "../entities/boss.js";
 import { SpatialGrid } from "../core/spatialGrid.js";
+import { Effect } from "../entities/effect.js";
 
 // Вся боевая часть кадра: враги, снаряды, попадания, смерти, лут и опыт.
 // Раньше это был один блок на 50 строк внутри main.update() вперемешку с
@@ -11,7 +12,29 @@ export class BattleSystem {
     this.particles=particles;
     this.sporeSystem=sporeSystem;
     this.grid=new SpatialGrid(96);
-    this._near=[];   // переиспользуемый буфер, чтобы не мусорить в GC
+    this._near=[];        // переиспользуемый буфер, чтобы не мусорить в GC
+    this.effects=[];      // одноразовые анимации взрывов
+  }
+
+  updateEffects(){
+    for(let i=this.effects.length-1;i>=0;i--){
+      this.effects[i].update();
+      if(this.effects[i].done) this.effects.splice(i,1);
+    }
+  }
+
+  drawEffects(renderer){ for(const e of this.effects) e.draw(renderer); }
+
+  // Попадание: вспышка, урон по области и яд, если оружие их даёт
+  impact(p,enemies){
+    const d=p.def;
+    if(d.burst) this.effects.push(new Effect(p.x,p.y,d.burst));
+    if(!d.area) return;
+    for(const o of this.grid.query(p.x,p.y,d.area.radius,[])){
+      if(o.dead||Math.hypot(o.x-p.x,o.y-p.y)>d.area.radius) continue;
+      o.hp-=p.damage*d.area.damage;
+      if(d.area.dot&&o.applyDot) o.applyDot(d.area.dot.dps,d.area.dot.time);
+    }
   }
 
   // Возвращает { leveledUp } — открытие меню прокачки остаётся за main,
@@ -25,6 +48,7 @@ export class BattleSystem {
     // Сетка строится после того, как все враги сдвинулись
     this.grid.rebuild(enemies);
     this.updateProjectiles(projectiles,enemies,player,camera);
+    this.updateEffects();
 
     let leveledUp=false;
     for(let i=enemies.length-1;i>=0;i--){
@@ -97,6 +121,7 @@ export class BattleSystem {
         hit=true; break;
       }
 
+      if(hit) this.impact(p,enemies);
       if(hit||p.isOffScreen(camera)||p.life<=0) projectiles.splice(i,1);
     }
   }
