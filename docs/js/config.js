@@ -16,18 +16,23 @@ export const CONFIG = {
     spriteCols: 4, spriteRows: 4,
     spriteDisplaySize: 64,
     // === НОВОЕ: анимация атаки ===
+    // Лист 2064x512, 4 кадра в ряд => кадр 516x512.
+    // attackCols * attackAnimSpeed должно быть МЕНЬШЕ attackRate,
+    // иначе анимация не успевает доиграть до следующего броска и игрок
+    // навсегда застревает в состоянии атаки (Player.update это ещё и подстрахует).
     attackSprite: "assets/images/player_attack/throw.png",
     attackFrameW: 516, attackFrameH: 512,
     attackCols: 4, attackRows: 1,
     attackDisplaySize: 64,
-    attackAnimSpeed: 4,
+    attackAnimSpeed: 3,
     color: { body: ["#5c3a21","#3d2616","#2a1a0f"], glow: "#00d4aa", stroke: "#6b2d5c" }
   },
   projectile: {
     // === НОВОЕ: спрайт снаряда ===
+    // Один кадр 256x256, склянка смотрит вправо, искры тянутся назад.
     sprite: "assets/images/projectiles/potion.png",
-    frameW: 516, frameH: 512,
-    cols: 4, rows: 1,
+    frameW: 256, frameH: 256,
+    cols: 1, rows: 1,
     displaySize: 32,
     animSpeed: 5
   },

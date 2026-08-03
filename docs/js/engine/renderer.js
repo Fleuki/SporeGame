@@ -36,11 +36,14 @@ export class Renderer {
     if(!img) return; this.ctx.save(); this.ctx.translate(x,y); this.ctx.rotate(angle); this.ctx.drawImage(img,-w/2,-h/2,w,h); this.ctx.restore();
   }
   // === НОВОЕ: анимированный спрайт-лист ===
-  drawSpriteSheet(img,x,y,frameW,frameH,col,row,displaySize,angle=0){
+  // angle вращает кадр (для снарядов), flip зеркалит его по горизонтали
+  // (для персонажа: направление задаётся рядом листа, вращать его нельзя).
+  drawSpriteSheet(img,x,y,frameW,frameH,col,row,displaySize,angle=0,flip=false){
     if(!img) return;
     this.ctx.save();
     this.ctx.translate(x,y);
-    this.ctx.rotate(angle);
+    if(angle) this.ctx.rotate(angle);
+    if(flip) this.ctx.scale(-1,1);
     this.ctx.drawImage(img, col*frameW, row*frameH, frameW, frameH, -displaySize/2, -displaySize/2, displaySize, displaySize);
     this.ctx.restore();
   }

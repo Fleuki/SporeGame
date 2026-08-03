@@ -25,7 +25,8 @@ export class Projectile {
   isOffScreen(w,h){ return this.x<-30||this.x>w+30||this.y<-30||this.y>h+30; }
 
   draw(renderer){
-    const img=renderer.loader?.getImage(CONFIG.projectile.sprite);
+    // Ключ загрузчика из CONFIG.assets.images, а не путь к файлу.
+    const img=renderer.loader?.getImage("projectile");
     if(img){
       renderer.drawSpriteSheet(
         img, this.x, this.y,
