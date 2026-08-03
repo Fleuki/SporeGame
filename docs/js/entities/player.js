@@ -1,5 +1,6 @@
-import { clamp, angleTo } from "../utils/math.js";
+import { angleTo } from "../utils/math.js";
 import { CONFIG } from "../config.js";
+import { Entity } from "./entity.js";
 import { Projectile } from "./projectile.js";
 
 function angleToRow(angle){
@@ -9,9 +10,10 @@ function angleToRow(angle){
   return 1;
 }
 
-export class Player {
+export class Player extends Entity {
   constructor(x,y){
-    this.x=x; this.y=y; this.radius=CONFIG.player.radius; this.speed=CONFIG.player.speed;
+    super(x,y,CONFIG.player.radius);
+    this.speed=CONFIG.player.speed;
     this.maxHp=CONFIG.player.maxHp; this.hp=this.maxHp; this.xp=0; this.level=1; this.xpToNext=10;
     this.damage=CONFIG.player.damage; this.attackCooldown=0; this.attackRate=CONFIG.player.attackRate;
     this.angle=0; this.color=CONFIG.player.color; this.sporeLevel=0; this.isGrabbed=false;
@@ -19,9 +21,9 @@ export class Player {
     this.ricochet=false; this.explosive=false; this.poison=false; this.autoLoot=false; this.lootRadius=40;
     this.canDash=false; this.regen=0; this.xpMult=1; this.lastKeyTime={w:0,a:0,s:0,d:0}; this.lastKey="";
     this.animTimer=0; this.animFrame=0; this.animSpeed=8; this.isMoving=false;
-    // life использовался в проверке регенерации, но нигде не задавался:
+    // life читался проверкой регенерации, но нигде не задавался:
     // undefined%60 === NaN, поэтому апгрейд «Мицелиевое исцеление» не лечил.
-    this.life=0;
+    // Теперь счётчик приходит из Entity.
     // === НОВОЕ: анимация броска ===
     this.attackAnimTimer=0;
     this.attackAnimFrame=0;
@@ -35,7 +37,8 @@ export class Player {
     ));
   }
 
-  update(input,w,h,dt,enemies){
+  update(dt,ctx){
+    const {input,enemies,camera}=ctx;
     this.life++;
     if(this.isGrabbed) return;
     let dx=0,dy=0;
@@ -52,13 +55,17 @@ export class Player {
       }
     }
 
+    // Мир больше не ограничен размером холста — clamp по краям убран,
+    // игрок свободно уходит в любую сторону, а камера следует за ним.
     this.x+=dx*this.speed; this.y+=dy*this.speed;
-    this.x=clamp(this.x,this.radius,w-this.radius);
-    this.y=clamp(this.y,this.radius,h-this.radius);
 
     const autoAim=input.getAutoAimAngle(this,enemies);
     if(autoAim!==null) this.angle=autoAim;
-    else this.angle=angleTo(this.x,this.y,input.mouse.x,input.mouse.y);
+    else {
+      // Мышь приходит в экранных координатах, целиться нужно в мировых
+      const m=camera?camera.toWorld(input.mouse.x,input.mouse.y):input.mouse;
+      this.angle=angleTo(this.x,this.y,m.x,m.y);
+    }
 
     if(this.attackCooldown>0) this.attackCooldown--;
     if(this.shieldTimer>0) this.shieldTimer--;

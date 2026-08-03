@@ -1,5 +1,6 @@
 import { CONFIG } from "./config.js";
 import { Loop } from "./core/loop.js";
+import { Camera } from "./core/camera.js";
 import { AssetLoader } from "./engine/assetLoader.js";
 import { AudioManager } from "./engine/audio.js";
 import { InputManager } from "./engine/input.js";
@@ -17,8 +18,9 @@ canvas.width=CONFIG.screen.width; canvas.height=CONFIG.screen.height;
 const loader=new AssetLoader();
 const audio=new AudioManager(loader);
 const input=new InputManager(canvas);
+const camera=new Camera(CONFIG.screen.width,CONFIG.screen.height);
 const renderer=new Renderer(canvas);
-renderer.loader=loader;
+renderer.loader=loader; renderer.camera=camera;
 const particles=new ParticleSystem();
 const sporeSystem=new SporeSystem();
 const upgradeSystem=new UpgradeSystem();
@@ -33,9 +35,10 @@ input.onPausePress=()=>{ if(upgradeSystem.isOpen){ upgradeSystem.hideMenu(); pau
 let player,enemies,projectiles,waveSystem,gameOver,paused,waitingForUpgrade;
 
 function init(){
-  player=new Player(CONFIG.screen.width/2,CONFIG.screen.height/2);
+  player=new Player(0,0);
+  camera.centerOn(player);
   enemies=[]; projectiles=[];
-  waveSystem=new WaveSystem(CONFIG.screen.width,CONFIG.screen.height);
+  waveSystem=new WaveSystem(camera);
   waveSystem.startWave(); gameOver=false; paused=false; waitingForUpgrade=false;
   document.getElementById("gameOverScreen").classList.add("hidden");
   upgradeSystem.hideMenu();
@@ -49,7 +52,8 @@ function update(dt){
   if(gameOver||paused||waitingForUpgrade) return;
 
   const sporeEffects=sporeSystem.getSporeEffects(player.sporeLevel);
-  player.update(input,CONFIG.screen.width,CONFIG.screen.height,dt,enemies);
+  player.update(dt,{input,enemies,camera});
+  camera.follow(player);
 
   const proj=player.tryShoot();
   if(proj) projectiles.push(proj);
@@ -57,7 +61,7 @@ function update(dt){
   const waveEvent=waveSystem.update(enemies,player,sporeEffects);
   if(waveEvent&&waveEvent.type==="boss") enemies.push(waveEvent.boss);
 
-  const {leveledUp}=battle.update(dt,{player,enemies,projectiles,sporeEffects});
+  const {leveledUp}=battle.update(dt,{player,enemies,projectiles,sporeEffects,camera});
   if(leveledUp) openUpgradeMenu();
 
   particles.update();
@@ -93,17 +97,21 @@ function syncHud(){
 
 function draw(){
   renderer.clear();
-  renderer.drawMyceliumVeins(CONFIG.screen.width,CONFIG.screen.height);
-  renderer.drawGrid(CONFIG.screen.width,CONFIG.screen.height);
   renderer.playerX=player.x; renderer.playerY=player.y;
 
+  // --- мировой слой: всё внутри begin/end сдвигается камерой ---
+  renderer.begin();
+  renderer.drawMyceliumVeins();
+  renderer.drawGrid();
   sporeSystem.draw(renderer);
   for(const e of enemies) e.draw(renderer);
   for(const p of projectiles) p.draw(renderer);
   particles.draw(renderer);
   player.draw(renderer);
-  input.drawJoystick(renderer);
+  renderer.end();
 
+  // --- экранный слой: интерфейс и джойстик не ездят вместе с миром ---
+  input.drawJoystick(renderer);
   renderer.drawText("Уровень "+player.level+"  |  XP "+Math.floor(player.xp)+"/"+player.xpToNext,20,30,{font:"14px monospace",color:"#aaa"});
   renderer.drawText("Волна "+waveSystem.wave+"  |  Врагов: "+enemies.length,CONFIG.screen.width-240,30,{font:"16px monospace",color:"#8888ff"});
 

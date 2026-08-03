@@ -1,6 +1,7 @@
 import { CONFIG } from "../config.js";
 import { Enemy } from "../entities/enemy.js";
 import { Boss } from "../entities/boss.js";
+import { SpatialGrid } from "../core/spatialGrid.js";
 
 // Вся боевая часть кадра: враги, снаряды, попадания, смерти, лут и опыт.
 // Раньше это был один блок на 50 строк внутри main.update() вперемешку с
@@ -9,17 +10,21 @@ export class BattleSystem {
   constructor(particles,sporeSystem){
     this.particles=particles;
     this.sporeSystem=sporeSystem;
+    this.grid=new SpatialGrid(96);
+    this._near=[];   // переиспользуемый буфер, чтобы не мусорить в GC
   }
 
   // Возвращает { leveledUp } — открытие меню прокачки остаётся за main,
   // потому что оно ставит игру на паузу.
-  update(dt,{player,enemies,projectiles,sporeEffects}){
-    const ctx={player,enemies,particles:this.particles,sporeLevel:player.sporeLevel,events:[]};
+  update(dt,{player,enemies,projectiles,sporeEffects,camera}){
+    const ctx={player,enemies,camera,particles:this.particles,sporeLevel:player.sporeLevel,events:[]};
 
     for(const e of enemies){ if(!e.dead) e.update(dt,ctx); }
-    for(const ev of ctx.events) this.handleBossEvent(ev,enemies,player);
+    for(const ev of ctx.events) this.handleBossEvent(ev,enemies,player,camera);
 
-    this.updateProjectiles(projectiles,enemies,player);
+    // Сетка строится после того, как все враги сдвинулись
+    this.grid.rebuild(enemies);
+    this.updateProjectiles(projectiles,enemies,player,camera);
 
     let leveledUp=false;
     for(let i=enemies.length-1;i>=0;i--){
@@ -31,7 +36,7 @@ export class BattleSystem {
     return {leveledUp};
   }
 
-  handleBossEvent(ev,enemies,player){
+  handleBossEvent(ev,enemies,player,camera){
     const b=ev.boss;
     if(ev.type==="sneeze"){
       this.particles.emitSporeCloud(b.x,b.y,CONFIG.bosses.mother_cap.sporeCloudRadius,"#6b2d5c");
@@ -43,21 +48,25 @@ export class BattleSystem {
         enemies.push(new Enemy(b.x+Math.cos(ang)*60,b.y+Math.sin(ang)*60,CONFIG.bosses.mother_cap.minionType));
       }
     } else if(ev.type==="summon_tentacle"){
-      const tx=50+Math.random()*(CONFIG.screen.width-100);
-      const ty=50+Math.random()*(CONFIG.screen.height-100);
-      enemies.push(new Enemy(tx,ty,"mycelium_tentacle"));
+      // Щупальце вырастает в случайной точке видимой области, а не в
+      // координатах бывшей фиксированной арены
+      const t=camera
+        ? {x:camera.x+50+Math.random()*(camera.w-100), y:camera.y+50+Math.random()*(camera.h-100)}
+        : {x:player.x, y:player.y};
+      enemies.push(new Enemy(t.x,t.y,"mycelium_tentacle"));
     } else if(ev.type==="pulse"){
       for(const en of enemies){ if(!(en instanceof Boss)) en.speed*=1.3; }
     }
   }
 
-  updateProjectiles(projectiles,enemies,player){
+  updateProjectiles(projectiles,enemies,player,camera){
     for(let i=projectiles.length-1;i>=0;i--){
       const p=projectiles[i];
       p.update();
       let hit=false;
 
-      for(const e of enemies){
+      // Кандидаты берутся из сетки — перебирать всех врагов не нужно
+      for(const e of this.grid.query(p.x,p.y,p.radius+64,this._near)){
         if(e.dead||Math.hypot(p.x-e.x,p.y-e.y)>=p.radius+e.radius) continue;
 
         e.takeDamage(p.damage);
@@ -65,7 +74,7 @@ export class BattleSystem {
         this.particles.emit(p.x,p.y,"#88ff88",5);
 
         if(player.explosive){
-          for(const o of enemies){
+          for(const o of this.grid.query(p.x,p.y,40,[])){
             if(o!==e&&!o.dead&&Math.hypot(o.x-p.x,o.y-p.y)<40) o.hp-=p.damage*0.5;
           }
           this.particles.emit(p.x,p.y,"#ff6633",10);
@@ -74,7 +83,7 @@ export class BattleSystem {
         // Один отскок на снаряд, в ближайшего врага в радиусе 150
         if(player.ricochet&&!p.ricocheted){
           let nearest=null,bestD=150;
-          for(const o of enemies){
+          for(const o of this.grid.query(p.x,p.y,150,[])){
             if(o===e||o.dead) continue;
             const d=Math.hypot(o.x-p.x,o.y-p.y);
             if(d<bestD){ bestD=d; nearest=o; }
@@ -88,7 +97,7 @@ export class BattleSystem {
         hit=true; break;
       }
 
-      if(hit||p.isOffScreen(CONFIG.screen.width,CONFIG.screen.height)||p.life<=0) projectiles.splice(i,1);
+      if(hit||p.isOffScreen(camera)||p.life<=0) projectiles.splice(i,1);
     }
   }
 
@@ -103,7 +112,7 @@ export class BattleSystem {
     }
     if(e.abilities.includes("explode_on_death")){
       this.particles.emit(e.x,e.y,"#c4a000",20,2,6);
-      for(const o of enemies){
+      for(const o of this.grid.query(e.x,e.y,t.explodeRadius,[])){
         if(o!==e&&!(o instanceof Boss)&&Math.hypot(o.x-e.x,o.y-e.y)<t.explodeRadius) o.hp-=t.explodeDamage*0.5;
       }
       if(Math.hypot(player.x-e.x,player.y-e.y)<t.explodeRadius){

@@ -111,7 +111,9 @@ export const CONFIG = {
   },
   waves: {
     baseEnemies: 3, enemyMultiplier: 1.6, spawnIntervalBase: 50,
-    spawnIntervalMin: 10, delayBetweenWaves: 60, bossEvery: 10
+    spawnIntervalMin: 10, delayBetweenWaves: 60, bossEvery: 10,
+    // Насколько за краем видимости появляются враги и боссы
+    spawnMargin: 90, bossSpawnMargin: 160
   },
   assets: {
     images: {

@@ -22,7 +22,8 @@ export class Projectile {
     }
   }
 
-  isOffScreen(w,h){ return this.x<-30||this.x>w+30||this.y<-30||this.y>h+30; }
+  // Мир не ограничен, поэтому «за экраном» считается относительно камеры
+  isOffScreen(camera){ return camera?!camera.sees(this.x,this.y,60):false; }
 
   draw(renderer){
     // Ключ загрузчика из CONFIG.assets.images, а не путь к файлу.
