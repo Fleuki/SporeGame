@@ -11,8 +11,8 @@ export const CONFIG = {
     sporeGrowth: 0.08, sporeGrowthOnHit: 3,
     // Используем новый спрайт алхимика (вы добавите PNG сами)
     sprite: "assets/images/player/alchemist_purple.png",
-    // Настройки для SpriteSheet (каждый кадр 64x64, 4x4)
-    spriteFrameW: 64, spriteFrameH: 64,
+    // Настройки для SpriteSheet (реальный размер листа 1024x1024, 4x4 => кадр 256x256)
+    spriteFrameW: 256, spriteFrameH: 256,
     spriteCols: 4, spriteRows: 4,
     spriteDisplaySize: 64,
     // === НОВОЕ: анимация атаки ===
