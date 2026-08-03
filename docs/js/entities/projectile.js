@@ -6,7 +6,7 @@ export class Projectile {
     this.vx=Math.cos(angle)*7; this.vy=Math.sin(angle)*7;
     this.radius=type==="antidote"?5:6;
     this.damage=damage; this.life=100; this.type=type;
-    this.angle=angle;
+    this.angle=angle; this.ricocheted=false;
     // === НОВОЕ: анимация снаряда ===
     this.animFrame=0;
     this.animTimer=0;

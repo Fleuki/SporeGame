@@ -19,6 +19,9 @@ export class Player {
     this.ricochet=false; this.explosive=false; this.poison=false; this.autoLoot=false; this.lootRadius=40;
     this.canDash=false; this.regen=0; this.xpMult=1; this.lastKeyTime={w:0,a:0,s:0,d:0}; this.lastKey="";
     this.animTimer=0; this.animFrame=0; this.animSpeed=8; this.isMoving=false;
+    // life использовался в проверке регенерации, но нигде не задавался:
+    // undefined%60 === NaN, поэтому апгрейд «Мицелиевое исцеление» не лечил.
+    this.life=0;
     // === НОВОЕ: анимация броска ===
     this.attackAnimTimer=0;
     this.attackAnimFrame=0;
@@ -33,6 +36,7 @@ export class Player {
   }
 
   update(input,w,h,dt,enemies){
+    this.life++;
     if(this.isGrabbed) return;
     let dx=0,dy=0;
     if(input.keys.w) dy=-1; if(input.keys.s) dy=1; if(input.keys.a) dx=-1; if(input.keys.d) dx=1;

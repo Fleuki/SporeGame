@@ -9,12 +9,29 @@ export class WaveSystem {
     if(!this.active) return null;
     if(this.waveDelay>0){ this.waveDelay--; return null; }
     if(this.wave%CONFIG.waves.bossEvery===0&&this.wave>0&&!this.bossSpawned&&enemies.filter(e=>e instanceof Boss).length===0){
-      this.bossSpawned=true; const type=this.wave%20===0?"mycelium_heart":"mother_cap"; return {type:"boss",boss:new Boss(this.w/2,this.h/2,type)};
+      this.bossSpawned=true;
+      const type=this.wave%20===0?"mycelium_heart":"mother_cap";
+      const [bx,by]=this.bossSpawnPoint(player);
+      return {type:"boss",boss:new Boss(bx,by,type)};
     }
     if(this.enemiesSpawned<this.enemiesPerWave){ this.spawnTimer--; if(this.spawnTimer<=0){ this.spawnEnemy(enemies,sporeEffects); this.enemiesSpawned++; this.spawnTimer=this.spawnInterval; } }
     else if(enemies.length===0||(enemies.length===1&&enemies[0] instanceof Boss)) this.startWave();
     return null;
   }
+  // Босс появлялся ровно в центре арены — там же, где стоит игрок в начале
+  // волны, — и мгновенно наносил контактный урон. Ставим его в самый дальний
+  // из четырёх углов-кандидатов, чтобы у игрока было время среагировать.
+  bossSpawnPoint(player){
+    const m=120;
+    const spots=[[m,m],[this.w-m,m],[m,this.h-m],[this.w-m,this.h-m],[this.w/2,m],[this.w/2,this.h-m]];
+    let best=spots[0], bestD=-1;
+    for(const [x,y] of spots){
+      const d=Math.hypot(x-player.x,y-player.y);
+      if(d>bestD){ bestD=d; best=[x,y]; }
+    }
+    return best;
+  }
+
   spawnEnemy(enemies,sporeEffects){
     const side=Math.floor(Math.random()*4), pad=40; let x,y;
     if(side===0){x=rand(-pad,this.w+pad);y=-pad;} else if(side===1){x=this.w+pad;y=rand(-pad,this.h+pad);} else if(side===2){x=rand(-pad,this.w+pad);y=this.h+pad;} else {x=-pad;y=rand(-pad,this.h+pad);}

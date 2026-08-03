@@ -1,4 +1,5 @@
 import { CONFIG } from "./config.js";
+import { Loop, STEP } from "./core/loop.js";
 import { AssetLoader } from "./engine/assetLoader.js";
 import { AudioManager } from "./engine/audio.js";
 import { InputManager } from "./engine/input.js";
@@ -45,10 +46,10 @@ window.addEventListener("upgradeChosen",(e)=>{
   upgradeSystem.applyUpgrade(e.detail,player); waitingForUpgrade=false; paused=false;
 });
 
-function update(){
+function update(dt){
   if(gameOver||paused) return; if(waitingForUpgrade) return;
   const sporeEffects=sporeSystem.getSporeEffects(player.sporeLevel);
-  player.update(input,CONFIG.screen.width,CONFIG.screen.height,1,enemies);
+  player.update(input,CONFIG.screen.width,CONFIG.screen.height,dt,enemies);
 
   const proj=player.tryShoot();
   if(proj){ projectiles.push(proj); }
@@ -95,11 +96,27 @@ function update(){
     for(const e of enemies){ if(e.dead) continue; if(Math.hypot(p.x-e.x,p.y-e.y)<p.radius+e.radius){
       e.takeDamage(p.damage); if(player.poison) e.hp-=3; particles.emit(p.x,p.y,"#88ff88",5);
       if(player.explosive){ for(const o of enemies){ if(o!==e&&!o.dead&&Math.hypot(o.x-p.x,o.y-p.y)<40) o.hp-=p.damage*0.5; } particles.emit(p.x,p.y,"#ff6633",10); }
-      if(player.ricochet){ let nearest=null, bestD=9999; for(const o of enemies){ if(o!==e&&!o.dead){ const d2=Math.hypot(o.x-p.x,o.y-p.y); if(d2<bestD&&d2<150){ bestD=d2; nearest=o; } } if(nearest){ const a2=Math.atan2(nearest.y-p.y,nearest.x-p.x); p.vx=Math.cos(a2)*7; p.vy=Math.sin(a2)*7; hit=false; continue; } }
+      // Рикошет: проверка `if(nearest)` стояла ВНУТРИ цикла поиска, поэтому
+      // снаряд разворачивался в первого попавшегося врага в радиусе, а не в
+      // ближайшего, и продолжал перебор уже после разворота.
+      if(player.ricochet && !p.ricocheted){
+        let nearest=null, bestD=150;
+        for(const o of enemies){
+          if(o===e||o.dead) continue;
+          const d2=Math.hypot(o.x-p.x,o.y-p.y);
+          if(d2<bestD){ bestD=d2; nearest=o; }
+        }
+        if(nearest){
+          const a2=Math.atan2(nearest.y-p.y,nearest.x-p.x);
+          p.vx=Math.cos(a2)*7; p.vy=Math.sin(a2)*7; p.angle=a2;
+          p.ricocheted=true;   // один отскок на снаряд, иначе он живёт вечно
+          hit=false; break;
+        }
+      }
       hit=true; break;
-    }}
+    }
+    }
     if(hit||p.isOffScreen(CONFIG.screen.width,CONFIG.screen.height)||p.life<=0) projectiles.splice(i,1);
-  }
   }
 
   particles.update(); sporeSystem.update(player);
@@ -129,6 +146,6 @@ function draw(){
   if(gameOver){ renderer.drawOverlay(0.7); renderer.drawText("СПОРЫ ПОБЕДИЛИ",CONFIG.screen.width/2,CONFIG.screen.height/2-20,{font:"bold 60px monospace",color:"#ff3344",align:"center"}); renderer.drawText("Волна "+waveSystem.wave+" | Уровень "+player.level,CONFIG.screen.width/2,CONFIG.screen.height/2+50,{font:"20px monospace",color:"#aaa",align:"center"}); renderer.drawText("R — рестарт | M — звук",CONFIG.screen.width/2,CONFIG.screen.height/2+100,{font:"16px monospace",color:"#888",align:"center"}); }
 }
 
-function gameLoop(){ update(); draw(); requestAnimationFrame(gameLoop); }
-init(); gameLoop();
+const loop=new Loop(update,draw);
+init(); loop.start();
 console.log("Грибной Сумрак запущен! WASD/джойстик — движение, мышь/авто-прицел — стрельба, M — звук, R — рестарт");
