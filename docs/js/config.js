@@ -49,12 +49,19 @@ export const CONFIG = {
     types: {
       spore_bearer: {
         name: "Спороносец", hp: 25, speed: 0.7, radius: 14, damage: 8, xpReward: 6,
-        color: { body: ["#8a8a8a","#6b2d5c","#3d1a33"] }, sprite: null,
+        color: { body: ["#8a8a8a","#6b2d5c","#3d1a33"] },
+        // Ряд 0 — вид в три четверти с вытянутыми руками, лицом вправо.
+        sprite: { key:"enemy_spore_bearer", frame:128, cols:4, rows:3,
+                  row:0, mirror:true, animSpeed:10, display:58 },
         abilities: ["spore_cloud_on_death"], sporeCloudRadius: 60, sporeCloudAmount: 5
       },
       mushroom_wolf: {
         name: "Грибной Волк", hp: 35, speed: 2.2, radius: 13, damage: 12, xpReward: 10,
-        color: { body: ["#5c3a21","#6b2d5c","#2a1a0f"] }, sprite: null,
+        color: { body: ["#5c3a21","#6b2d5c","#2a1a0f"] },
+        // У волка полноценный набор из 4 направлений: ряды сверху вниз —
+        // от камеры, вправо, на камеру, влево.
+        sprite: { key:"enemy_mushroom_wolf", frame:128, cols:4, rows:4,
+                  dirRows:{up:0,right:1,down:2,left:3}, animSpeed:6, display:64 },
         abilities: ["spore_trail","spore_cloud_on_death"],
         trailInterval: 8, sporeCloudRadius: 50, sporeCloudAmount: 8
       },
@@ -71,7 +78,10 @@ export const CONFIG = {
       },
       spore_bat: {
         name: "Летучая Спора", hp: 20, speed: 1.8, radius: 11, damage: 10, xpReward: 9,
-        color: { body: ["#2a2a2a","#6b2d5c","#8a8a8a"] }, sprite: null,
+        color: { body: ["#2a2a2a","#6b2d5c","#8a8a8a"] },
+        // Ряд 0 — вид спереди, 4 фазы взмаха крыльев.
+        sprite: { key:"enemy_spore_bat", frame:128, cols:4, rows:4,
+                  row:0, mirror:true, animSpeed:5, display:56 },
         abilities: ["zigzag_flight","toxic_trail"], zigzagAmp: 2.5, trailInterval: 5
       }
     }
@@ -80,6 +90,10 @@ export const CONFIG = {
     mother_cap: {
       name: "Материнская Капля", hp: 800, speed: 0, radius: 45, damage: 20, xpReward: 200,
       color: { body: ["#6b2d5c","#c4a000","#ff3333"] },
+      // Ряды 2-3 листа (East/West) собраны из несовместимых поз, годится
+      // только вид на камеру — ряд 1.
+      sprite: { key:"boss_mother_cap", frame:256, cols:4, rows:4,
+                row:1, animSpeed:9, display:150 },
       abilities: ["spawn_minions","sneeze_burst"],
       sneezeInterval: 180, sneezeCooldown: 90,
       minionType: "spore_bearer", minionCount: 3, sporeCloudRadius: 120
@@ -87,6 +101,10 @@ export const CONFIG = {
     mycelium_heart: {
       name: "Мицелиевая Сердцевина", hp: 1200, speed: 0, radius: 40, damage: 15, xpReward: 300,
       color: { body: ["#00d4aa","#6b2d5c","#1a3d2e"] },
+      // 4 ряда листа — 4 стадии сердцебиения, они же фазы босса:
+      // ряд выбирается по остатку HP, колонки крутят удар сердца.
+      sprite: { key:"boss_mycelium_heart", frame:256, cols:4, rows:4,
+                phaseRows:true, animSpeed:7, display:140 },
       abilities: ["summon_tentacles","pulse_damage"],
       tentacleInterval: 120, pulseInterval: 90
     }
@@ -99,7 +117,13 @@ export const CONFIG = {
     images: {
       player: "assets/images/player/alchemist_purple.png",
       playerAttack: "assets/images/player_attack/throw.png",
-      projectile: "assets/images/projectiles/potion.png"
+      projectile: "assets/images/projectiles/potion.png",
+      enemy_spore_bearer: "assets/images/enemies/spore_bearer.png",
+      enemy_mushroom_wolf: "assets/images/enemies/mushroom_wolf.png",
+      enemy_spore_bat: "assets/images/enemies/spore_bat.png",
+      boss_mother_cap: "assets/images/bosses/mother_cap.png",
+      boss_mycelium_heart: "assets/images/bosses/mycelium_heart.png"
+      // fruit_body и mycelium_tentacle пока без спрайтов — рисуются примитивами
     },
     sounds: {}
   }

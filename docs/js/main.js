@@ -57,7 +57,10 @@ function update(){
   if(waveEvent&&waveEvent.type==="boss"){ enemies.push(waveEvent.boss); }
 
   for(let i=enemies.length-1;i>=0;i--){
-    const e=enemies[i]; e.update(player,1,player.sporeLevel); if(e.dead) continue;
+    // У Boss своя сигнатура update(player,enemies,sporeLevel) — общий вызов
+    // для него не подходит и раньше прокручивал боссу все таймеры дважды.
+    const e=enemies[i]; if(!(e instanceof Boss)) e.update(player,1,player.sporeLevel);
+    if(e.dead) continue;
 
     if(e instanceof Boss){
       const evt=e.update(player,enemies,player.sporeLevel);
