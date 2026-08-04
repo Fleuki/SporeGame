@@ -37,11 +37,17 @@ input.onPausePress=()=>{ if(upgradeSystem.isOpen){ upgradeSystem.hideMenu(); pau
 (async()=>{ await loader.loadAll(CONFIG.assets); })();
 
 let player,enemies,projectiles,waveSystem,gameOver,paused,waitingForUpgrade;
+let runTime=0;   // секунды с начала забега, идут только пока игра не на паузе
+// Меню прокачки открывается не мгновенно: сначала должна доиграть вспышка
+// уровня. При паузе кадры анимации не идут, поэтому иначе её никто не увидит.
+let levelUpDelay=0;
+const LEVELUP_FRAMES=CONFIG.levelUp.cols*CONFIG.levelUp.speed+4;
 
 function init(){
   player=new Player(0,0);
   camera.centerOn(player);
   enemies=[]; projectiles=[]; loot.reset();
+  battle.kills=0; runTime=0; levelUpDelay=0;
   waveSystem=new WaveSystem(camera);
   waveSystem.startWave(); gameOver=false; paused=false; waitingForUpgrade=false;
   document.getElementById("gameOverScreen").classList.add("hidden");
@@ -54,6 +60,7 @@ window.addEventListener("upgradeChosen",(e)=>{
 
 function update(dt){
   if(gameOver||paused||waitingForUpgrade) return;
+  runTime+=dt;
 
   const sporeEffects=sporeSystem.getSporeEffects(player.sporeLevel);
   player.update(dt,{input,enemies,camera});
@@ -66,7 +73,8 @@ function update(dt){
 
   battle.update(dt,{player,enemies,projectiles,sporeEffects,camera});
   // Опыт даёт не смерть врага, а подобранный предмет
-  if(loot.update(player,camera)) openUpgradeMenu();
+  if(loot.update(player,camera)) startLevelUp();
+  if(levelUpDelay>0&&--levelUpDelay===0) openUpgradeMenu();
 
   particles.update();
   map.update(camera);              // кадры анимации и список видимых декораций
@@ -76,8 +84,13 @@ function update(dt){
   if(player.hp<=0) endGame();
 }
 
-function openUpgradeMenu(){
+function startLevelUp(){
   particles.emit(player.x,player.y,"#00d4aa",25);
+  battle.addEffect(player.x,player.y-30,CONFIG.levelUp);
+  levelUpDelay=LEVELUP_FRAMES;
+}
+
+function openUpgradeMenu(){
   waitingForUpgrade=true; paused=true;
   upgradeSystem.showMenu(upgradeSystem.generateCards(player));
 }
@@ -86,13 +99,21 @@ function endGame(){
   player.hp=0; gameOver=true;
   document.getElementById("finalWave").textContent=waveSystem.wave;
   document.getElementById("finalLevel").textContent=player.level;
+  document.getElementById("finalKills").textContent=battle.kills;
+  document.getElementById("finalTime").textContent=formatTime(runTime);
   document.getElementById("gameOverScreen").classList.remove("hidden");
+}
+
+function formatTime(sec){
+  const m=Math.floor(sec/60), s=Math.floor(sec%60);
+  return m+":"+String(s).padStart(2,"0");
 }
 
 function syncHud(){
   document.getElementById("xpDisplay").textContent=Math.floor(player.xp);
   document.getElementById("levelDisplay").textContent=player.level;
-  document.getElementById("enemyCount").textContent=enemies.length;
+  document.getElementById("killDisplay").textContent=battle.kills;
+  document.getElementById("timeDisplay").textContent=formatTime(runTime);
   document.getElementById("waveDisplay").textContent=waveSystem.wave;
   document.getElementById("coinDisplay").textContent=loot.coins;
   document.getElementById("hpBar").style.width=(player.hp/player.maxHp*100)+"%";

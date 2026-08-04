@@ -15,6 +15,7 @@ export class BattleSystem {
     this.grid=new SpatialGrid(96);
     this._near=[];        // переиспользуемый буфер, чтобы не мусорить в GC
     this.effects=[];      // одноразовые анимации взрывов
+    this.kills=0;         // счётчик убитых, его показывает интерфейс
   }
 
   updateEffects(){
@@ -25,6 +26,9 @@ export class BattleSystem {
   }
 
   drawEffects(renderer){ for(const e of this.effects) e.draw(renderer); }
+
+  // Разовая анимация в точке — вспышка уровня, взрыв склянки
+  addEffect(x,y,def){ this.effects.push(new Effect(x,y,def)); }
 
   // Попадание: вспышка, урон по области и яд, если оружие их даёт
   impact(p,enemies){
@@ -126,7 +130,7 @@ export class BattleSystem {
   }
 
   killEnemy(e,enemies,player,sporeEffects){
-    e.dead=true;
+    e.dead=true; this.kills++;
     const t=e.def||{};
     this.particles.emit(e.x,e.y,"#39ff14",t.sporeCloudAmount||8);
 

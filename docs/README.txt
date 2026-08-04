@@ -46,12 +46,27 @@
    map.decorChance), коллизий у них нет. Точка опоры спрайта — низ по
    центру, поэтому рисуй объект «стоящим на земле».
 
-5. МУЗЫКА:
+5. ИНТЕРФЕЙС И КУРСОР:
+   Иконки HUD — обычные <img class="icon"> в index.html,
+   лежат в assets/images/ui/. Масштаб задаётся в css/style.css
+   (.icon), там же image-rendering: pixelated — без него
+   пиксель-арт мылится при уменьшении.
+   Курсор — тоже CSS: cursor: url(...) X Y, где X Y — точка
+   прицела внутри картинки.
+
+6. АНИМАЦИЯ-ВСПЫШКА (левел-ап, взрыв):
+   PNG с кадрами В ОДИН РЯД → assets/images/effects/levelup.png
+   В config.js:
+     levelUp: { key:"fx_levelup", frame:192, cols:4, display:220, speed:7 }
+   frame — сторона кадра в файле, display — размер на экране,
+   speed — сколько кадров игры держится один кадр анимации.
+
+7. МУЗЫКА:
    assets/sounds/music/battle.ogg
    В config.js assets.sounds.bgm = "..."
    В main.js раскомментируй audio.playMusic("bgm")
 
-6. ЗВУКИ:
+8. ЗВУКИ:
    Добавь пути в config.js assets.sounds
    Раскомментируй audio.playSfx() в main.js
 

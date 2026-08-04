@@ -209,6 +209,8 @@ export const CONFIG = {
   // ЛУТ. Опыт больше не начисляется в момент смерти врага — он выпадает
   // шариками, за которыми надо идти. Значения кристаллов растут по кадрам
   // листа: мелкий → крупный.
+  // Вспышка при получении уровня: 4 кадра — вихрь, пламя, надпись, искры
+  levelUp: { key: "fx_levelup", frame: 192, cols: 4, display: 220, speed: 7 },
   loot: {
     magnetRadius: 70,     // с какого расстояния предмет летит к игроку
     magnetForce: 0.55,
@@ -263,7 +265,8 @@ export const CONFIG = {
       dropCrystal: "assets/images/drops/drop_crystal.png",
       dropAntidote: "assets/images/drops/drop_antidote.png",
       dropPotion: "assets/images/drops/drop_potion.png",
-      dropCoin: "assets/images/drops/drop_coin.png"
+      dropCoin: "assets/images/drops/drop_coin.png",
+      fx_levelup: "assets/images/effects/levelup.png"
     },
     sounds: {}
   }
