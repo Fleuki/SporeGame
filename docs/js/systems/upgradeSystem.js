@@ -2,60 +2,105 @@ import { CONFIG } from "../config.js";
 
 // ПРОКАЧКА.
 //
-// Две вещи здесь были сломаны по-крупному:
+// Колода переехала с «плоского» набора флагов на ветки по стволам.
 //
-//  1. Одноразовые улучшения («Ядовитый колчан», «Рикошет», «Рывок»…) не
-//     убирались из колоды после взятия. Карточка выпадала снова, игрок тратил
-//     на неё уровень, и не происходило ровным счётом ничего.
-//  2. Мутации меняли CONFIG.player.sporeGrowth — глобальный объект, живущий
-//     дольше забега. После двух-трёх партий с мутациями новая игра начиналась
-//     с многократно ускоренным заражением, и никто не понимал почему.
+// Что было не так. Улучшения стрельбы были глобальными: одна карточка
+// «Рикошет» — и отскакивают ВСЕ снаряды, включая зажигательную склянку,
+// которая и так взрывается по площади. Каждый такой эффект брался ровно один
+// раз, после чего ветка кончалась, а колода на высоких уровнях вырождалась в
+// «+15% урона» и запасную перевязку. Плюс висели карточки, которых просто не
+// должно быть: «Споровый рывок» включал сломанный телепорт по двойному WASD.
 //
-// Теперь у каждого улучшения есть предел числа взятий (max, по умолчанию 1),
-// а всё накапливаемое живёт на игроке. Заодно улучшения стакаются там, где это
-// осмысленно: одна карточка урона — это скучно, пять уровней одной карточки —
-// это уже сборка.
+// Что стало. У каждого ствола своя ветка из трёх-четырёх карточек, и она
+// показывается ТОЛЬКО если этот ствол у игрока есть. Ветки разведены по
+// смыслу: антидот — точность и цели (веер, пробитие, отскок), токсичная —
+// площадь и время (лужа шире, споры злее), зажигательная — сила одного удара.
+// Поэтому выбор «взять второй ствол или углубить первый» стал настоящим.
+//
+// Пределы взятий (max) есть у всего: без них карточка выпадала бы бесконечно.
+// Всё накапливаемое живёт на игроке и на его стволах, а не в CONFIG — глобальный
+// конфиг живёт дольше забега, и правки в нём переносились в следующие партии.
+
+// Хелпер: найти ствол игрока по ключу из CONFIG.weapons
+const gun = (p, key) => p.weapons.find(w => w.def.key === key);
+
 export class UpgradeSystem {
   constructor(){
     this.isOpen=false; this.cards=[];
     this.allUpgrades=[
-      // --- стволы: стреляют одновременно, не заменяют друг друга ---
-      {id:"w_toxic",title:CONFIG.weapons.toxic.name,desc:CONFIG.weapons.toxic.desc,category:"weapon",
+      // === СТВОЛЫ =======================================================
+      // Стреляют одновременно, не заменяют друг друга. Открывают свои ветки.
+      {id:"w_toxic",title:CONFIG.weapons.toxic.name,
+       desc:"Новый ствол: лужа спор с уроном по времени",category:"weapon",
        available:(p)=>!p.hasWeapon("toxic"),effect:(p)=>{p.addWeapon("toxic");}},
-      {id:"w_incendiary",title:CONFIG.weapons.incendiary.name,desc:CONFIG.weapons.incendiary.desc,category:"weapon",
+      {id:"w_incendiary",title:CONFIG.weapons.incendiary.name,
+       desc:"Новый ствол: взрыв по области вблизи",category:"weapon",
        available:(p)=>!p.hasWeapon("incendiary"),effect:(p)=>{p.addWeapon("incendiary");}},
 
-      // --- экстракты: работают со стрельбой ---
-      {id:"fire_rate",title:"Ускоренный экстракт",desc:"Скорость стрельбы +20%",category:"extract",
-       max:5,effect:(p)=>{p.attackRate=Math.max(4,p.attackRate*0.8);}},
-      {id:"damage",title:"Концентрат яда",desc:"Урон +15%",category:"extract",
-       max:6,effect:(p)=>{p.damage*=1.15;}},
-      {id:"poison",title:"Ядовитый колчан",desc:"Снаряды отравляют (3 ур/сек)",category:"extract",
-       effect:(p)=>{p.poison=true;}},
-      {id:"ricochet",title:"Грибной рикошет",desc:"Отскок к другому врагу",category:"extract",
-       effect:(p)=>{p.ricochet=true;}},
-      {id:"explosive",title:"Споровая бомба",desc:"Взрыв радиусом 40 при попадании",category:"extract",
-       effect:(p)=>{p.explosive=true;}},
+      // === ВЕТКА АНТИДОТА: точность и число целей =======================
+      {id:"a_split",title:"Раздвоенный бросок",desc:"Антидот: +1 склянка веером",
+       category:"antidote",max:2,available:(p)=>!!gun(p,"antidote"),
+       effect:(p)=>{const w=gun(p,"antidote"); w.shots++; w.dmgMult*=0.88;}},
+      {id:"a_pierce",title:"Костяная игла",desc:"Антидот: прошивает +1 врага",
+       category:"antidote",max:2,available:(p)=>!!gun(p,"antidote"),
+       effect:(p)=>{gun(p,"antidote").pierce++;}},
+      {id:"a_ricochet",title:"Грибной рикошет",desc:"Антидот: +1 отскок к соседу",
+       category:"antidote",max:2,available:(p)=>!!gun(p,"antidote"),
+       effect:(p)=>{gun(p,"antidote").bounces++;}},
+      {id:"a_power",title:"Тяжёлая склянка",desc:"Антидот: урон +30%",
+       category:"antidote",max:3,available:(p)=>!!gun(p,"antidote"),
+       effect:(p)=>{gun(p,"antidote").dmgMult*=1.3;}},
 
-      // --- мутации: сила в обмен на ускоренное заражение ---
+      // === ВЕТКА ТОКСИЧНОЙ: площадь и время =============================
+      {id:"t_dot",title:"Густой мицелий",desc:"Токсичная: споры жгут на 50% сильнее",
+       category:"toxic",max:3,available:(p)=>!!gun(p,"toxic"),
+       effect:(p)=>{gun(p,"toxic").dotMult*=1.5;}},
+      {id:"t_area",title:"Широкий разлёт",desc:"Токсичная: лужа шире на 30%",
+       category:"toxic",max:2,available:(p)=>!!gun(p,"toxic"),
+       effect:(p)=>{gun(p,"toxic").areaMult*=1.3;}},
+      {id:"t_rate",title:"Быстрая варка",desc:"Токсичная: перезарядка −20%",
+       category:"toxic",max:2,available:(p)=>!!gun(p,"toxic"),
+       effect:(p)=>{gun(p,"toxic").rateMult*=0.8;}},
+
+      // === ВЕТКА ЗАЖИГАТЕЛЬНОЙ: один тяжёлый удар =======================
+      {id:"i_area",title:"Ударная волна",desc:"Зажигательная: взрыв шире на 25%",
+       category:"incendiary",max:2,available:(p)=>!!gun(p,"incendiary"),
+       effect:(p)=>{gun(p,"incendiary").areaMult*=1.25;}},
+      {id:"i_power",title:"Плотный заряд",desc:"Зажигательная: урон +35%",
+       category:"incendiary",max:3,available:(p)=>!!gun(p,"incendiary"),
+       effect:(p)=>{gun(p,"incendiary").dmgMult*=1.35;}},
+      {id:"i_rate",title:"Скорый фитиль",desc:"Зажигательная: перезарядка −20%",
+       category:"incendiary",max:2,available:(p)=>!!gun(p,"incendiary"),
+       effect:(p)=>{gun(p,"incendiary").rateMult*=0.8;}},
+
+      // === ЭКСТРАКТЫ: работают на все стволы сразу ======================
+      // Пределы срезаны (было 5×−20% и 6×+15%): вместе эти две карточки
+      // разгоняли урон в секунду вчетверо и обгоняли любой рост врагов.
+      {id:"fire_rate",title:"Ускоренный экстракт",desc:"Все стволы: скорость стрельбы +14%",
+       category:"extract",max:4,effect:(p)=>{p.rateMult=Math.max(0.35,p.rateMult*0.86);}},
+      {id:"damage",title:"Концентрат яда",desc:"Все стволы: урон +12%",
+       category:"extract",max:5,effect:(p)=>{p.damage*=1.12;}},
+
+      // === МУТАЦИИ: сила в обмен на ускоренное заражение ================
       {id:"mut_dmg",title:"Грибная ярость",desc:"Урон +25%, заражение +15%",category:"mutation",
        max:3,effect:(p)=>{p.damage*=1.25; p.sporeRate*=1.15;}},
-      {id:"mut_regen",title:"Мицелиевое исцеление",desc:"Реген +2 HP/сек, заражение ×1.8",category:"mutation",
-       max:3,effect:(p)=>{p.regen+=2; p.sporeRate*=1.8;}},
-      {id:"mut_greed",title:"Спорная жадность",desc:"Опыт +50%, заражение +30%",category:"mutation",
-       max:2,effect:(p)=>{p.xpMult*=1.5; p.sporeRate*=1.3;}},
+      {id:"mut_regen",title:"Мицелиевое исцеление",desc:"Реген +2 HP/сек, заражение ×1.6",category:"mutation",
+       max:3,effect:(p)=>{p.regen+=2; p.sporeRate*=1.6;}},
+      {id:"mut_greed",title:"Спорная жадность",desc:"Опыт +40%, заражение +30%",category:"mutation",
+       max:2,effect:(p)=>{p.xpMult*=1.4; p.sporeRate*=1.3;}},
 
-      // --- снаряжение: выживаемость и удобство ---
+      // === СНАРЯЖЕНИЕ: выживаемость и удобство ==========================
       {id:"hp_up",title:"Грибная броня",desc:"Макс HP +20",category:"gear",
-       max:6,effect:(p)=>{p.maxHp+=20; p.hp+=20;}},
-      {id:"speed",title:"Мицелиевые сапоги",desc:"Скорость передвижения +10%",category:"gear",
-       max:4,effect:(p)=>{p.speed*=1.1;}},
+       max:5,effect:(p)=>{p.maxHp+=20; p.hp+=20;}},
+      {id:"speed",title:"Мицелиевые сапоги",desc:"Скорость передвижения +8%",category:"gear",
+       max:3,effect:(p)=>{p.speed*=1.08;}},
       {id:"shield",title:"Биолюмин. щит",desc:"Блокирует удар, восстановление 10 сек",category:"gear",
        effect:(p)=>{p.hasShield=true; p.shieldActive=true; p.shieldCd=0;}},
-      {id:"dash",title:"Споровый рывок",desc:"Двойное WASD — рывок",category:"gear",
-       effect:(p)=>{p.canDash=true;}},
-      {id:"autoloot",title:"Магнит мицелия",desc:"Радиус подбора +80",category:"gear",
-       max:3,effect:(p)=>{p.autoLoot=true; p.lootRadius+=80;}},
+      // Радиус срезан втрое (было +80 за уровень при трёх уровнях): +240 к
+      // притяжению — это больше половины высоты экрана, и лут собирался сам,
+      // а «идти за опытом в толпу» переставало быть решением.
+      {id:"autoloot",title:"Магнит мицелия",desc:"Радиус подбора +45",category:"gear",
+       max:3,effect:(p)=>{p.lootRadius+=45;}},
       {id:"cleanse",title:"Споровый фильтр",desc:"Заражение растёт на 25% медленнее",category:"gear",
        max:3,effect:(p)=>{p.sporeRate*=0.75;}},
 
@@ -65,16 +110,42 @@ export class UpgradeSystem {
       {id:"patch",title:"Полевая перевязка",desc:"+30 HP и −20% заражения",category:"gear",
        max:Infinity,effect:(p)=>{p.hp=Math.min(p.maxHp,p.hp+30); p.reduceSpore(20);}}
     ];
+    // Карточка «Споровый рывок» удалена вместе с самим рывком: он
+    // телепортировал на 40 единиц каждый кадр удержания клавиши и без
+    // перезарядки (см. комментарий в player.js).
+    //
+    // Оттуда же убраны «Ядовитый колчан» и «Споровая бомба»: обе вешали
+    // глобальный флаг поверх всех стволов и делали то же, что уже делают
+    // токсичная и зажигательная склянки, только хуже и без прокачки.
   }
 
-  // Взятые до предела улучшения и уже полученные стволы в колоду не возвращаются
-  generateCards(player){
+  // Что вообще можно предложить: взятое до предела и улучшения отсутствующих
+  // стволов в колоду не возвращаются
+  pool(player){
     const taken=player?.taken||{};
-    const pool=this.allUpgrades.filter(u=>{
+    return this.allUpgrades.filter(u=>{
       if((taken[u.id]||0)>=(u.max??1)) return false;
       return !u.available||!player||u.available(player);
     });
-    this.cards=[...pool].sort(()=>Math.random()-0.5).slice(0,3);
+  }
+
+  // Три карточки, по возможности из РАЗНЫХ категорий. Чистый random из общей
+  // колоды регулярно выдавал три улучшения одного и того же ствола — выбор
+  // из трёх почти одинаковых вариантов выбором не является.
+  generateCards(player){
+    const pool=this.pool(player).sort(()=>Math.random()-0.5);
+    const picked=[], usedCats=new Set();
+    for(const u of pool){
+      if(picked.length>=3) break;
+      if(usedCats.has(u.category)) continue;
+      picked.push(u); usedCats.add(u.category);
+    }
+    // Категорий не хватило — добираем чем есть
+    for(const u of pool){
+      if(picked.length>=3) break;
+      if(!picked.includes(u)) picked.push(u);
+    }
+    this.cards=picked;
     return this.cards;
   }
 
@@ -87,18 +158,50 @@ export class UpgradeSystem {
     this.isOpen=false; this.cards=[];
   }
 
-  showMenu(cards){
-    this.isOpen=true; const menu=document.getElementById("upgradeMenu"); const container=document.getElementById("upgradeCards");
+  showMenu(cards,player){
+    this.isOpen=true;
+    const menu=document.getElementById("upgradeMenu");
+    const container=document.getElementById("upgradeCards");
     container.innerHTML=""; menu.classList.remove("hidden");
     cards.forEach((card,i)=>{
-      const div=document.createElement("div"); div.className="upgrade-card cat-"+card.category;
-      const risk=card.category==="mutation"?'<div class="risk">⚠ Мутация — риск заражения</div>'
-                :card.category==="weapon"?'<div class="risk">✦ Новый ствол — стреляет сам</div>':"";
-      div.innerHTML='<div class="title">'+card.title+'</div><div class="desc">'+card.desc+'</div>'+risk;
-      div.onclick=()=>{ window.dispatchEvent(new CustomEvent("upgradeChosen",{detail:i})); menu.classList.add("hidden"); };
+      const div=document.createElement("div");
+      div.className="upgrade-card cat-"+card.category;
+      div.innerHTML=
+        '<div class="tag">'+LABEL[card.category]+'</div>'+
+        '<div class="title">'+card.title+'</div>'+
+        '<div class="desc">'+card.desc+'</div>'+
+        this.pips(card,player);
+      div.onclick=()=>{
+        window.dispatchEvent(new CustomEvent("upgradeChosen",{detail:i}));
+        menu.classList.add("hidden");
+      };
       container.appendChild(div);
     });
   }
 
+  // Точки уровней внизу карточки: сколько раз улучшение уже взято и сколько
+  // осталось. Без них стакающиеся карточки неотличимы от одноразовых, и
+  // непонятно, стоит ли добивать ветку.
+  pips(card,player){
+    const max=card.max??1;
+    if(!isFinite(max)||max<=1) return "";
+    const have=(player?.taken||{})[card.id]||0;
+    let html='<div class="pips">';
+    for(let i=0;i<max;i++) html+='<i class="'+(i<have?"on":"")+'"></i>';
+    return html+'</div>';
+  }
+
   hideMenu(){ document.getElementById("upgradeMenu").classList.add("hidden"); this.isOpen=false; }
 }
+
+// Подпись категории на карточке. Цвет рамки уже кодирует категорию, но
+// «жёлтая рамка = ветка антидота» приходится запоминать, а слово читается.
+const LABEL={
+  weapon:"НОВЫЙ СТВОЛ",
+  antidote:"АНТИДОТ",
+  toxic:"ТОКСИН",
+  incendiary:"ОГОНЬ",
+  extract:"ЭКСТРАКТ",
+  mutation:"МУТАЦИЯ ⚠",
+  gear:"СНАРЯЖЕНИЕ"
+};

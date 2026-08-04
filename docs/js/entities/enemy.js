@@ -12,7 +12,11 @@ export class Enemy extends Entity {
     this.def=t; this.typeKey=typeKey;
     this.maxHp=t.hp*(isMutated?1.5:1)*s.hp; this.hp=this.maxHp;
     this.baseSpeed=t.speed*s.speed; this.speed=this.baseSpeed;
-    this.damage=t.damage*(isMutated?1.3:1)*s.damage;
+    // dmgScale держим отдельно от damage: контактный урон и урон снаряда
+    // берутся из разных полей конфига, но расти по времени забега обязаны
+    // одинаково
+    this.dmgScale=(isMutated?1.3:1)*s.damage;
+    this.damage=t.damage*this.dmgScale;
     // Опыт растёт медленнее HP, иначе поздние волны разгоняют уровень быстрее,
     // чем растёт сложность, и прокачка снова обгоняет врагов.
     this.xpReward=t.xpReward*(isMutated?1.5:1)*(1+(s.hp-1)*0.45);
@@ -23,6 +27,11 @@ export class Enemy extends Entity {
     this.grabTimer=0; this.zigzagOffset=0; this.zigzagDir=1;
     this.dotTime=0; this.dotDps=0;   // урон по времени от токсичной склянки
     this.touchCd=0;                  // перезарядка контактного удара
+    // Стрелок: кадров до следующего выстрела и текущий прогресс замаха
+    // (-1 — не заряжает). strafeDir — в какую сторону обходит игрока.
+    this.shootCd=t.ranged?Math.round(t.ranged.cooldown*(0.4+Math.random()*0.6)):0;
+    this.charge=-1;
+    this.strafeDir=Math.random()<0.5?-1:1;
   }
 
   // Урон по времени не складывается стопками, а обновляет длительность
@@ -49,6 +58,8 @@ export class Enemy extends Entity {
 
     if(this.abilities.includes("emerge_from_ground")){ this.emergeTimer--; if(this.emergeTimer>0) return; }
     if(this.grabTimer>0){ this.grabTimer--; player.isGrabbed=this.grabTimer>0; return; }
+
+    if(this.abilities.includes("ranged_attack")){ this.updateRanged(ctx); return; }
 
     const a=angleTo(this.x,this.y,player.x,player.y);
     this.moveAngle=a; this.anim.step(a);
@@ -77,7 +88,64 @@ export class Enemy extends Entity {
         this.touchCd=CONFIG.enemies.touchInterval;
       }
       const push=Math.atan2(this.y-player.y,this.x-player.x);
-      this.x+=Math.cos(push)*6; this.y+=Math.sin(push)*6;
+      const k=CONFIG.enemies.touchPush;
+      this.x+=Math.cos(push)*k; this.y+=Math.sin(push)*k;
+    }
+  }
+
+  // СТРЕЛОК. Держит дистанцию и стреляет облаками спор.
+  //
+  // Кадры листа тут не шаги, а фазы раздувания трубы, поэтому анимация не
+  // крутится сама: пока враг просто идёт, он показывает нулевой кадр (мешок
+  // закрыт), а во время заряда кадр выбирается по прогрессу замаха. Игрок
+  // видит, кто именно сейчас в него целится, и у него есть время уйти.
+  updateRanged(ctx){
+    const {player}=ctx;
+    const R=this.def.ranged;
+    const a=angleTo(this.x,this.y,player.x,player.y);
+    const d=Math.hypot(player.x-this.x,player.y-this.y);
+    this.moveAngle=a;
+
+    if(this.shootCd>0) this.shootCd--;
+
+    if(this.charge>=0){
+      // Замах: стоит на месте, труба раскрывается, в конце — выстрел
+      this.charge++;
+      this.anim.hold(a,Math.floor(this.charge/R.chargeTime*this.def.sprite.cols));
+      if(this.charge>=R.chargeTime){
+        this.charge=-1;
+        this.shootCd=R.cooldown;
+        ctx.shots?.push({x:this.x,y:this.y,angle:a,def:R.shot,
+                         damage:R.shot.damage*this.dmgScale});
+        ctx.particles?.emitMuzzle(this.x,this.y,a,R.shot.glow);
+      }
+      return;
+    }
+
+    this.anim.hold(a,0);
+
+    // Слишком далеко — подходит, слишком близко — пятится, на дистанции —
+    // обходит по кругу. Без обхода десяток трубачей выстраивается в ровное
+    // кольцо и выглядит как декорация.
+    if(d>R.keepDist){
+      this.x+=Math.cos(a)*this.speed; this.y+=Math.sin(a)*this.speed;
+    } else if(d<R.retreatDist){
+      this.x-=Math.cos(a)*this.speed; this.y-=Math.sin(a)*this.speed;
+    } else {
+      const perp=a+Math.PI/2*this.strafeDir;
+      this.x+=Math.cos(perp)*this.speed*0.6;
+      this.y+=Math.sin(perp)*this.speed*0.6;
+      if(this.life%90===0) this.strafeDir*=-1;
+    }
+
+    // Стреляет только с дистанции, на которой снаряд долетит
+    if(this.shootCd<=0 && d<=R.keepDist*1.15) this.charge=0;
+
+    // Подошли вплотную — бьёт как все остальные: подойти к стрелку в упор
+    // должно быть выгодно, но не бесплатно
+    if(this.overlaps(player)&&this.touchCd<=0){
+      player.takeDamage(this.damage);
+      this.touchCd=CONFIG.enemies.touchInterval;
     }
   }
 
@@ -119,6 +187,22 @@ export class Enemy extends Entity {
 
     // Мутанты подсвечиваются золотой аурой независимо от способа отрисовки
     if(this.isMutated) renderer.drawGlowCircle(this.x,this.y,this.radius+4,"#c4a000",10);
+
+    // Замах стрелка виден и без спрайта: кольцо стягивается к врагу, пока
+    // раздувается труба. Это единственное предупреждение перед выстрелом, и
+    // оно обязано читаться в толпе, а не только на пустом экране.
+    if(this.charge>=0){
+      const R=this.def.ranged, k=this.charge/R.chargeTime;
+      const ctx=renderer.ctx;
+      ctx.save();
+      ctx.globalAlpha=0.25+k*0.55;
+      ctx.strokeStyle=R.shot.glow||"#ffe066";
+      ctx.lineWidth=1.6;
+      ctx.beginPath();
+      ctx.arc(this.x,this.y,this.radius+22-k*18,0,Math.PI*2);
+      ctx.stroke();
+      ctx.restore();
+    }
 
     // Контур под спрайтом: у мутанта золотой, у остальных — свой цвет типа.
     // Он рисуется до спрайта, поэтому наружу торчит только ободок.

@@ -2,6 +2,7 @@ import { CONFIG } from "../config.js";
 import { Enemy } from "../entities/enemy.js";
 import { Boss } from "../entities/boss.js";
 import { SpatialGrid } from "../core/spatialGrid.js";
+import { EnemyShot } from "../entities/projectile.js";
 import { Effect, Dissolve } from "../entities/effect.js";
 
 // Вся боевая часть кадра: враги, снаряды, попадания, смерти, лут и опыт.
@@ -16,8 +17,11 @@ export class BattleSystem {
     this.grid=new SpatialGrid(96);
     this._near=[];        // переиспользуемый буфер, чтобы не мусорить в GC
     this.effects=[];      // одноразовые анимации взрывов
+    this.enemyShots=[];   // облака спор, выпущенные трубачами
     this.kills=0;         // счётчик убитых, его показывает интерфейс
   }
+
+  reset(){ this.effects.length=0; this.enemyShots.length=0; this.kills=0; }
 
   updateEffects(){
     for(let i=this.effects.length-1;i>=0;i--){
@@ -31,21 +35,26 @@ export class BattleSystem {
   // Разовая анимация в точке — вспышка уровня, взрыв склянки
   addEffect(x,y,def){ this.effects.push(new Effect(x,y,def)); }
 
-  // Попадание: вспышка, урон по области и яд, если оружие их даёт
+  // Попадание: вспышка, урон по области и лужа, если оружие их даёт.
+  // Радиус и сила лужи берутся с учётом прокачки ИМЕННО ЭТОГО ствола
+  // (p.mods), а не общих флагов игрока.
   impact(p,enemies,camera){
     const d=p.def;
     if(d.burst) this.effects.push(new Effect(p.x,p.y,d.burst));
     if(!d.area) return;
+    const radius=d.area.radius*(p.mods.areaMult||1);
     // Взрыв по области — заметное событие: его слышно и от него трясёт
-    this.audio?.sfx("boom",Math.min(1,d.area.radius/120));
-    camera?.shake(CONFIG.feel.shakeExplosion*Math.min(1,d.area.radius/120),9);
-    for(const o of this.grid.query(p.x,p.y,d.area.radius,[])){
-      if(o.dead||Math.hypot(o.x-p.x,o.y-p.y)>d.area.radius) continue;
+    this.audio?.sfx("boom",Math.min(1,radius/120));
+    camera?.shake(CONFIG.feel.shakeExplosion*Math.min(1,radius/120),9);
+    for(const o of this.grid.query(p.x,p.y,radius,[])){
+      if(o.dead||Math.hypot(o.x-p.x,o.y-p.y)>radius) continue;
       const dmg=p.damage*d.area.damage;
       const a=Math.atan2(o.y-p.y,o.x-p.x);
       o.takeDamage(dmg,a,CONFIG.feel.knockback*this.kbMult(o)*0.7);
       this.showDamage(o,dmg,false);
-      if(d.area.dot&&o.applyDot) o.applyDot(d.area.dot.dps,d.area.dot.time);
+      if(d.area.dot&&o.applyDot){
+        o.applyDot(d.area.dot.dps*(p.mods.dotMult||1),d.area.dot.time);
+      }
     }
   }
 
@@ -63,15 +72,21 @@ export class BattleSystem {
   // Уровень теперь поднимается не здесь: опыт выпадает предметами, и
   // LootSystem сообщает о левел-апе в момент подбора.
   update(dt,{player,enemies,projectiles,sporeEffects,camera}){
-    const ctx={player,enemies,camera,particles:this.particles,sporeLevel:player.sporeLevel,events:[]};
+    const ctx={player,enemies,camera,particles:this.particles,
+               sporeLevel:player.sporeLevel,events:[],shots:[]};
 
     for(const e of enemies){ if(!e.dead) e.update(dt,ctx); }
     for(const ev of ctx.events) this.handleBossEvent(ev,enemies,player,camera);
+    for(const s of ctx.shots){
+      this.enemyShots.push(new EnemyShot(s.x,s.y,s.angle,s.def,s.damage));
+      this.audio?.sfx("shoot",0.5);
+    }
 
     // Сетка строится после того, как все враги сдвинулись
     this.grid.rebuild(enemies);
     this.separate(enemies);
     this.updateProjectiles(projectiles,enemies,player,camera);
+    this.updateEnemyShots(player,camera);
     this.updateEffects();
 
     for(let i=enemies.length-1;i>=0;i--){
@@ -122,11 +137,13 @@ export class BattleSystem {
     for(let i=projectiles.length-1;i>=0;i--){
       const p=projectiles[i];
       p.update();
-      let hit=false;
+      let spent=false;   // снаряд отработал и должен исчезнуть
 
       // Кандидаты берутся из сетки — перебирать всех врагов не нужно
       for(const e of this.grid.query(p.x,p.y,p.radius+64,this._near)){
-        if(e.dead||Math.hypot(p.x-e.x,p.y-e.y)>=p.radius+e.radius) continue;
+        if(e.dead||p.hit.has(e)) continue;
+        if(Math.hypot(p.x-e.x,p.y-e.y)>=p.radius+e.radius) continue;
+        p.hit.add(e);
 
         // Крит — единственная причина, по которой цифры урона вообще стоит
         // показывать: одинаковые числа не несут информации, разброс — несёт.
@@ -135,37 +152,64 @@ export class BattleSystem {
         e.takeDamage(dmg,p.angle,CONFIG.feel.knockback*this.kbMult(e)*(crit?1.6:1));
         this.showDamage(e,dmg,crit);
         this.audio?.sfx(crit?"crit":"hit");
-        if(player.poison) e.hp-=3;
         this.particles.emit(p.x,p.y,"#88ff88",5);
+        this.impact(p,enemies,camera);
 
-        if(player.explosive){
-          for(const o of this.grid.query(p.x,p.y,40,[])){
-            if(o!==e&&!o.dead&&Math.hypot(o.x-p.x,o.y-p.y)<40) o.hp-=p.damage*0.5;
-          }
-          this.particles.emit(p.x,p.y,"#ff6633",10);
-        }
+        // ПРОБИТИЕ идёт раньше ОТСКОКА: прошивающий снаряд летит дальше по
+        // прямой и в кого-то ещё врежется сам, а отскок — это уже последнее
+        // действие снаряда, после него он гарантированно тратится.
+        if(p.pierceLeft>0){ p.pierceLeft--; break; }
 
-        // Один отскок на снаряд, в ближайшего врага в радиусе 150
-        if(player.ricochet&&!p.ricocheted){
-          let nearest=null,bestD=150;
-          for(const o of this.grid.query(p.x,p.y,150,[])){
-            if(o===e||o.dead) continue;
-            const d=Math.hypot(o.x-p.x,o.y-p.y);
-            if(d<bestD){ bestD=d; nearest=o; }
-          }
-          if(nearest){
-            const a=Math.atan2(nearest.y-p.y,nearest.x-p.x);
-            p.vx=Math.cos(a)*7; p.vy=Math.sin(a)*7; p.angle=a;
-            p.ricocheted=true; hit=false; break;
+        if(p.bouncesLeft>0){
+          const next=this.nearestOther(p,e,170);
+          if(next){
+            const a=Math.atan2(next.y-p.y,next.x-p.x);
+            const sp=Math.hypot(p.vx,p.vy);
+            p.vx=Math.cos(a)*sp; p.vy=Math.sin(a)*sp; p.angle=a;
+            p.bouncesLeft--; p.life=Math.max(p.life,40);
+            break;
           }
         }
-        hit=true; break;
+        spent=true; break;
       }
 
-      if(hit) this.impact(p,enemies,camera);
-      if(hit||p.isOffScreen(camera)||p.life<=0) projectiles.splice(i,1);
+      if(spent||p.isOffScreen(camera)||p.life<=0) projectiles.splice(i,1);
     }
   }
+
+  // Ближайшая цель для отскока, кроме той, в которую только что попали
+  nearestOther(p,skip,range){
+    let best=null,bestD=range;
+    for(const o of this.grid.query(p.x,p.y,range,[])){
+      if(o===skip||o.dead||p.hit.has(o)) continue;
+      const d=Math.hypot(o.x-p.x,o.y-p.y);
+      if(d<bestD){ bestD=d; best=o; }
+    }
+    return best;
+  }
+
+  // СНАРЯДЫ ВРАГОВ. Единственное, что достаёт игрока, когда он стоит в
+  // безопасном углу и выкашивает всё на подходе.
+  updateEnemyShots(player,camera){
+    for(let i=this.enemyShots.length-1;i>=0;i--){
+      const s=this.enemyShots[i];
+      s.update();
+      if(!player.isDying&&Math.hypot(player.x-s.x,player.y-s.y)<player.radius+s.radius){
+        // takeDamage вернёт false, если урон съели щит или неуязвимость, —
+        // споры в этом случае тоже не налипают
+        if(player.takeDamage(s.damage)&&s.def.spore){
+          player.sporeLevel=Math.min(CONFIG.sporeSystem.maxSpore,
+                                     player.sporeLevel+s.def.spore);
+        }
+        this.particles.emit(s.x,s.y,s.def.glow||"#ffe066",10);
+        this.enemyShots.splice(i,1);
+        continue;
+      }
+      if(s.life<=0||s.isOffScreen(camera)) this.enemyShots.splice(i,1);
+    }
+  }
+
+  drawShots(renderer){ for(const s of this.enemyShots) s.draw(renderer); }
 
   killEnemy(e,enemies,player,sporeEffects,camera){
     e.dead=true; this.kills++;

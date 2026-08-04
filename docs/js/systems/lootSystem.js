@@ -28,28 +28,31 @@ export class LootSystem {
       type, def, x, y,
       vx:Math.cos(a)*s, vy:Math.sin(a)*s,   // разлёт из точки смерти
       life:def.life||CONFIG.loot.defaultLife,
-      frame:Math.floor(Math.random()*(def.frames||1)),
       bob:Math.random()*Math.PI*2,
       ...extra
     });
   }
 
   // Что выпадает из убитого врага. xp уже посчитан с учётом множителей.
+  //
+  // РОВНО ОДНА точка опыта с рядового врага. Раньше опыт дробился на
+  // кристаллы номиналами 10/25/60/150 плюс шарик на остаток — с каждого врага
+  // падало по два предмета, и при сорока врагах на поле земля превращалась в
+  // ковёр из спрайтов. Дробить есть смысл только у босса: три минуты боя не
+  // должны заканчиваться одной точкой.
   dropFor(enemy,xp,isBoss){
-    const L=CONFIG.loot, tiers=L.crystalTiers;
-    // Опыт разбивается на предметы по номиналам сверху вниз: из рядового
-    // врага выпадет шарик, из босса — горсть крупных кристаллов, а не
-    // триста мелких шариков.
-    let left=Math.round(xp), guard=L.maxDrops;
-    while(left>=tiers[0]&&guard>0){
-      let t=0;
-      for(let k=tiers.length-1;k>=0;k--){ if(tiers[k]<=left){ t=k; break; } }
-      // Последний предмет забирает весь остаток, чтобы опыт не терялся
-      const value=(guard===1)?left:tiers[t];
-      this.spawn("crystal",enemy.x,enemy.y,{value,tier:t});
-      left-=value; guard--;
+    const L=CONFIG.loot;
+    const total=Math.max(1,Math.round(xp));
+    if(isBoss){
+      const n=L.bossDrops;
+      const part=Math.max(1,Math.floor(total/n));
+      for(let i=0;i<n;i++){
+        // Последняя точка забирает остаток, чтобы опыт не терялся на округлении
+        this.spawn("xp",enemy.x,enemy.y,{value:i===n-1?total-part*(n-1):part});
+      }
+    } else {
+      this.spawn("xp",enemy.x,enemy.y,{value:total});
     }
-    if(left>0) this.spawn("xp_orb",enemy.x,enemy.y,{value:left});
 
     if(isBoss||Math.random()<L.antidoteChance) this.spawn("antidote",enemy.x,enemy.y);
     if(Math.random()<L.potionChance) this.spawn("potion",enemy.x,enemy.y);
@@ -61,7 +64,7 @@ export class LootSystem {
     this.tick++;
     const L=CONFIG.loot;
     // «Магнит мицелия» из прокачки расширяет радиус притяжения
-    const magnet=L.magnetRadius+(player.autoLoot?player.lootRadius:0);
+    const magnet=L.magnetRadius+(player.lootRadius||0);
     let leveledUp=false;
 
     for(let i=this.items.length-1;i>=0;i--){
@@ -113,27 +116,53 @@ export class LootSystem {
     return false;
   }
 
+  // Размер и цвет точки опыта по её номиналу: мелочь с рядового врага —
+  // зелёная искра, кусок с босса — крупный голубой огонёк. Разницу видно, а
+  // места точка занимает как частица.
+  tierOf(def,value){
+    const t=def.tiers;
+    let best=t[0];
+    for(const row of t) if(value>=row[0]) best=row;
+    return best;
+  }
+
   draw(renderer){
+    const ctx=renderer.ctx;
     for(const it of this.items){
       const def=it.def;
-      const img=renderer.loader?.getImage(def.image);
       // Мигание перед исчезновением — предмет не пропадает молча
       if(it.life<90&&Math.floor(it.life/6)%2===0) continue;
       const y=it.y+Math.sin(it.bob)*2;
+
+      if(def.dot){
+        const [,r,color]=this.tierOf(def,it.value||1);
+        // Пульсация — единственное, что отличает лежащую точку опыта от
+        // случайной частицы взрыва: частицы гаснут, эта дышит
+        const k=1+Math.sin(it.bob*1.6)*0.12;
+        // Свечение здесь НЕ через shadowBlur: точек на земле бывает под
+        // сотню, а shadowBlur — это размытие всего кадра на каждый вызов,
+        // то есть сто размытий в кадр на ровном месте. Три круга с падающей
+        // прозрачностью дают тот же ореол бесплатно.
+        ctx.save();
+        ctx.globalAlpha=0.18;
+        renderer.drawCircle(it.x,y,r*k*2.2,color);
+        ctx.globalAlpha=0.4;
+        renderer.drawCircle(it.x,y,r*k*1.45,color);
+        ctx.globalAlpha=1;
+        renderer.drawCircle(it.x,y,r*k,color);
+        ctx.globalAlpha=0.85;
+        renderer.drawCircle(it.x,y,r*k*0.45,"#ffffff");
+        ctx.restore();
+        continue;
+      }
+
+      const img=renderer.loader?.getImage(def.image);
       if(!img||!img.width){
         renderer.drawGlowCircle(it.x,y,def.radius,def.particle||"#ffd24a",12);
         continue;
       }
-      const frames=def.frames||1;
-      if(frames===1){
-        // одиночный спрайт может быть не квадратным — подгоняем по высоте
-        renderer.drawSprite(img,it.x,y,def.size*img.width/img.height,def.size);
-        continue;
-      }
-      const frame=def.animSpeed
-        ? Math.floor(this.tick/def.animSpeed+it.frame)%frames
-        : Math.min(it.tier||0,frames-1);
-      renderer.drawSpriteSheet(img,it.x,y,img.width/frames,img.height,frame,0,def.size);
+      // одиночный спрайт может быть не квадратным — подгоняем по высоте
+      renderer.drawSprite(img,it.x,y,def.size*img.width/img.height,def.size);
     }
   }
 }
