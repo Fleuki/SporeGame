@@ -1,6 +1,7 @@
-import { clamp, angleTo } from "../utils/math.js";
+import { angleTo } from "../utils/math.js";
 import { CONFIG } from "../config.js";
-import { Projectile } from "./projectile.js";
+import { Entity } from "./entity.js";
+import { Weapon } from "./weapon.js";
 
 function angleToRow(angle){
   if(angle>=-Math.PI/4 && angle<Math.PI/4) return 2;
@@ -9,23 +10,39 @@ function angleToRow(angle){
   return 1;
 }
 
-export class Player {
+export class Player extends Entity {
   constructor(x,y){
-    this.x=x; this.y=y; this.radius=CONFIG.player.radius; this.speed=CONFIG.player.speed;
+    super(x,y,CONFIG.player.radius);
+    this.speed=CONFIG.player.speed;
     this.maxHp=CONFIG.player.maxHp; this.hp=this.maxHp; this.xp=0; this.level=1; this.xpToNext=10;
     this.damage=CONFIG.player.damage; this.attackCooldown=0; this.attackRate=CONFIG.player.attackRate;
+    // Стволы стреляют одновременно, каждый по своему таймеру.
+    // Остальные выдаются карточками прокачки.
+    this.weapons=[new Weapon(CONFIG.weapons.antidote)];
     this.angle=0; this.color=CONFIG.player.color; this.sporeLevel=0; this.isGrabbed=false;
-    this.shieldActive=false; this.shieldTimer=0; this.dashCooldown=0; this.projectileType="antidote";
+    this.shieldActive=false; this.shieldTimer=0; this.dashCooldown=0;
     this.ricochet=false; this.explosive=false; this.poison=false; this.autoLoot=false; this.lootRadius=40;
     this.canDash=false; this.regen=0; this.xpMult=1; this.lastKeyTime={w:0,a:0,s:0,d:0}; this.lastKey="";
-    this.animTimer=0; this.animFrame=0; this.animSpeed=8;
+    this.animTimer=0; this.animFrame=0; this.animSpeed=8; this.isMoving=false;
+    // life читался проверкой регенерации, но нигде не задавался:
+    // undefined%60 === NaN, поэтому апгрейд «Мицелиевое исцеление» не лечил.
+    // Теперь счётчик приходит из Entity.
     // === НОВОЕ: анимация броска ===
     this.attackAnimTimer=0;
     this.attackAnimFrame=0;
     this.isAttacking=false;
+    // Анимация броска обязана доигрывать быстрее, чем перезаряжается атака.
+    // Иначе isAttacking больше никогда не сбрасывается и игрок навсегда
+    // остаётся в кадре броска.
+    this.attackAnimSpeed=Math.max(1,Math.min(
+      CONFIG.player.attackAnimSpeed,
+      Math.floor((CONFIG.player.attackRate-1)/CONFIG.player.attackCols)
+    ));
   }
 
-  update(input,w,h,dt,enemies){
+  update(dt,ctx){
+    const {input,enemies,camera}=ctx;
+    this.life++;
     if(this.isGrabbed) return;
     let dx=0,dy=0;
     if(input.keys.w) dy=-1; if(input.keys.s) dy=1; if(input.keys.a) dx=-1; if(input.keys.d) dx=1;
@@ -41,13 +58,17 @@ export class Player {
       }
     }
 
+    // Мир больше не ограничен размером холста — clamp по краям убран,
+    // игрок свободно уходит в любую сторону, а камера следует за ним.
     this.x+=dx*this.speed; this.y+=dy*this.speed;
-    this.x=clamp(this.x,this.radius,w-this.radius);
-    this.y=clamp(this.y,this.radius,h-this.radius);
 
     const autoAim=input.getAutoAimAngle(this,enemies);
     if(autoAim!==null) this.angle=autoAim;
-    else this.angle=angleTo(this.x,this.y,input.mouse.x,input.mouse.y);
+    else {
+      // Мышь приходит в экранных координатах, целиться нужно в мировых
+      const m=camera?camera.toWorld(input.mouse.x,input.mouse.y):input.mouse;
+      this.angle=angleTo(this.x,this.y,m.x,m.y);
+    }
 
     if(this.attackCooldown>0) this.attackCooldown--;
     if(this.shieldTimer>0) this.shieldTimer--;
@@ -58,38 +79,51 @@ export class Player {
     // === НОВОЕ: обновление анимации атаки ===
     if(this.isAttacking){
       this.attackAnimTimer++;
-      if(this.attackAnimTimer>=CONFIG.player.attackAnimSpeed){
+      if(this.attackAnimTimer>=this.attackAnimSpeed){
         this.attackAnimTimer=0;
-        this.attackAnimFrame++;
-        if(this.attackAnimFrame>=CONFIG.player.attackCols){
-          this.isAttacking=false;
-          this.attackAnimFrame=0;
-        }
+        if(this.attackAnimFrame<CONFIG.player.attackCols-1) this.attackAnimFrame++;
+      }
+      // Анимация доиграла — держим последний кадр до конца перезарядки.
+      // Возвращаться к спрайту ходьбы на пару кадров нельзя: стрельба
+      // автоматическая, и спрайт бы дёргался туда-сюда каждый выстрел.
+      if(this.attackCooldown<=0 && this.attackAnimFrame>=CONFIG.player.attackCols-1){
+        this.isAttacking=false;
+        this.attackAnimFrame=0;
       }
     }
 
-    // Анимация ходьбы
-    this.animTimer++;
-    if(this.animTimer>=this.animSpeed){
-      this.animTimer=0;
-      this.animFrame=(this.animFrame+1)%CONFIG.player.spriteCols;
+    // Анимация ходьбы — крутится только когда игрок реально идёт
+    this.isMoving=(dx!==0||dy!==0);
+    if(this.isMoving){
+      this.animTimer++;
+      if(this.animTimer>=this.animSpeed){
+        this.animTimer=0;
+        this.animFrame=(this.animFrame+1)%CONFIG.player.spriteCols;
+      }
+    } else {
+      this.animTimer=0; this.animFrame=0;
     }
   }
 
-  tryShoot(){
-    if(this.attackCooldown<=0){
+  hasWeapon(key){ return this.weapons.some(w=>w.def===CONFIG.weapons[key]); }
+  addWeapon(key){ if(!this.hasWeapon(key)) this.weapons.push(new Weapon(CONFIG.weapons[key])); }
+
+  // Опрашивает все стволы и возвращает вылетевшие снаряды
+  tryShoot(enemies){
+    const shots=[];
+    for(const w of this.weapons){
+      w.update();
+      const p=w.fire(this,enemies);
+      if(p) shots.push(p);
+    }
+    if(shots.length){
+      // Анимация броска общая: играет, когда выстрелил хоть один ствол
       this.attackCooldown=this.attackRate;
-      // === НОВОЕ: запуск анимации броска ===
       this.isAttacking=true;
       this.attackAnimFrame=0;
       this.attackAnimTimer=0;
-      return new Projectile(
-        this.x+Math.cos(this.angle)*(this.radius+6),
-        this.y+Math.sin(this.angle)*(this.radius+6),
-        this.angle,this.damage,this.projectileType
-      );
     }
-    return null;
+    return shots;
   }
 
   takeDamage(a){
@@ -112,51 +146,49 @@ export class Player {
   reduceSpore(a){ this.sporeLevel=Math.max(0,this.sporeLevel-a); }
 
   draw(renderer){
-    // === НОВОЕ: если идёт анимация атаки — рисуем спрайт броска ===
-    if(this.isAttacking){
-      // ЗДЕСЬ: используем ключ загрузчика (playerAttack), а не путь из CONFIG.player.attackSprite
-      const atkImg=renderer.loader?.getImage("playerAttack");
-      if(atkImg){
-        renderer.drawSpriteSheet(
-          atkImg, this.x, this.y,
-          CONFIG.player.attackFrameW, CONFIG.player.attackFrameH,
-          this.attackAnimFrame, 0,
-          CONFIG.player.attackDisplaySize,
-          this.angle
-        );
-      }
+    // Ключи загрузчика (CONFIG.assets.images), а не пути к файлам.
+    const atkImg=renderer.loader?.getImage("playerAttack");
+    const bodyImg=renderer.loader?.getImage("player");
+    // Спрайт броска нарисован лицом вправо: зеркалим его при стрельбе влево.
+    // Вращать спрайт персонажа нельзя — направление уже задано рядом листа.
+    const faceLeft=Math.cos(this.angle)<0;
+
+    if(this.isAttacking && atkImg){
+      renderer.drawSpriteSheet(
+        atkImg, this.x, this.y,
+        CONFIG.player.attackFrameW, CONFIG.player.attackFrameH,
+        this.attackAnimFrame, 0,
+        CONFIG.player.attackDisplaySize,
+        0, faceLeft
+      );
+    } else if(bodyImg){
+      // Обычный спрайт игрока: ряд листа = направление взгляда
+      renderer.drawSpriteSheet(
+        bodyImg, this.x, this.y,
+        CONFIG.player.spriteFrameW, CONFIG.player.spriteFrameH,
+        this.animFrame, angleToRow(this.angle),
+        CONFIG.player.spriteDisplaySize,
+        0
+      );
     } else {
-      // Обычный спрайт игрока
-      // ЗДЕСЬ: используем ключ загрузчика 'player' (AssetLoader хранит изображения по ключам из CONFIG.assets.images)
-      const img=renderer.loader?.getImage("player");
-      if(img){
-        const row=angleToRow(this.angle);
-        renderer.drawSpriteSheet(
-          img, this.x, this.y,
-          CONFIG.player.spriteFrameW, CONFIG.player.spriteFrameH,
-          this.animFrame, row,
-          CONFIG.player.spriteDisplaySize,
-          this.angle
-        );
-      } else {
-        // Fallback-отрисовка примитивами
-        renderer.drawGlowCircle(this.x,this.y,this.radius+6,this.color.glow,12);
-        renderer.drawGradientCircle(this.x,this.y,this.radius,this.color.body);
-        renderer.ctx.strokeStyle=this.color.stroke; renderer.ctx.lineWidth=2; renderer.ctx.stroke();
-        for(let side=-1;side<=1;side+=2){
-          const ex=this.x+Math.cos(this.angle+side*0.45)*this.radius*0.45;
-          const ey=this.y+Math.sin(this.angle+side*0.45)*this.radius*0.45;
-          renderer.drawCircle(ex,ey,4,"#00d4aa");
-          renderer.drawCircle(ex+Math.cos(this.angle)*1.5,ey+Math.sin(this.angle)*1.5,2,"#000");
-        }
-        renderer.ctx.strokeStyle="#2a2a2a"; renderer.ctx.lineWidth=2; renderer.ctx.beginPath();
-        renderer.ctx.moveTo(this.x-6,this.y+4); renderer.ctx.lineTo(this.x-10,this.y+12);
-        renderer.ctx.moveTo(this.x+6,this.y+4); renderer.ctx.lineTo(this.x+10,this.y+12); renderer.ctx.stroke();
-        renderer.drawGlowCircle(this.x-8,this.y+10,3,"#39ff14",6);
-        renderer.drawCircle(this.x-8,this.y+10,3,"#39ff14");
-        renderer.drawGlowCircle(this.x+8,this.y+10,3,"#c4a000",6);
-        renderer.drawCircle(this.x+8,this.y+10,3,"#c4a000");
+      // Fallback-отрисовка примитивами: сюда попадаем, если ни один спрайт
+      // не загрузился — игрок обязан остаться видимым в любом случае.
+      renderer.drawGlowCircle(this.x,this.y,this.radius+6,this.color.glow,12);
+      renderer.drawGradientCircle(this.x,this.y,this.radius,this.color.body);
+      renderer.ctx.strokeStyle=this.color.stroke; renderer.ctx.lineWidth=2; renderer.ctx.stroke();
+      for(let side=-1;side<=1;side+=2){
+        const ex=this.x+Math.cos(this.angle+side*0.45)*this.radius*0.45;
+        const ey=this.y+Math.sin(this.angle+side*0.45)*this.radius*0.45;
+        renderer.drawCircle(ex,ey,4,"#00d4aa");
+        renderer.drawCircle(ex+Math.cos(this.angle)*1.5,ey+Math.sin(this.angle)*1.5,2,"#000");
       }
+      renderer.ctx.strokeStyle="#2a2a2a"; renderer.ctx.lineWidth=2; renderer.ctx.beginPath();
+      renderer.ctx.moveTo(this.x-6,this.y+4); renderer.ctx.lineTo(this.x-10,this.y+12);
+      renderer.ctx.moveTo(this.x+6,this.y+4); renderer.ctx.lineTo(this.x+10,this.y+12); renderer.ctx.stroke();
+      renderer.drawGlowCircle(this.x-8,this.y+10,3,"#39ff14",6);
+      renderer.drawCircle(this.x-8,this.y+10,3,"#39ff14");
+      renderer.drawGlowCircle(this.x+8,this.y+10,3,"#c4a000",6);
+      renderer.drawCircle(this.x+8,this.y+10,3,"#c4a000");
     }
 
     if(this.shieldActive&&this.shieldTimer>0){

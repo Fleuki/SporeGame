@@ -1,48 +1,30 @@
-import { CONFIG } from "../config.js";
-
+// Снаряд несёт с собой описание своего оружия (def): по нему боевая
+// система знает, какой рисовать спрайт, какой проигрывать взрыв и есть
+// ли урон по области при попадании.
 export class Projectile {
-  constructor(x,y,angle,damage,type="antidote"){
+  constructor(x,y,angle,damage,def){
+    this.def=def;
     this.x=x; this.y=y;
-    this.vx=Math.cos(angle)*7; this.vy=Math.sin(angle)*7;
-    this.radius=type==="antidote"?5:6;
-    this.damage=damage; this.life=100; this.type=type;
-    this.angle=angle;
-    // === НОВОЕ: анимация снаряда ===
-    this.animFrame=0;
-    this.animTimer=0;
+    this.vx=Math.cos(angle)*def.speed; this.vy=Math.sin(angle)*def.speed;
+    this.radius=def.radius;
+    this.damage=damage; this.life=100;
+    this.angle=angle; this.ricocheted=false;
   }
 
-  update(){
-    this.x+=this.vx; this.y+=this.vy; this.life--;
-    // === НОВОЕ: крутим анимацию склянки ===
-    this.animTimer++;
-    if(this.animTimer>=CONFIG.projectile.animSpeed){
-      this.animTimer=0;
-      this.animFrame=(this.animFrame+1)%CONFIG.projectile.cols;
-    }
-  }
+  update(){ this.x+=this.vx; this.y+=this.vy; this.life--; }
 
-  isOffScreen(w,h){ return this.x<-30||this.x>w+30||this.y<-30||this.y>h+30; }
+  // Мир не ограничен, поэтому «за экраном» считается относительно камеры
+  isOffScreen(camera){ return camera?!camera.sees(this.x,this.y,60):false; }
 
   draw(renderer){
-    const img=renderer.loader?.getImage(CONFIG.projectile.sprite);
+    const img=renderer.loader?.getImage(this.def.sprite);
     if(img){
-      renderer.drawSpriteSheet(
-        img, this.x, this.y,
-        CONFIG.projectile.frameW, CONFIG.projectile.frameH,
-        this.animFrame, 0,
-        CONFIG.projectile.displaySize,
-        this.angle
-      );
+      // Склянка нарисована летящей вправо — вращаем по направлению полёта
+      renderer.drawSpriteSheet(img,this.x,this.y,this.def.frame,this.def.frame,
+                               0,0,this.def.display,this.angle);
     } else {
-      // Fallback
-      if(this.type==="antidote"){
-        renderer.drawGlowCircle(this.x,this.y,this.radius,"#00d4aa",12);
-        renderer.drawCircle(this.x,this.y,this.radius,"#aaffff");
-      } else {
-        renderer.drawGlowCircle(this.x,this.y,this.radius,"#39ff14",12);
-        renderer.drawCircle(this.x,this.y,this.radius,"#39ff14");
-      }
+      renderer.drawGlowCircle(this.x,this.y,this.radius,"#00d4aa",12);
+      renderer.drawCircle(this.x,this.y,this.radius,"#aaffff");
     }
   }
 }
