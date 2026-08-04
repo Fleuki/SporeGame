@@ -12,6 +12,7 @@ import { SporeSystem } from "./systems/sporeSystem.js";
 import { UpgradeSystem } from "./systems/upgradeSystem.js";
 import { BattleSystem } from "./systems/battleSystem.js";
 import { MapSystem } from "./systems/mapSystem.js";
+import { LootSystem } from "./systems/lootSystem.js";
 
 const canvas=document.getElementById("gameCanvas");
 canvas.width=CONFIG.screen.width; canvas.height=CONFIG.screen.height;
@@ -25,7 +26,8 @@ renderer.loader=loader; renderer.camera=camera;
 const particles=new ParticleSystem();
 const sporeSystem=new SporeSystem();
 const upgradeSystem=new UpgradeSystem();
-const battle=new BattleSystem(particles,sporeSystem);
+const loot=new LootSystem(particles);
+const battle=new BattleSystem(particles,sporeSystem,loot);
 const map=new MapSystem();
 
 input.onMutePress=()=>audio.toggleMute();
@@ -39,7 +41,7 @@ let player,enemies,projectiles,waveSystem,gameOver,paused,waitingForUpgrade;
 function init(){
   player=new Player(0,0);
   camera.centerOn(player);
-  enemies=[]; projectiles=[];
+  enemies=[]; projectiles=[]; loot.reset();
   waveSystem=new WaveSystem(camera);
   waveSystem.startWave(); gameOver=false; paused=false; waitingForUpgrade=false;
   document.getElementById("gameOverScreen").classList.add("hidden");
@@ -62,12 +64,12 @@ function update(dt){
   const waveEvent=waveSystem.update(enemies,player,sporeEffects);
   if(waveEvent&&waveEvent.type==="boss") enemies.push(waveEvent.boss);
 
-  const {leveledUp}=battle.update(dt,{player,enemies,projectiles,sporeEffects,camera});
-  if(leveledUp) openUpgradeMenu();
+  battle.update(dt,{player,enemies,projectiles,sporeEffects,camera});
+  // Опыт даёт не смерть врага, а подобранный предмет
+  if(loot.update(player,camera)) openUpgradeMenu();
 
   particles.update();
   map.update();                    // кадры анимированных декораций
-  sporeSystem.update(player);
   syncHud();
 
   if(player.hp<=0) endGame();
@@ -91,6 +93,7 @@ function syncHud(){
   document.getElementById("levelDisplay").textContent=player.level;
   document.getElementById("enemyCount").textContent=enemies.length;
   document.getElementById("waveDisplay").textContent=waveSystem.wave;
+  document.getElementById("coinDisplay").textContent=loot.coins;
   document.getElementById("hpBar").style.width=(player.hp/player.maxHp*100)+"%";
   document.getElementById("hpText").textContent=Math.floor(player.hp)+"/"+player.maxHp;
   document.getElementById("sporeBar").style.width=player.sporeLevel+"%";
@@ -105,7 +108,7 @@ function draw(){
   renderer.begin();
   map.drawGround(renderer,waveSystem.wave);   // земля текущего биома
   map.drawDecor(renderer);                    // пни и телеги под сущностями
-  sporeSystem.draw(renderer);
+  loot.draw(renderer);
   for(const e of enemies) e.draw(renderer);
   for(const p of projectiles) p.draw(renderer);
   particles.draw(renderer);

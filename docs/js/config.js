@@ -186,6 +186,33 @@ export const CONFIG = {
     decorChance: 0.5,       // доля клеток с декорацией
     decorClearRadius: 150,  // радиус вокруг точки старта без декораций
   },
+  // ЛУТ. Опыт больше не начисляется в момент смерти врага — он выпадает
+  // шариками, за которыми надо идти. Значения кристаллов растут по кадрам
+  // листа: мелкий → крупный.
+  loot: {
+    magnetRadius: 70,     // с какого расстояния предмет летит к игроку
+    magnetForce: 0.55,
+    friction: 0.9,        // затухание разлёта из точки смерти
+    defaultLife: 900,     // 15 секунд при 60 fps
+    despawnMargin: 500,   // за этим краем от камеры предмет выбрасывается
+    crystalTiers: [10, 25, 60, 150],  // опыт по кадрам drop_crystal
+    maxDrops: 12,         // страховка от сотни предметов с жирного босса
+    antidoteChance: 0.08,
+    potionChance: 0.05,
+    coinChance: 0.12,
+    types: {
+      xp_orb:   { image:"dropXpOrb",   size:26, radius:11, xp:true, value:1,
+                  frames:5, animSpeed:6, particle:"#ffd24a" },
+      crystal:  { image:"dropCrystal", size:40, radius:14, xp:true, value:10,
+                  frames:4, particle:"#c08cff" },
+      antidote: { image:"dropAntidote", size:26, radius:12, spore:25,
+                  particle:"#00d4aa" },
+      potion:   { image:"dropPotion",  size:28, radius:12, heal:25,
+                  particle:"#ff4455" },
+      coin:     { image:"dropCoin",    size:24, radius:11, coin:1,
+                  particle:"#ffcc33" }
+    }
+  },
   assets: {
     images: {
       player: "assets/images/player/alchemist_purple.png",
@@ -211,7 +238,12 @@ export const CONFIG = {
       propMushroomCart: "assets/images/props/prop_mushroom_cart.png",
       propMossyRock: "assets/images/props/prop_mossy_rock.png",
       propGlowShrooms: "assets/images/props/prop_glow_shrooms.png",
-      propAcidPool: "assets/images/effects/acid_pool.png"
+      propAcidPool: "assets/images/effects/acid_pool.png",
+      dropXpOrb: "assets/images/drops/drop_xp_orb.png",
+      dropCrystal: "assets/images/drops/drop_crystal.png",
+      dropAntidote: "assets/images/drops/drop_antidote.png",
+      dropPotion: "assets/images/drops/drop_potion.png",
+      dropCoin: "assets/images/drops/drop_coin.png"
     },
     sounds: {}
   }
