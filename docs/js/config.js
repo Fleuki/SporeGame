@@ -55,6 +55,15 @@ export const CONFIG = {
     // Бросок стал реже — анимации можно дать больше кадров на позу.
     // Ограничение прежнее: attackCols * attackAnimSpeed < attackRate (16 < 21).
     attackAnimSpeed: 4,
+    // === СМЕРТЬ ===
+    // Лист лежал в репозитории с самого начала и никогда не проигрывался:
+    // игрок просто замирал, и экран поражения появлялся мгновенно.
+    // Лист 2064x512, 4 кадра в ряд => кадр 516x512.
+    deathSprite: "assets/images/player/alchemist_death.png",
+    deathFrameW: 516, deathFrameH: 512,
+    deathCols: 4, deathDisplaySize: 72,
+    deathAnimSpeed: 9,   // кадров игры на кадр анимации
+    deathHold: 40,       // сколько держать последний кадр до экрана поражения
     color: { body: ["#5c3a21","#3d2616","#2a1a0f"], glow: "#00d4aa", stroke: "#6b2d5c" }
   },
   // ОРУЖИЕ. Все стволы стреляют одновременно, у каждого свой таймер —
@@ -315,6 +324,7 @@ export const CONFIG = {
     images: {
       player: "assets/images/player/alchemist_purple.png",
       playerAttack: "assets/images/player_attack/throw.png",
+      playerDeath: "assets/images/player/alchemist_death.png",
       projectile: "assets/images/projectiles/potion.png",
       vial_toxic: "assets/images/projectiles/vial_toxic.png",
       vial_fire: "assets/images/projectiles/vial_fire.png",
