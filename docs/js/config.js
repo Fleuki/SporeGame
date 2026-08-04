@@ -7,7 +7,11 @@ export const CONFIG = {
     armor: "#5c3a21", mask: "#2a2a2a", spore: "#8a8a8a", blood: "#ff3333"
   },
   player: {
-    radius: 16, speed: 3.0, maxHp: 100, damage: 10, attackRate: 14,
+    // ВНИМАНИЕ: attackRate НЕ управляет темпом стрельбы — он задаёт только
+    // блокировку анимации броска и точку отсчёта для апгрейда скорострельности
+    // (Weapon.fire делит текущий attackRate на этот базовый). Реальный темп
+    // каждого ствола — это weapons.<ствол>.interval ниже.
+    radius: 16, speed: 3.0, maxHp: 100, damage: 10, attackRate: 21,
     // sporeGrowth — процентов спор в секунду. Раньше поле никто не читал, и
     // счётчик спор рос ТОЛЬКО от попаданий: главная механика игры почти не
     // работала, а мутации «споры ×2» не делали ничего.
@@ -36,7 +40,9 @@ export const CONFIG = {
     attackFrameW: 516, attackFrameH: 512,
     attackCols: 4, attackRows: 1,
     attackDisplaySize: 64,
-    attackAnimSpeed: 3,
+    // Бросок стал реже — анимации можно дать больше кадров на позу.
+    // Ограничение прежнее: attackCols * attackAnimSpeed < attackRate (16 < 21).
+    attackAnimSpeed: 4,
     color: { body: ["#5c3a21","#3d2616","#2a1a0f"], glow: "#00d4aa", stroke: "#6b2d5c" }
   },
   // ОРУЖИЕ. Все стволы стреляют одновременно, у каждого свой таймер —
@@ -54,8 +60,12 @@ export const CONFIG = {
   weapons: {
     antidote: {
       name: "Склянка антидота", desc: "Прямой выстрел по прицелу",
+      // Темп снижен с 14 до 21 кадра (≈4.3 → ≈2.9 выстрела в секунду): очередь
+      // сливалась в непрерывную струю, отдельного броска не было слышно и не
+      // было видно. Урон поднят с 1.0 до 1.35, чтобы это был другой ритм, а не
+      // просто нерф на треть — особенно теперь, когда враги растут по волнам.
       sprite: "projectile", frame: 256, display: 32,
-      interval: 14, damage: 1.0, speed: 7, radius: 5, range: 0,
+      interval: 21, damage: 1.35, speed: 7, radius: 5, range: 0,
       burst: { key: "fx_burst_purple", frame: 128, cols: 4, display: 64, speed: 3 }
     },
     toxic: {
