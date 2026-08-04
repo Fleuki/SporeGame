@@ -10,8 +10,9 @@ import { CONFIG } from "../config.js";
 // Предметы живут в мировых координатах и подбираются двумя способами:
 // в упор — сразу, а внутри magnetRadius летят к игроку сами.
 export class LootSystem {
-  constructor(particles){
+  constructor(particles,audio){
     this.particles=particles;
+    this.audio=audio;
     this.items=[];
     this.coins=0;
     this.tick=0;
@@ -95,11 +96,19 @@ export class LootSystem {
     if(def.xp){
       const v=it.value||def.value||1;
       this.particles?.emit(it.x,it.y,def.particle||"#ffd24a",6);
+      this.audio?.sfx("pickup");
       return player.addXp(v);
     }
-    if(def.heal){ player.hp=Math.min(player.maxHp,player.hp+def.heal); }
-    if(def.spore){ player.reduceSpore(def.spore); }
+    if(def.heal){
+      player.hp=Math.min(player.maxHp,player.hp+def.heal);
+      this.particles?.emitText(it.x,it.y-12,"+"+def.heal,"#66ff88");
+    }
+    if(def.spore){
+      player.reduceSpore(def.spore);
+      this.particles?.emitText(it.x,it.y-12,"−"+def.spore+"% спор","#00d4aa",12);
+    }
     if(def.coin){ this.coins+=def.coin; }
+    this.audio?.sfx(def.coin?"coin":"pickup");
     this.particles?.emit(it.x,it.y,def.particle||"#ffffff",8);
     return false;
   }

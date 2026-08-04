@@ -69,6 +69,13 @@ canvas {
 .bar-hp    { background-image: url("../assets/images/ui/bar_fill_hp.png");    width: 100%; }
 .bar-spore { background-image: url("../assets/images/ui/bar_fill_spore.png"); width: 0%; }
 .bar-xp    { background-image: url("../assets/images/ui/bar_fill_xp.png");    width: 0%; }
+/* Мало HP или высокое заражение — строка пульсирует. В бою на цифры в углу
+   экрана никто не смотрит, а движение боковое зрение ловит. */
+.bar-row.critical { animation: bar-alarm 0.7s ease-in-out infinite; }
+@keyframes bar-alarm {
+  0%, 100% { filter: none; }
+  50%      { filter: brightness(1.6) drop-shadow(0 0 6px rgba(255,60,60,0.9)); }
+}
 .stats { margin-top: 6px; color: #8a8a8a; font-size: 13px; display: flex; align-items: center; gap: 10px; }
 .stat { display: flex; align-items: center; gap: 4px; }
 /* Иконки — пиксель-арт, сглаживание при уменьшении его мылит */
@@ -103,6 +110,12 @@ canvas {
   pointer-events: auto;
 }
 .upgrade-card:hover { background: #2a5d4e; border-color: #39ff14; transform: scale(1.05); }
+/* Категория читается по цвету рамки: за полсекунды выбора текст прочитать
+   успеваешь не всегда, а «жёлтая — это ствол» запоминается сразу */
+.upgrade-card.cat-weapon   { border-color: #c4a000; }
+.upgrade-card.cat-mutation { border-color: #6b2d5c; }
+.upgrade-card.cat-extract  { border-color: #39ff14; }
+.upgrade-card.cat-gear     { border-color: #00d4aa; }
 .upgrade-card .title { color: #00d4aa; font-weight: bold; margin-bottom: 6px; font-size: 13px; }
 .upgrade-card .desc { color: #8a8a8a; font-size: 11px; }
 .upgrade-card .risk { color: #c4a000; font-size: 10px; margin-top: 4px; }
@@ -122,6 +135,16 @@ canvas {
 @media (max-width: 950px) {
   canvas { width: 100vw !important; height: auto !important; border: none; }
   #ui { font-size: 12px; top: 8px; left: 8px; }
-  .bar-bg { width: 90px; height: 10px; }
+  /* --bar-w обязан меняться вместе с шириной: background-size заливки задан
+     через него, и без этой строки картинка шкалы обрезалась по левой трети */
+  .bar-bg {
+    --bar-w: 108px;
+    width: var(--bar-w); height: 12px;
+    /* рамку тоже ужимаем, иначе 20 пикселей бордюра душат 12-пиксельное окно */
+    border-width: 9px 11px 5px 11px;
+    border-image-width: 9px 11px 5px 11px;
+  }
   .label { width: 55px; font-size: 11px; }
+  .upgrade-card { width: 132px; padding: 9px; }
+  #upgradeMenu { padding: 16px; max-width: 96vw; }
 }
