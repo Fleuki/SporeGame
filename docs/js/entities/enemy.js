@@ -4,7 +4,7 @@ import { Entity } from "./entity.js";
 import { SpriteAnim } from "../engine/sprite.js";
 
 export class Enemy extends Entity {
-  // scale — множители сложности от номера волны, см. WaveSystem.scale()
+  // scale — множители сложности от времени забега, см. SpawnSystem.scale()
   constructor(x,y,typeKey,isMutated=false,scale=null){
     const t=CONFIG.enemies.types[typeKey]||CONFIG.enemies.types.spore_bearer;
     super(x,y,t.radius);

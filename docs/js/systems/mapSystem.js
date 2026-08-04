@@ -49,15 +49,16 @@ export class MapSystem {
     }
   }
 
-  biome(wave){
+  // Биом сменяется по времени забега: номера волны больше не существует
+  biome(runTime){
     const list=CONFIG.map.biomes;
-    return list[Math.floor((wave-1)/CONFIG.map.wavesPerBiome)%list.length];
+    return list[Math.floor(Math.max(0,runTime)/CONFIG.map.secondsPerBiome)%list.length];
   }
 
   // --- мировой слой ---------------------------------------------------
-  drawGround(renderer,wave){
+  drawGround(renderer,runTime){
     const c=renderer.camera, ctx=renderer.ctx;
-    const biome=this.biome(wave);
+    const biome=this.biome(runTime);
     const img=renderer.loader?.getImage(biome.tile);
     if(!c) return;
     if(!img||!img.width){
@@ -160,4 +161,61 @@ export class MapSystem {
 
   // --- экранный слой ---------------------------------------------------
   drawVignette(renderer){ renderer.drawVignette(CONFIG.map.vignette); }
+
+  // ТЕМНОТА. Арена больше не освещена равномерно: кадр затемняется целиком,
+  // а свет остаётся кругом вокруг игрока и ореолами вокруг светящихся
+  // декораций.
+  //
+  // Одним градиентом поверх кадра это не рисуется: источников света
+  // несколько, и накладывать их друг на друга нельзя — в местах пересечения
+  // получилось бы двойное затемнение. Поэтому слой собирается в отдельном
+  // канвасе: сплошная заливка, из которой источники ВЫРЕЗАЮТ свет через
+  // destination-out, и только потом всё это кладётся на кадр.
+  drawDarkness(renderer,player){
+    const D=CONFIG.map.darkness;
+    if(!D||D.strength<=0) return;
+    const cam=renderer.camera; if(!cam||!player) return;
+    const w=renderer.canvas.width, h=renderer.canvas.height;
+
+    let cv=this._dark;
+    if(!cv||cv.width!==w||cv.height!==h){
+      cv=this._dark=document.createElement("canvas");
+      cv.width=w; cv.height=h;
+      this._darkCtx=cv.getContext("2d");
+    }
+    const dc=this._darkCtx;
+    dc.globalCompositeOperation="source-over";
+    dc.fillStyle="#03060a";
+    dc.clearRect(0,0,w,h);
+    dc.fillRect(0,0,w,h);
+
+    dc.globalCompositeOperation="destination-out";
+    // Круг света дышит — иначе он выглядит трафаретом, приклеенным к игроку
+    const pulse=Math.sin(this.tick*D.pulseSpeed)*(D.pulse||0);
+    const p=cam.toScreen(player.x,player.y);
+    this.cutLight(dc,p.x,p.y,D.playerRadius+pulse,D.playerCore);
+    for(const d of this.visible){
+      if(!d.def.glow) continue;
+      const s=cam.toScreen(d.x,d.y-d.w*0.3);
+      this.cutLight(dc,s.x,s.y,D.propRadius*(d.w/(d.def.width||d.w)),0.15);
+    }
+
+    renderer.ctx.save();
+    renderer.ctx.globalAlpha=D.strength;
+    renderer.ctx.drawImage(cv,0,0);
+    renderer.ctx.restore();
+  }
+
+  // Вырезает из слоя темноты мягкое пятно света. core — доля радиуса, внутри
+  // которой темнота снимается полностью.
+  cutLight(dc,x,y,r,core){
+    if(r<=0) return;
+    const g=dc.createRadialGradient(x,y,r*core,x,y,r);
+    g.addColorStop(0,"rgba(0,0,0,1)");
+    g.addColorStop(0.5,"rgba(0,0,0,0.72)");
+    g.addColorStop(0.8,"rgba(0,0,0,0.3)");
+    g.addColorStop(1,"rgba(0,0,0,0)");
+    dc.fillStyle=g;
+    dc.beginPath(); dc.arc(x,y,r,0,Math.PI*2); dc.fill();
+  }
 }
