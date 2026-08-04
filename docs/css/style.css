@@ -12,7 +12,12 @@ html, body {
   -webkit-user-select: none;
   user-select: none;
 }
+/* Коробка игрового кадра: холст и HUD поверх него. Нужна, чтобы интерфейс
+   лип к краям кадра, а не окна — иначе нижняя полоса опыта и таймер сверху
+   разъезжаются с картинкой на широких экранах. */
+#stage { position: relative; display: inline-block; line-height: 0; }
 canvas {
+  display: block;
   background: #1a3d2e;
   border: 3px solid #6b2d5c;
   box-shadow: 0 0 30px rgba(107,45,92,0.3);
@@ -23,19 +28,41 @@ canvas {
   width: auto;
   height: auto;
 }
+/* HUD.
+   Раньше всё было свалено в левый верхний угол: три подписанные шкалы в
+   столбик плюс строка статистики — четверть экрана под отладочную панель.
+   Теперь на боевом экране только три вещи: таймер сверху по центру, пара
+   HP/споры внизу слева и полоса опыта во всю ширину у нижнего края.
+   Счётчики убитых и монет переехали на экран итогов. */
 #ui {
   position: absolute;
-  top: 12px; left: 12px;
+  top: 0; left: 0; right: 0; bottom: 0;
   color: #00d4aa;
   font: 14px "Courier New", monospace;
   pointer-events: none;
   z-index: 10;
+  line-height: 1;
   text-shadow: 0 0 8px rgba(0,212,170,0.5);
 }
-.bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
-.label { width: 52px; }
+/* Таймер — единственная мера прогресса вместо волн, поэтому крупный */
+#timer {
+  position: absolute; top: 10px; left: 50%;
+  transform: translateX(-50%);
+  display: flex; align-items: center; gap: 8px;
+  font-size: 30px; letter-spacing: 2px;
+  color: #e8f6f0;
+  text-shadow: 0 0 12px rgba(0,212,170,0.55), 0 2px 4px rgba(0,0,0,0.9);
+}
+#timer .icon { width: 22px; height: 22px; opacity: 0.75; }
+
+/* Пара HP/споры: без подписей и без цифр — длина и цвет читаются быстрее */
+#vitals {
+  position: absolute; left: 14px; bottom: 26px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.vital { display: flex; align-items: center; gap: 6px; }
 /* Иконка есть не у каждой шкалы, но место под неё держим всегда —
-   иначе подписи разъезжаются по строкам */
+   иначе шкалы разъезжаются по строкам */
 .icon-slot { width: 20px; display: inline-flex; justify-content: center; }
 
 /* ШКАЛЫ.
@@ -46,7 +73,11 @@ canvas {
    background-size задан в пикселях полной шкалы, а не в процентах: иначе
    при убывании HP рисунок сжимался бы, вместо того чтобы убывать. */
 .bar-bg {
-  --bar-w: 190px;
+  /* Стало короче: шкала теперь не подписана и стоит у нижнего края,
+     длинная полоса на 190 пикселей там перетягивала бы на себя внимание.
+     ВАЖНО: --bar-w меняется ТОЛЬКО вместе с width — на нём висит
+     background-size заливки, и рассинхрон обрезает картинку. */
+  --bar-w: 132px;
   /* content-box, а не общий border-box: ширина заливки должна совпадать с
      внутренним окном рамки, иначе картинка заливки обрезается ещё на 100% */
   box-sizing: content-box;
@@ -68,16 +99,40 @@ canvas {
 }
 .bar-hp    { background-image: url("../assets/images/ui/bar_fill_hp.png");    width: 100%; }
 .bar-spore { background-image: url("../assets/images/ui/bar_fill_spore.png"); width: 0%; }
-.bar-xp    { background-image: url("../assets/images/ui/bar_fill_xp.png");    width: 0%; }
-/* Мало HP или высокое заражение — строка пульсирует. В бою на цифры в углу
-   экрана никто не смотрит, а движение боковое зрение ловит. */
-.bar-row.critical { animation: bar-alarm 0.7s ease-in-out infinite; }
+/* Мало HP или высокое заражение — шкала пульсирует. Подписей и цифр больше
+   нет, поэтому тревога передаётся движением. */
+.vital.critical { animation: bar-alarm 0.7s ease-in-out infinite; }
 @keyframes bar-alarm {
   0%, 100% { filter: none; }
   50%      { filter: brightness(1.6) drop-shadow(0 0 6px rgba(255,60,60,0.9)); }
 }
-.stats { margin-top: 6px; color: #8a8a8a; font-size: 13px; display: flex; align-items: center; gap: 10px; }
-.stat { display: flex; align-items: center; gap: 4px; }
+
+/* ОПЫТ — тонкая полоса во всю ширину кадра у нижнего края.
+   Текстуру bar_fill_xp.png здесь намеренно не используем: её background-size
+   задаётся в пикселях от --bar-w, а ширина этой полосы зависит от размера
+   окна. Пришлось бы пересчитывать переменную из JS на каждый resize, и любой
+   промах обрезал бы картинку. Ровная заливка со свечением на высоте 5
+   пикселей выглядит ничем не хуже. */
+#xpStrip {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 8px 6px 8px;
+}
+#levelDisplay {
+  font-size: 13px; color: #cbb3ff; min-width: 18px; text-align: right;
+  text-shadow: 0 0 8px rgba(150,110,255,0.7), 0 1px 3px rgba(0,0,0,0.9);
+}
+#xpTrack {
+  flex: 1; height: 5px;
+  background: rgba(6,9,11,0.75);
+  box-shadow: inset 0 0 0 1px rgba(0,212,170,0.18);
+}
+#xpBar {
+  height: 100%; width: 0%;
+  background: linear-gradient(90deg, #00d4aa, #39ff14);
+  box-shadow: 0 0 8px rgba(57,255,20,0.65);
+  transition: width 0.2s;
+}
 /* Иконки — пиксель-арт, сглаживание при уменьшении его мылит */
 .icon {
   width: 18px; height: 18px;
@@ -133,18 +188,21 @@ canvas {
 
 /* Мобильная адаптация */
 @media (max-width: 950px) {
+  #stage { width: 100vw; }
   canvas { width: 100vw !important; height: auto !important; border: none; }
-  #ui { font-size: 12px; top: 8px; left: 8px; }
+  #ui { font-size: 12px; }
+  #timer { font-size: 22px; top: 6px; }
+  #timer .icon { width: 16px; height: 16px; }
+  #vitals { left: 8px; bottom: 20px; }
   /* --bar-w обязан меняться вместе с шириной: background-size заливки задан
      через него, и без этой строки картинка шкалы обрезалась по левой трети */
   .bar-bg {
-    --bar-w: 108px;
+    --bar-w: 88px;
     width: var(--bar-w); height: 12px;
     /* рамку тоже ужимаем, иначе 20 пикселей бордюра душат 12-пиксельное окно */
     border-width: 9px 11px 5px 11px;
     border-image-width: 9px 11px 5px 11px;
   }
-  .label { width: 55px; font-size: 11px; }
   .upgrade-card { width: 132px; padding: 9px; }
   #upgradeMenu { padding: 16px; max-width: 96vw; }
 }

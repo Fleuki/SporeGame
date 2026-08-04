@@ -18,9 +18,18 @@ export const WORLD = {
 };
 
 export class Camera {
-  constructor(viewW,viewH){
+  // viewW/viewH — размер холста в ЭКРАННЫХ пикселях, zoom — во сколько раз
+  // мир крупнее холста.
+  //
+  // w/h камеры при этом хранятся в МИРОВЫХ единицах (холст / zoom). Это
+  // важнее, чем кажется: на camera.w/h завязаны спавн за краем экрана,
+  // список видимых декораций, отсечение снарядов и лута. Держи мы их в
+  // экранных пикселях — каждое из этих мест пришлось бы делить на зум
+  // отдельно, и любое забытое стало бы багом видимости.
+  constructor(viewW,viewH,zoom=1){
     this.x=0; this.y=0;          // левый верхний угол окна в мире
-    this.w=viewW; this.h=viewH;
+    this.zoom=zoom||1;
+    this.w=viewW/this.zoom; this.h=viewH/this.zoom;
     this.smoothing=0.15;         // 0 — камера не движется, 1 — жёстко привязана
     // Тряска: живёт отдельно от позиции, иначе clampToWorld гасил бы её у края
     this.shakeMag=0; this.shakeTime=0; this.shakeMax=1; this.ox=0; this.oy=0;
@@ -60,13 +69,23 @@ export class Camera {
     this.y=Math.min(Math.max(this.y,WORLD.minY),WORLD.maxY-this.h);
   }
 
-  // Округляем сдвиг до целых пикселей: иначе пиксель-арт «плывёт» на
-  // дробных смещениях и подрагивает при движении.
-  begin(ctx){ ctx.save(); ctx.translate(-Math.round(this.x+this.ox),-Math.round(this.y+this.oy)); }
+  // Округляем сдвиг до целых ЭКРАННЫХ пикселей: иначе пиксель-арт «плывёт»
+  // на дробных смещениях и подрагивает при движении. Округлять мировые
+  // координаты бессмысленно — на дробном зуме целая мировая единица всё
+  // равно попадает между пикселями экрана.
+  begin(ctx){
+    ctx.save();
+    ctx.scale(this.zoom,this.zoom);
+    ctx.translate(-Math.round((this.x+this.ox)*this.zoom)/this.zoom,
+                  -Math.round((this.y+this.oy)*this.zoom)/this.zoom);
+  }
   end(ctx){ ctx.restore(); }
 
-  toWorld(sx,sy){ return {x:sx+this.x, y:sy+this.y}; }
-  toScreen(wx,wy){ return {x:wx-this.x, y:wy-this.y}; }
+  // Мышь приходит в пикселях холста — до мира её надо не только сдвинуть,
+  // но и поделить на зум, иначе прицел уезжает тем сильнее, чем дальше
+  // курсор от левого верхнего угла.
+  toWorld(sx,sy){ return {x:sx/this.zoom+this.x, y:sy/this.zoom+this.y}; }
+  toScreen(wx,wy){ return {x:(wx-this.x)*this.zoom, y:(wy-this.y)*this.zoom}; }
 
   // Видна ли точка в окне (margin — запас за краем)
   sees(x,y,margin=0){

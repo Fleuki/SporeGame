@@ -296,7 +296,8 @@ side to side.
 (`phaseRows: true`), а не направления. Ряд 0 — целый босс, ряд 3 — почти
 убитый. Это редкая, но очень выигрышная схема: босс визуально звереет.
 
-**Третий босс — Споровый Улей** (для волны 30):
+**Третий босс — Споровый Улей** (третий в очереди боссов, двенадцатая минута
+забега):
 
 ```
 [БАЗА СТИЛЯ]
@@ -518,10 +519,16 @@ Frame 4: only a few fading sparks remain.
 
 ## ИКОНКИ ИНТЕРФЕЙСА
 
-Иконки в HUD — обычные `<img>` в `index.html`. Есть: споры, черепа, время.
-**Нет: HP и опыта** — в строках «HP» и «Опыт» стоят пустые слоты. И ещё две
-позиции в `.stats` до сих пор нарисованы эмодзи (`🌊` волна, `🪙` монеты),
-что посреди пиксель-арта смотрится чужеродно.
+Иконки в HUD — обычные `<img>` в `index.html`. Есть: споры, время.
+
+**Нет иконки HP** — у шкалы здоровья пустой слот `.icon-slot`, и это
+единственное, чего HUD сейчас не хватает. Подписей у шкал больше нет, так что
+иконка осталась единственным, что отличает здоровье от спор кроме цвета.
+
+Остальное из старого списка отпало вместе с перекройкой HUD: у полосы опыта
+нет слота под иконку (она тонкая, во всю ширину экрана), счётчик монет ушёл
+на экран итогов и рисуется эмодзи ровно один раз за забег, а волн в игре
+больше нет вообще — иконка `icon_wave.png` не нужна.
 
 Общий промпт, меняется только `[ПРЕДМЕТ]`:
 
@@ -537,11 +544,10 @@ Subject: [ПРЕДМЕТ]
 ```
 
 - **HP** (`icon_hp.png`): `an anatomical heart overgrown with fungus, deep blood red with pale mycelium threads creeping across its surface and one small purple mushroom cap sprouting from the top`
-- **Опыт** (`icon_xp.png`): `a faceted glowing crystal shard of condensed spore energy, bright bioluminescent teal #00d4aa, radiating a soft halo`
-- **Волна** (`icon_wave.png`): `a curling wave made of purple #6b2d5c spore dust rolling forward, stylised into a single bold curved shape`
-- **Монеты** (`icon_coin.png`): `a tarnished pre-collapse coin, worn gold #c4a000, with a mushroom cap stamped in relief on its face and green corrosion in the grooves`
+- **Монеты** (`icon_coin.png`, если захочется убрать эмодзи с экрана итогов):
+  `a tarnished pre-collapse coin, worn gold #c4a000, with a mushroom cap stamped in relief on its face and green corrosion in the grooves`
 
-Как подключить — в `index.html`:
+Как подключить — в `index.html`, в первую `.vital`:
 
 ```html
 <span class="icon-slot"><img class="icon" src="assets/images/ui/icon_hp.png" alt=""></span>

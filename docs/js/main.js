@@ -7,7 +7,7 @@ import { InputManager } from "./engine/input.js";
 import { Renderer } from "./engine/renderer.js";
 import { Player } from "./entities/player.js";
 import { ParticleSystem } from "./entities/particle.js";
-import { WaveSystem } from "./systems/waveSystem.js";
+import { SpawnSystem } from "./systems/spawnSystem.js";
 import { SporeSystem } from "./systems/sporeSystem.js";
 import { UpgradeSystem } from "./systems/upgradeSystem.js";
 import { BattleSystem } from "./systems/battleSystem.js";
@@ -20,7 +20,7 @@ canvas.width=CONFIG.screen.width; canvas.height=CONFIG.screen.height;
 const loader=new AssetLoader();
 const audio=new AudioManager(loader);
 const input=new InputManager(canvas);
-const camera=new Camera(CONFIG.screen.width,CONFIG.screen.height);
+const camera=new Camera(CONFIG.screen.width,CONFIG.screen.height,CONFIG.camera.zoom);
 const renderer=new Renderer(canvas);
 renderer.loader=loader; renderer.camera=camera;
 const particles=new ParticleSystem();
@@ -39,7 +39,7 @@ input.onPausePress=()=>{ if(!gameOver&&!waitingForUpgrade) paused=!paused; };
 
 (async()=>{ await loader.loadAll(CONFIG.assets); })();
 
-let player,enemies,projectiles,waveSystem,gameOver,paused,waitingForUpgrade;
+let player,enemies,projectiles,spawnSystem,gameOver,paused,waitingForUpgrade;
 let runTime=0;   // секунды с начала забега, идут только пока игра не на паузе
 // Меню прокачки открывается не мгновенно: сначала должна доиграть вспышка
 // уровня. При паузе кадры анимации не идут, поэтому иначе её никто не увидит.
@@ -62,9 +62,10 @@ function init(){
   camera.centerOn(player);
   enemies=[]; projectiles=[]; loot.reset(); particles.reset(); battle.effects.length=0;
   battle.kills=0; runTime=0; levelUpDelay=0; dying=0;
-  waveSystem=new WaveSystem(camera);
-  waveSystem.startWave(); gameOver=false; paused=false; waitingForUpgrade=false;
+  spawnSystem=new SpawnSystem(camera);
+  gameOver=false; paused=false; waitingForUpgrade=false;
   document.getElementById("gameOverScreen").classList.add("hidden");
+  document.getElementById("ui").classList.remove("hidden");
   upgradeSystem.hideMenu();
 }
 
@@ -103,12 +104,12 @@ function update(dt){
   }
   if(shots.length) audio.sfx("shoot");
 
-  const waveEvent=waveSystem.update(enemies,player,sporeEffects);
-  if(waveEvent&&waveEvent.type==="boss"){
-    enemies.push(waveEvent.boss);
+  // Волн больше нет: враги идут потоком, сложность считается от runTime,
+  // единственное событие спавна — выход босса
+  const spawnEvent=spawnSystem.update(dt,enemies,player,sporeEffects);
+  if(spawnEvent&&spawnEvent.type==="boss"){
+    enemies.push(spawnEvent.boss);
     audio.sfx("boss"); camera.shake(CONFIG.feel.shakeBoss,40);
-  } else if(waveEvent&&waveEvent.type==="wave"){
-    audio.sfx("wave");
   }
 
   battle.update(dt,{player,enemies,projectiles,sporeEffects,camera});
@@ -147,11 +148,16 @@ function openUpgradeMenu(){
 
 function endGame(){
   player.hp=0; gameOver=true; dying=0;
-  document.getElementById("finalWave").textContent=waveSystem.wave;
+  // Убитые и монеты переехали сюда с игрового экрана: в бою на них не
+  // смотрят, а на экране итогов они как раз и есть итог
   document.getElementById("finalLevel").textContent=player.level;
   document.getElementById("finalKills").textContent=battle.kills;
+  document.getElementById("finalCoins").textContent=loot.coins;
   document.getElementById("finalTime").textContent=formatTime(runTime);
   document.getElementById("gameOverScreen").classList.remove("hidden");
+  // Боевой HUD на экране итогов не нужен: таймер и шкалы просвечивали
+  // сквозь затемнение и спорили с итоговыми цифрами
+  document.getElementById("ui").classList.add("hidden");
 }
 
 function formatTime(sec){
@@ -159,32 +165,31 @@ function formatTime(sec){
   return m+":"+String(s).padStart(2,"0");
 }
 
-// Узлы интерфейса ищутся один раз: getElementById двенадцать раз в кадр —
-// это лишняя работа каждый кадр и заодно шум в коде
+// Узлы интерфейса ищутся один раз: getElementById по разу на поле в кадр —
+// это лишняя работа каждый кадр и заодно шум в коде.
+//
+// Состав HUD урезан: с боевого экрана ушли счётчик убитых, монеты, номер
+// волны и все текстовые подписи шкал. Осталось три вещи — таймер сверху по
+// центру (он же единственная мера прогресса), полоса опыта во всю ширину
+// внизу и компактная пара HP/споры над ней. Цифры «74/100» в бою всё равно
+// никто не читает, а цвет и длина шкалы читаются мгновенно.
 const HUD={};
-for(const id of ["xpBar","xpText","levelDisplay","killDisplay","timeDisplay","waveDisplay",
-                 "coinDisplay","hpBar","hpText","sporeBar","sporeText"]){
+for(const id of ["xpBar","levelDisplay","timeDisplay","hpBar","sporeBar"]){
   HUD[id]=document.getElementById(id);
 }
-const hpRow=HUD.hpBar.closest(".bar-row"), sporeRow=HUD.sporeBar.closest(".bar-row");
+const hpRow=HUD.hpBar.closest(".vital"), sporeRow=HUD.sporeBar.closest(".vital");
 
 function syncHud(){
   HUD.xpBar.style.width=(player.xp/player.xpToNext*100)+"%";
-  HUD.xpText.textContent=Math.floor(player.xp)+"/"+player.xpToNext;
   HUD.levelDisplay.textContent=player.level;
-  HUD.killDisplay.textContent=battle.kills;
   HUD.timeDisplay.textContent=formatTime(runTime);
-  HUD.waveDisplay.textContent=waveSystem.wave;
-  HUD.coinDisplay.textContent=loot.coins;
 
   const hpPct=Math.max(0,player.hp/player.maxHp);
   HUD.hpBar.style.width=(hpPct*100)+"%";
-  HUD.hpText.textContent=Math.max(0,Math.floor(player.hp))+"/"+Math.round(player.maxHp);
   // Полоска пульсирует на последней четверти здоровья и на критическом
-  // заражении: цифры в углу экрана в бою никто не читает, движение — видно
+  // заражении: движение боковое зрение ловит даже в свалке
   hpRow.classList.toggle("critical",hpPct<=0.25);
   HUD.sporeBar.style.width=player.sporeLevel+"%";
-  HUD.sporeText.textContent=Math.floor(player.sporeLevel)+"%";
   sporeRow.classList.toggle("critical",player.sporeLevel>=CONFIG.sporeSystem.thresholds.danger);
 }
 
@@ -208,7 +213,7 @@ function draw(){
 
   // --- мировой слой: всё внутри begin/end сдвигается камерой ---
   renderer.begin();
-  map.drawGround(renderer,waveSystem.wave);   // земля текущего биома
+  map.drawGround(renderer,runTime);           // земля текущего биома
   map.drawDecor(renderer);                    // пни и телеги под сущностями
   map.drawEdge(renderer);                     // мрак на границе арены
   loot.draw(renderer);
@@ -220,10 +225,12 @@ function draw(){
   renderer.end();
 
   // --- экранный слой: интерфейс и джойстик не ездят вместе с миром ---
+  // Темнота идёт первой: она гасит мир, но не должна гасить виньетку,
+  // красную рамку урона и джойстик
+  map.drawDarkness(renderer,player);
   map.drawVignette(renderer);
   drawHurtVignette();
   input.drawJoystick(renderer);
-  renderer.drawText("Волна "+waveSystem.wave+"  |  Врагов: "+enemies.length,CONFIG.screen.width-240,30,{font:"16px monospace",color:"#8888ff"});
 
   if(paused&&!waitingForUpgrade&&!gameOver){
     renderer.drawOverlay(0.55);

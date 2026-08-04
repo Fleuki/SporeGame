@@ -28,7 +28,7 @@
    В config.js assets.images.groundSwamp = "assets/images/map/ground_swamp.png"
    Затем добавь биом в config.js map.biomes:
      { key: "swamp", tile: "groundSwamp", tint: "rgba(10,25,20,0.35)" }
-   Биомы сменяются по кругу каждые map.wavesPerBiome волн.
+   Биомы сменяются по кругу каждые map.secondsPerBiome секунд забега.
    tint — полупрозрачная заливка поверх текстуры: без неё яркая земля
    забивает врагов и снаряды.
 
@@ -98,8 +98,8 @@
 Добавь врага "GhostFungus": hp 40, speed 1.5,
 способность — телепортация на 50px каждые 3 сек.
 
-[ФАЙЛ: js/systems/waveSystem.js]
-Каждые 7 волн спавни редкого элитного врага
+[ФАЙЛ: js/systems/spawnSystem.js]
+Раз в 90 секунд забега спавни редкого элитного врага
 с золотой аурой и х2.5 HP.
 
 [ФАЙЛ: js/entities/player.js]
