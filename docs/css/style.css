@@ -55,68 +55,60 @@ canvas {
 }
 #timer .icon { width: 22px; height: 22px; opacity: 0.75; }
 
-/* Пара HP/споры: без подписей и без цифр — длина и цвет читаются быстрее */
-#vitals {
-  position: absolute; left: 14px; bottom: 26px;
-  display: flex; flex-direction: column; gap: 4px;
-}
-.vital { display: flex; align-items: center; gap: 6px; }
-/* Иконка есть не у каждой шкалы, но место под неё держим всегда —
-   иначе шкалы разъезжаются по строкам */
-.icon-slot { width: 20px; display: inline-flex; justify-content: center; }
+/* ШКАЛЫ HP И СПОР.
+   Это не полоска цвета в рамке, а две копии одной иллюстрации: снизу
+   «погасшая» (тёмный камень с мёртвыми жилами), сверху «горящая» (тот же
+   камень, залитый свечением). Верхнюю открывает clip-path по проценту —
+   поэтому заполнение выглядит как оживающий мицелий, а рамка с наростами
+   по краям остаётся целой при любом значении.
 
-/* ШКАЛЫ.
-   Рамка — одна картинка на все три шкалы, растянутая через border-image:
-   углы остаются целыми, тянется только середина, поэтому шкала любой
-   длины выглядит одинаково.
-   Заливка — отдельная картинка на 100%, и обрезается шириной элемента.
-   background-size задан в пикселях полной шкалы, а не в процентах: иначе
-   при убывании HP рисунок сжимался бы, вместо того чтобы убывать. */
-.bar-bg {
-  /* Стало короче: шкала теперь не подписана и стоит у нижнего края,
-     длинная полоса на 190 пикселей там перетягивала бы на себя внимание.
-     ВАЖНО: --bar-w меняется ТОЛЬКО вместе с width — на нём висит
-     background-size заливки, и рассинхрон обрезает картинку. */
-  --bar-w: 132px;
-  /* content-box, а не общий border-box: ширина заливки должна совпадать с
-     внутренним окном рамки, иначе картинка заливки обрезается ещё на 100% */
-  box-sizing: content-box;
-  width: var(--bar-w); height: 16px;
-  border-style: solid;
-  border-width: 13px 16px 7px 16px;
-  /* без ключевого слова fill: середину рамки рисовать не надо,
-     там пустая часть шкалы — её красит фон элемента */
-  border-image: url("../assets/images/ui/bar_frame.png") 25 31 14 32 / 13px 16px 7px 16px stretch;
-  background: rgba(6,9,11,0.9);
-  image-rendering: pixelated;
+   ВАЖНО: --win-a / --win-b — где в КАРТИНКЕ начинается и кончается окно
+   шкалы (в процентах её ширины). Резные наросты заходят внутрь кадра, и
+   без этих полей заполнение начиналось бы от самого края картинки, то есть
+   уже «на четверть полное» при нуле. Значения посчитаны по исходнику
+   (окно 60..1238 из 1276 пикселей) — менять их надо вместе с картинками.
+   Их читает syncHud() в main.js. */
+#vitals {
+  position: absolute; left: 12px; bottom: 20px;
+  display: flex; flex-direction: column; gap: 2px;
 }
-.bar-fill {
-  height: 100%;
-  background-repeat: no-repeat;
-  background-size: var(--bar-w) 100%;
-  image-rendering: pixelated;
-  transition: width 0.2s;
+.orn-bar {
+  --win-a: 4.7;
+  --win-b: 97.02;
+  position: relative;
+  width: 236px; height: 44px;   /* родное разрешение картинки, 1:1 */
 }
-.bar-hp    { background-image: url("../assets/images/ui/bar_fill_hp.png");    width: 100%; }
-.bar-spore { background-image: url("../assets/images/ui/bar_fill_spore.png"); width: 0%; }
-/* Мало HP или высокое заражение — шкала пульсирует. Подписей и цифр больше
-   нет, поэтому тревога передаётся движением. */
+.orn-bar img {
+  position: absolute; left: 0; top: 0;
+  width: 100%; height: 100%;
+  image-rendering: pixelated;
+  /* Картинки шкал грузятся вместе со страницей и не должны ловить
+     перетаскивание мышью прямо в бою */
+  pointer-events: none; -webkit-user-drag: none;
+}
+.orn-full {
+  clip-path: inset(0 100% 0 0);
+  transition: clip-path 0.18s linear;
+  filter: drop-shadow(0 0 6px rgba(150,60,255,0.35));
+}
+#hpBar { filter: drop-shadow(0 0 6px rgba(255,60,70,0.35)); }
+/* Мало HP или высокое заражение — шкала пульсирует. Подписей и цифр нет,
+   поэтому тревога передаётся движением. */
 .vital.critical { animation: bar-alarm 0.7s ease-in-out infinite; }
 @keyframes bar-alarm {
   0%, 100% { filter: none; }
-  50%      { filter: brightness(1.6) drop-shadow(0 0 6px rgba(255,60,60,0.9)); }
+  50%      { filter: brightness(1.45) drop-shadow(0 0 8px rgba(255,60,60,0.9)); }
 }
 
 /* ОПЫТ — тонкая полоса во всю ширину кадра у нижнего края.
-   Текстуру bar_fill_xp.png здесь намеренно не используем: её background-size
-   задаётся в пикселях от --bar-w, а ширина этой полосы зависит от размера
-   окна. Пришлось бы пересчитывать переменную из JS на каждый resize, и любой
-   промах обрезал бы картинку. Ровная заливка со свечением на высоте 5
-   пикселей выглядит ничем не хуже. */
+   Текстурную шкалу здесь намеренно не используем: её ширина зависит от
+   размера окна, а рисунок пришлось бы пересчитывать на каждый resize. Ровная
+   заливка со свечением на высоте 5 пикселей выглядит ничем не хуже и не
+   спорит с двумя резными шкалами рядом. */
 #xpStrip {
   position: absolute; left: 0; right: 0; bottom: 0;
   display: flex; align-items: center; gap: 8px;
-  padding: 0 8px 6px 8px;
+  padding: 0 8px 5px 8px;
 }
 #levelDisplay {
   font-size: 13px; color: #cbb3ff; min-width: 18px; text-align: right;
@@ -139,7 +131,6 @@ canvas {
   image-rendering: pixelated;
   vertical-align: middle;
 }
-.bar-row .icon { width: 20px; height: 20px; }
 #upgradeMenu {
   position: absolute; top: 50%; left: 50%;
   transform: translate(-50%,-50%);
@@ -193,16 +184,10 @@ canvas {
   #ui { font-size: 12px; }
   #timer { font-size: 22px; top: 6px; }
   #timer .icon { width: 16px; height: 16px; }
-  #vitals { left: 8px; bottom: 20px; }
-  /* --bar-w обязан меняться вместе с шириной: background-size заливки задан
-     через него, и без этой строки картинка шкалы обрезалась по левой трети */
-  .bar-bg {
-    --bar-w: 88px;
-    width: var(--bar-w); height: 12px;
-    /* рамку тоже ужимаем, иначе 20 пикселей бордюра душат 12-пиксельное окно */
-    border-width: 9px 11px 5px 11px;
-    border-image-width: 9px 11px 5px 11px;
-  }
+  #vitals { left: 6px; bottom: 16px; }
+  /* Шкалы ужимаются целиком, вместе с рамкой: пропорции картинки те же,
+     поэтому --win-a/--win-b трогать не надо */
+  .orn-bar { width: 150px; height: 28px; }
   .upgrade-card { width: 132px; padding: 9px; }
   #upgradeMenu { padding: 16px; max-width: 96vw; }
 }

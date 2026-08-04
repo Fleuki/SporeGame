@@ -56,6 +56,16 @@ export class SpriteAnim {
     return true;
   }
 
+  // Светящийся контур под спрайтом — рисовать ДО draw()
+  outline(renderer,x,y,color,width,alpha){
+    const d=this.def; if(!d||!color) return false;
+    const img=renderer.loader?.getImage(d.key);
+    if(!img) return false;
+    renderer.drawOutline(img,d.key,x,y,d.frame,d.frame,this.frame,this.row,
+                         d.display,this.flip,color,width,alpha);
+    return true;
+  }
+
   // Тот же кадр силуэтом — вспышка от попадания поверх спрайта
   flash(renderer,x,y,alpha,color="#ffffff"){
     const d=this.def; if(!d) return false;

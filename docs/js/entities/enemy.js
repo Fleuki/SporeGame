@@ -120,6 +120,12 @@ export class Enemy extends Entity {
     // Мутанты подсвечиваются золотой аурой независимо от способа отрисовки
     if(this.isMutated) renderer.drawGlowCircle(this.x,this.y,this.radius+4,"#c4a000",10);
 
+    // Контур под спрайтом: у мутанта золотой, у остальных — свой цвет типа.
+    // Он рисуется до спрайта, поэтому наружу торчит только ободок.
+    this.anim.outline(renderer,this.x,this.y,
+      this.isMutated?"#ffd24a":(this.def.rim||"#b98cff"),
+      CONFIG.enemies.rimWidth, CONFIG.enemies.rimAlpha);
+
     if(!this.anim.draw(renderer,this.x,this.y)){
       // Запасная отрисовка примитивами для типов без спрайта
       renderer.drawGradientCircle(this.x,this.y,this.radius,this.color?.body||["#8a8a8a","#6b2d5c"]);

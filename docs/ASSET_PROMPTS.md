@@ -519,16 +519,26 @@ Frame 4: only a few fading sparks remain.
 
 ## ИКОНКИ ИНТЕРФЕЙСА
 
-Иконки в HUD — обычные `<img>` в `index.html`. Есть: споры, время.
+Иконки в HUD — обычные `<img>` в `index.html`. Есть: споры, время, череп
+(экран итогов).
 
-**Нет иконки HP** — у шкалы здоровья пустой слот `.icon-slot`, и это
-единственное, чего HUD сейчас не хватает. Подписей у шкал больше нет, так что
-иконка осталась единственным, что отличает здоровье от спор кроме цвета.
+**Иконки HP больше не нужно рисовать.** Шкалы здоровья и спор — это резные
+каменные рамки (`bar_hp_*.png`, `bar_spore_*.png`), они отличаются друг от
+друга и формой наростов, и цветом свечения; иконка рядом с такой шкалой
+только шумит. Слот `.icon-slot` из разметки убран вместе со старыми
+текстурами `bar_frame.png` / `bar_fill_*.png`.
 
-Остальное из старого списка отпало вместе с перекройкой HUD: у полосы опыта
-нет слота под иконку (она тонкая, во всю ширину экрана), счётчик монет ушёл
-на экран итогов и рисуется эмодзи ровно один раз за забег, а волн в игре
-больше нет вообще — иконка `icon_wave.png` не нужна.
+**Эмодзи в интерфейсе не осталось.** Монеты на экране итогов рисует спрайт
+`drop_coin.png`, убитых — `icon_kills.png`, оглушение босса — три искры в
+канвасе. Системный шрифт поверх пиксель-арта выглядит наклейкой и на разных
+платформах рисуется по-разному, поэтому эмодзи здесь под запретом.
+
+**Курсор** (`cursor.png`) — прицел, а не гриб: 32x32, hotspot ровно в центре
+(16,16), центральная точка обязана оставаться пустой, иначе курсор закрывает
+собой ту самую цель, в которую целишься.
+
+У полосы опыта слота под иконку нет — она тонкая, во всю ширину экрана.
+Волн в игре нет, `icon_wave.png` не нужна.
 
 Общий промпт, меняется только `[ПРЕДМЕТ]`:
 
@@ -543,14 +553,38 @@ high contrast, no fine detail.
 Subject: [ПРЕДМЕТ]
 ```
 
-- **HP** (`icon_hp.png`): `an anatomical heart overgrown with fungus, deep blood red with pale mycelium threads creeping across its surface and one small purple mushroom cap sprouting from the top`
-- **Монеты** (`icon_coin.png`, если захочется убрать эмодзи с экрана итогов):
-  `a tarnished pre-collapse coin, worn gold #c4a000, with a mushroom cap stamped in relief on its face and green corrosion in the grooves`
+Пример предмета, если понадобится новая иконка:
+`an anatomical heart overgrown with fungus, deep blood red with pale mycelium
+threads creeping across its surface and one small purple mushroom cap
+sprouting from the top`
 
-Как подключить — в `index.html`, в первую `.vital`:
+### ШКАЛЫ HP И СПОР
 
-```html
-<span class="icon-slot"><img class="icon" src="assets/images/ui/icon_hp.png" alt=""></span>
+Шкала — ДВЕ картинки одного кадра: `bar_*_empty.png` (потухшая) и
+`bar_*_full.png` (горящая). Вторая лежит поверх первой и открывается
+`clip-path`'ом слева направо, поэтому заполнение — это оживающая иллюстрация,
+а не полоска цвета в рамке.
+
+Требования к паре:
+- обе картинки одного размера и с одинаковой рамкой, различаться должна
+  ТОЛЬКО внутренность окна: иначе рамка дёргается при изменении значения;
+- свечение внутри окна — горизонтально однородное, без «начала» и «конца»:
+  срез может остановиться в любой точке;
+- наросты по краям заходят внутрь кадра, поэтому границы окна вынесены в CSS
+  (`--win-a` / `--win-b` у `.orn-bar`, сейчас 4.7% и 97.02%). Нарисуешь новую
+  рамку — пересчитай их, иначе пустая шкала будет выглядеть частично полной.
+
+Промпт:
+
+```
+[БАЗА СТИЛЯ]
+
+A horizontal UI progress bar, 236x44 pixels, on transparent background.
+A carved dark stone frame with mushroom growths and mycelium tendrils
+climbing over both ends. Inside the frame a long rectangular window filled
+edge to edge with glowing purple spore energy, bright motes and swirling
+mycelium patterns, evenly bright along the whole length, no gradient towards
+either end. No text, no numbers, no scale marks.
 ```
 
 ---

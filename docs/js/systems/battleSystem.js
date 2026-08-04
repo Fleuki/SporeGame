@@ -2,7 +2,7 @@ import { CONFIG } from "../config.js";
 import { Enemy } from "../entities/enemy.js";
 import { Boss } from "../entities/boss.js";
 import { SpatialGrid } from "../core/spatialGrid.js";
-import { Effect } from "../entities/effect.js";
+import { Effect, Dissolve } from "../entities/effect.js";
 
 // Вся боевая часть кадра: враги, снаряды, попадания, смерти, лут и опыт.
 // Раньше это был один блок на 50 строк внутри main.update() вперемешку с
@@ -170,6 +170,9 @@ export class BattleSystem {
   killEnemy(e,enemies,player,sporeEffects,camera){
     e.dead=true; this.kills++;
     const t=e.def||{};
+    // Тело растворяется: без этого враг просто исчезал в кадре смерти
+    if(e.anim?.def) this.effects.push(new Dissolve(e.anim,e.x,e.y,t.rim||"#c58cff",
+                                                   e instanceof Boss?34:20));
     this.particles.emit(e.x,e.y,"#39ff14",t.sporeCloudAmount||8);
     this.audio?.sfx("kill");
     if(e instanceof Boss){ this.audio?.sfx("boom"); camera?.shake(CONFIG.feel.shakeBoss,26); }

@@ -179,17 +179,43 @@ for(const id of ["xpBar","levelDisplay","timeDisplay","hpBar","sporeBar"]){
 }
 const hpRow=HUD.hpBar.closest(".vital"), sporeRow=HUD.sporeBar.closest(".vital");
 
+// Заполнение резной шкалы. Ширину менять нельзя — картинка сжималась бы
+// вместе с рамкой; вместо этого «горящая» копия открывается clip-path'ом.
+// Открывается не от края картинки, а от края ОКНА шкалы: наросты по бокам
+// заходят внутрь кадра, и без этой поправки пустая шкала выглядела бы
+// заполненной на несколько процентов, а полная — не доходящей до конца.
+// Границы окна лежат в CSS (--win-a/--win-b), там же, где сама картинка.
+// Границы окна читаются один раз на шкалу: getComputedStyle в каждом кадре —
+// это принудительный пересчёт стилей шестьдесят раз в секунду на ровном месте.
+const BAR_WIN=new WeakMap();
+function barWindow(el){
+  let w=BAR_WIN.get(el);
+  if(!w){
+    const cs=getComputedStyle(el.parentElement);
+    w={ a: parseFloat(cs.getPropertyValue("--win-a"))||0,
+        b: parseFloat(cs.getPropertyValue("--win-b"))||100 };
+    BAR_WIN.set(el,w);
+  }
+  return w;
+}
+
+function fillBar(el,pct){
+  const {a,b}=barWindow(el);
+  const p=Math.max(0,Math.min(1,pct));
+  el.style.clipPath="inset(0 "+(100-(a+(b-a)*p)).toFixed(2)+"% 0 0)";
+}
+
 function syncHud(){
   HUD.xpBar.style.width=(player.xp/player.xpToNext*100)+"%";
   HUD.levelDisplay.textContent=player.level;
   HUD.timeDisplay.textContent=formatTime(runTime);
 
   const hpPct=Math.max(0,player.hp/player.maxHp);
-  HUD.hpBar.style.width=(hpPct*100)+"%";
+  fillBar(HUD.hpBar,hpPct);
   // Полоска пульсирует на последней четверти здоровья и на критическом
   // заражении: движение боковое зрение ловит даже в свалке
   hpRow.classList.toggle("critical",hpPct<=0.25);
-  HUD.sporeBar.style.width=player.sporeLevel+"%";
+  fillBar(HUD.sporeBar,player.sporeLevel/CONFIG.sporeSystem.maxSpore);
   sporeRow.classList.toggle("critical",player.sporeLevel>=CONFIG.sporeSystem.thresholds.danger);
 }
 
@@ -242,6 +268,29 @@ function draw(){
   // лежала вторая, канвасная копия того же текста — обе показывались
   // одновременно и со смещением, буквы наезжали друг на друга.
   if(gameOver) renderer.drawOverlay(0.35);
+}
+
+// ОТЛАДОЧНЫЙ ДОСТУП: только по «?debug» в адресе. Баланс здесь правится
+// числами в CONFIG, а проверить их иначе как забегом нельзя — глазами по
+// скриншоту не посчитать ни живых врагов, ни потолок, ни темп спавна.
+// В обычной игре объект не создаётся вовсе.
+if(new URLSearchParams(location.search).has("debug")){
+  window.GAME={
+    // Геттеры, а не ссылки: init() создаёт нового игрока на каждый рестарт,
+    // и захваченная ссылка после первого же «R» указывала бы в пустоту
+    get player(){ return player; },
+    get enemies(){ return enemies; },
+    get spawn(){ return spawnSystem; },
+    stats:()=>({
+      time:runTime, level:player.level, hp:player.hp, maxHp:player.maxHp,
+      spore:player.sporeLevel, kills:battle.kills, gameOver,
+      alive:enemies.filter(e=>!e.dead).length,
+      aliveLimit:spawnSystem.aliveLimit(),
+      interval:spawnSystem.interval(),
+      onScreen:enemies.filter(e=>!e.dead&&camera.sees(e.x,e.y,0)).length,
+      damage:player.damage, weapons:player.weapons.length
+    })
+  };
 }
 
 const loop=new Loop(update,draw);

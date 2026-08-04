@@ -18,16 +18,24 @@
       <!-- Волн больше нет, и таймер — единственная мера прогресса,
            поэтому он крупный и по центру -->
       <div id="timer"><img class="icon" src="assets/images/ui/icon_time.png" alt=""><span id="timeDisplay">0:00</span></div>
-      <!-- HP и споры: компактная пара без подписей, цвет и иконка говорят
-           всё сами -->
+      <!-- HP и споры. Обе шкалы — резной камень, проросший мицелием: снизу
+           лежит «погасшая» картинка, сверху «горящая», и её открывает
+           clip-path по проценту. Так заполнение — это не полоска цвета, а та
+           же самая иллюстрация, которая просто зажигается слева направо.
+           Шкала здоровья — тот же кадр, перекрашенный в багровый: две шкалы
+           одного рисунка читаются как один прибор, а не как два разных. -->
       <div id="vitals">
-        <div class="vital">
-          <span class="icon-slot"></span>
-          <div class="bar-bg"><div class="bar-fill bar-hp" id="hpBar"></div></div>
+        <div class="vital" id="hpVital">
+          <div class="orn-bar">
+            <img class="orn-empty" src="assets/images/ui/bar_hp_empty.png" alt="">
+            <img class="orn-full" id="hpBar" src="assets/images/ui/bar_hp_full.png" alt="">
+          </div>
         </div>
-        <div class="vital">
-          <span class="icon-slot"><img class="icon" src="assets/images/ui/icon_spore.png" alt=""></span>
-          <div class="bar-bg"><div class="bar-fill bar-spore" id="sporeBar"></div></div>
+        <div class="vital" id="sporeVital">
+          <div class="orn-bar">
+            <img class="orn-empty" src="assets/images/ui/bar_spore_empty.png" alt="">
+            <img class="orn-full" id="sporeBar" src="assets/images/ui/bar_spore_full.png" alt="">
+          </div>
         </div>
       </div>
       <!-- Опыт — тонкая полоса во всю ширину у нижнего края -->
@@ -44,7 +52,11 @@
   <div id="gameOverScreen" class="hidden">
     <h1>СПОРЫ ПОБЕДИЛИ</h1>
     <p>Продержался <span id="finalTime">0:00</span>, уровень <span id="finalLevel">1</span></p>
-    <p>Убито <span id="finalKills">0</span>, собрано <span id="finalCoins">0</span> 🪙</p>
+    <!-- Раньше здесь стоял эмодзи-кругляш «🪙»: системный шрифт поверх
+         пиксель-арта, да ещё и разный на каждой платформе. Теперь это те же
+         спрайты, что валяются на арене. -->
+    <p><img class="icon" src="assets/images/ui/icon_kills.png" alt="Убито"> <span id="finalKills">0</span>
+       &nbsp; <img class="icon" src="assets/images/drops/drop_coin.png" alt="Монет"> <span id="finalCoins">0</span></p>
     <p class="hint">R — рестарт</p>
   </div>
   <script type="module" src="js/main.js"></script>
