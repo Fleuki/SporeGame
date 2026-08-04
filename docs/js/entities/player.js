@@ -141,11 +141,15 @@ export class Player extends Entity {
       if(p) shots.push(p);
     }
     if(shots.length){
-      // Анимация броска общая: играет, когда выстрелил хоть один ствол
       this.attackCooldown=this.attackRate;
-      this.isAttacking=true;
-      this.attackAnimFrame=0;
-      this.attackAnimTimer=0;
+      // Анимация броска общая: играет, когда выстрелил хоть один ствол.
+      // При выключенном attackAnim в неё вообще не входим — иначе цикл ходьбы
+      // всё равно прерывался бы, просто уже незаметно для глаза.
+      if(CONFIG.player.attackAnim){
+        this.isAttacking=true;
+        this.attackAnimFrame=0;
+        this.attackAnimTimer=0;
+      }
     }
     return shots;
   }
@@ -182,7 +186,7 @@ export class Player extends Entity {
 
   draw(renderer){
     // Ключи загрузчика (CONFIG.assets.images), а не пути к файлам.
-    const atkImg=renderer.loader?.getImage("playerAttack");
+    const atkImg=CONFIG.player.attackAnim?renderer.loader?.getImage("playerAttack"):null;
     const bodyImg=renderer.loader?.getImage("player");
     // Спрайт броска нарисован лицом вправо: зеркалим его при стрельбе влево.
     // Вращать спрайт персонажа нельзя — направление уже задано рядом листа.

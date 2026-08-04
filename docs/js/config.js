@@ -31,11 +31,23 @@ export const CONFIG = {
     spriteFrameW: 256, spriteFrameH: 256,
     spriteCols: 4, spriteRows: 4,
     spriteDisplaySize: 64,
-    // === НОВОЕ: анимация атаки ===
-    // Лист 2064x512, 4 кадра в ряд => кадр 516x512.
-    // attackCols * attackAnimSpeed должно быть МЕНЬШЕ attackRate,
-    // иначе анимация не успевает доиграть до следующего броска и игрок
-    // навсегда застревает в состоянии атаки (Player.update это ещё и подстрахует).
+    // === АНИМАЦИЯ БРОСКА — ВЫКЛЮЧЕНА ===
+    // Поставь true, чтобы вернуть: лист никуда не делся, отключён только показ.
+    //
+    // Почему выключена. Лист броска — ОДИН ряд, зеркалимый по горизонтали, а
+    // лист ходьбы — четыре ряда на четыре направления. Пока играет бросок,
+    // направление взгляда теряется, и вид со спины с видом в профиль не
+    // показываются вообще. При этом стрельба автоматическая и идёт три раза в
+    // секунду: между бросками остаётся пять кадров, то есть персонаж почти
+    // всегда стоит в позе броска, а шестнадцать кадров ходьбы простаивают.
+    //
+    // Плюс отсюда же росло ограничение attackCols * attackAnimSpeed < attackRate,
+    // при нарушении которого игрок навсегда застревал в позе броска.
+    //
+    // Выстрел теперь читается не позой персонажа, а вспышкой у ствола и
+    // свечением самого снаряда — так это сделано в играх жанра, где герой
+    // обычно вообще статичный.
+    attackAnim: false,
     attackSprite: "assets/images/player_attack/throw.png",
     attackFrameW: 516, attackFrameH: 512,
     attackCols: 4, attackRows: 1,
@@ -64,20 +76,23 @@ export const CONFIG = {
       // сливалась в непрерывную струю, отдельного броска не было слышно и не
       // было видно. Урон поднят с 1.0 до 1.35, чтобы это был другой ритм, а не
       // просто нерф на треть — особенно теперь, когда враги растут по волнам.
-      sprite: "projectile", frame: 256, display: 32,
+      // glow — цвет свечения и шлейфа снаряда. На 32 пикселях детали склянки
+      // всё равно не разобрать, а вот движущееся яркое пятно видно всегда:
+      // именно оно, а не рисунок склянки, показывает, что ты стреляешь.
+      sprite: "projectile", frame: 256, display: 32, glow: "#00d4aa",
       interval: 21, damage: 1.35, speed: 7, radius: 5, range: 0,
       burst: { key: "fx_burst_purple", frame: 128, cols: 4, display: 64, speed: 3 }
     },
     toxic: {
       name: "Токсичная склянка", desc: "Лужа спор: 6 ур/сек, 3 сек",
-      sprite: "vial_toxic", frame: 128, display: 30,
+      sprite: "vial_toxic", frame: 128, display: 30, glow: "#c4a000",
       interval: 46, damage: 0.6, speed: 4.5, radius: 6, range: 320,
       burst: { key: "fx_burst_toxic", frame: 128, cols: 4, display: 96, speed: 4 },
       area: { radius: 78, damage: 0.4, dot: { dps: 6, time: 180 } }
     },
     incendiary: {
       name: "Зажигательная склянка", desc: "Взрыв по области вблизи",
-      sprite: "vial_fire", frame: 128, display: 30,
+      sprite: "vial_fire", frame: 128, display: 30, glow: "#ff7722",
       interval: 78, damage: 1.2, speed: 5.5, radius: 6, range: 200,
       burst: { key: "fx_burst_big", frame: 256, cols: 4, display: 170, speed: 4 },
       area: { radius: 115, damage: 1.7 }

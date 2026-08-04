@@ -77,7 +77,12 @@ function update(dt){
   camera.follow(player);
 
   const shots=player.tryShoot(enemies);
-  for(const shot of shots) projectiles.push(shot);
+  for(const shot of shots){
+    projectiles.push(shot);
+    // Вспышка в точке вылета — теперь это единственный признак выстрела на
+    // самом персонаже, анимация броска отключена (CONFIG.player.attackAnim)
+    particles.emitMuzzle(shot.x,shot.y,shot.angle,shot.def.glow||"#00d4aa");
+  }
   if(shots.length) audio.sfx("shoot");
 
   const waveEvent=waveSystem.update(enemies,player,sporeEffects);
