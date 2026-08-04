@@ -69,7 +69,8 @@ function update(dt){
   if(loot.update(player,camera)) openUpgradeMenu();
 
   particles.update();
-  map.update();                    // кадры анимированных декораций
+  map.update(camera);              // кадры анимации и список видимых декораций
+  map.applyHazards(dt,player,enemies,particles);   // кислотные лужи жгут всех
   syncHud();
 
   if(player.hp<=0) endGame();
@@ -108,6 +109,7 @@ function draw(){
   renderer.begin();
   map.drawGround(renderer,waveSystem.wave);   // земля текущего биома
   map.drawDecor(renderer);                    // пни и телеги под сущностями
+  map.drawEdge(renderer);                     // мрак на границе арены
   loot.draw(renderer);
   for(const e of enemies) e.draw(renderer);
   for(const p of projectiles) p.draw(renderer);

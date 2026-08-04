@@ -1,9 +1,10 @@
 import { CONFIG } from "../config.js";
+import { WORLD } from "../core/camera.js";
 
-// КАРТА: земля и декорации бесконечного мира.
+// КАРТА: земля и декорации арены.
 //
-// Мир не ограничен, поэтому ни тайлы, ни декорации нельзя разложить заранее:
-// оба слоя строятся каждый кадр по видимому куску мира.
+// Арена большая (см. CONFIG.world), поэтому ни тайлы, ни декорации не
+// раскладываются заранее: оба слоя строятся каждый кадр по видимому куску.
 //   * земля — паттерн из бесшовной текстуры, он сам прокручивается вместе
 //     с камерой, потому что рисуется в мировых координатах;
 //   * декорации — детерминированный «шум» по индексам клетки (тот же приём,
@@ -12,9 +13,41 @@ import { CONFIG } from "../config.js";
 //
 // Биом меняется по номеру волны и перекрашивает всю арену целиком.
 export class MapSystem {
-  constructor(){ this.patternKey=null; this.pattern=null; this.tick=0; }
+  constructor(){
+    this.patternKey=null; this.pattern=null; this.tick=0;
+    this.visible=[];   // декорации текущего кадра, считаются один раз
+    // Мешок типов по весам: лужи должны попадаться заметно реже пней
+    this.bag=[];
+    for(const [key,def] of Object.entries(CONFIG.map.props)){
+      for(let i=0;i<(def.weight||1);i++) this.bag.push(key);
+    }
+  }
 
-  update(){ this.tick++; }
+  // Список видимых декораций пересчитывается раз в кадр: его читают и
+  // отрисовка, и проверка урона от луж.
+  update(camera){
+    this.tick++;
+    this.visible=camera?this.visibleProps(camera):[];
+  }
+
+  // Урон от опасных декораций (кислотная лужа). Достаётся всем, кто внутри:
+  // толпу можно заманить в лужу, но и самому туда лучше не заходить.
+  applyHazards(dt,player,enemies,particles){
+    for(const d of this.visible){
+      const h=d.def.hazard;
+      if(!h) continue;
+      const r=d.w*h.radius;
+      if(Math.hypot(player.x-d.x,player.y-d.y)<r+player.radius*0.5){
+        player.hp-=h.dps*dt;
+        player.sporeLevel=Math.min(CONFIG.sporeSystem.maxSpore,player.sporeLevel+h.spore*dt);
+        if(this.tick%12===0) particles?.emit(player.x,player.y,"#c8ff2a",3);
+      }
+      for(const e of enemies){
+        if(e.dead) continue;
+        if(Math.hypot(e.x-d.x,e.y-d.y)<r+e.radius*0.5) e.hp-=h.enemyDps*dt;
+      }
+    }
+  }
 
   biome(wave){
     const list=CONFIG.map.biomes;
@@ -37,32 +70,67 @@ export class MapSystem {
       this.patternKey=biome.tile;
     }
     if(!this.pattern) return;
+    // Земля есть только внутри арены — за границей пустота
+    const x0=Math.max(c.x-1,WORLD.minX), y0=Math.max(c.y-1,WORLD.minY);
+    const x1=Math.min(c.x+c.w+1,WORLD.maxX), y1=Math.min(c.y+c.h+1,WORLD.maxY);
+    if(x1<=x0||y1<=y0) return;
+    ctx.fillStyle=CONFIG.world.voidColor;
+    ctx.fillRect(c.x-1,c.y-1,c.w+2,c.h+2);
     // Масштабируем холст, чтобы тайл лёг нужного размера; координаты делим
     // на тот же множитель — на экране позиция не съезжает.
     const s=CONFIG.map.tileSize/img.width;
     ctx.save();
     ctx.scale(s,s);
     ctx.fillStyle=this.pattern;
-    // запас в пиксель по краям: камера сдвигается на округлённые значения
-    ctx.fillRect((c.x-1)/s,(c.y-1)/s,(c.w+2)/s,(c.h+2)/s);
+    ctx.fillRect(x0/s,y0/s,(x1-x0)/s,(y1-y0)/s);
     ctx.restore();
     ctx.fillStyle=biome.tint;
-    ctx.fillRect(c.x-1,c.y-1,c.w+2,c.h+2);
+    ctx.fillRect(x0,y0,x1-x0,y1-y0);
+  }
+
+  // Граница арены: не стена, а сгущающийся мрак. Рисуется поверх земли и
+  // декораций, но под сущностями — врага у самого края видно должно быть.
+  drawEdge(renderer){
+    const ctx=renderer.ctx, c=renderer.camera;
+    if(!c) return;
+    const f=CONFIG.world.edgeFog;
+    if(f<=0) return;
+    const edges=[
+      [WORLD.minX,WORLD.minX+f,0], [WORLD.maxX,WORLD.maxX-f,0],
+      [WORLD.minY,WORLD.minY+f,1], [WORLD.maxY,WORLD.maxY-f,1]
+    ];
+    for(const [at,inner,axis] of edges){
+      const g=axis===0
+        ? ctx.createLinearGradient(at,0,inner,0)
+        : ctx.createLinearGradient(0,at,0,inner);
+      g.addColorStop(0,"rgba(5,8,10,0.95)");
+      g.addColorStop(1,"rgba(5,8,10,0)");
+      ctx.fillStyle=g;
+      if(axis===0){
+        const x=Math.min(at,inner);
+        ctx.fillRect(x,c.y-1,f,c.h+2);
+      }else{
+        const y=Math.min(at,inner);
+        ctx.fillRect(c.x-1,y,c.w+2,f);
+      }
+    }
   }
 
   // Декорации видимых клеток, отсортированные по Y: дальние рисуются первыми
   visibleProps(camera){
-    const M=CONFIG.map, types=Object.keys(M.props), cell=M.decorCell, out=[];
+    const M=CONFIG.map, cell=M.decorCell, out=[];
     const gx0=Math.floor((camera.x-cell)/cell), gx1=Math.floor((camera.x+camera.w)/cell);
     const gy0=Math.floor((camera.y-cell)/cell), gy1=Math.floor((camera.y+camera.h)/cell);
     for(let gx=gx0;gx<=gx1;gx++){
       for(let gy=gy0;gy<=gy1;gy++){
         const h=(gx*73856093^gy*19349663)>>>0;
         if((h%1000)/1000>M.decorChance) continue;
-        const def=M.props[types[(h>>>9)%types.length]];
+        const def=M.props[this.bag[(h>>>9)%this.bag.length]];
         const x=gx*cell+(h>>>3)%cell, y=gy*cell+(h>>>13)%cell;
         // вокруг точки старта декораций нет — иначе игрок появляется в телеге
         if(Math.hypot(x,y)<M.decorClearRadius) continue;
+        // и за границей арены их тоже нет
+        if(x<WORLD.minX||x>WORLD.maxX||y<WORLD.minY||y>WORLD.maxY) continue;
         out.push({ def, x, y,
           w: def.width*(0.85+((h>>>23)%100)/300),
           flip: ((h>>>17)&1)===1,
@@ -75,8 +143,7 @@ export class MapSystem {
   }
 
   drawDecor(renderer){
-    if(!renderer.camera) return;
-    for(const d of this.visibleProps(renderer.camera)){
+    for(const d of this.visible){
       const def=d.def;
       const img=renderer.loader?.getImage(def.image);
       if(!img||!img.width) continue;
