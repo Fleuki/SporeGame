@@ -1,6 +1,7 @@
 import { angleTo } from "../utils/math.js";
 import { CONFIG } from "../config.js";
 import { Entity } from "./entity.js";
+import { WORLD } from "../core/camera.js";
 import { Weapon } from "./weapon.js";
 
 function angleToRow(angle){
@@ -58,9 +59,11 @@ export class Player extends Entity {
       }
     }
 
-    // Мир больше не ограничен размером холста — clamp по краям убран,
-    // игрок свободно уходит в любую сторону, а камера следует за ним.
+    // Мир не привязан к размеру холста, но и не бесконечен: игрок ходит
+    // свободно внутри арены, а на её границе упирается.
     this.x+=dx*this.speed; this.y+=dy*this.speed;
+    this.x=Math.min(Math.max(this.x,WORLD.minX+this.radius),WORLD.maxX-this.radius);
+    this.y=Math.min(Math.max(this.y,WORLD.minY+this.radius),WORLD.maxY-this.radius);
 
     const autoAim=input.getAutoAimAngle(this,enemies);
     if(autoAim!==null) this.angle=autoAim;

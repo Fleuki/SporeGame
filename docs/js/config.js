@@ -140,6 +140,101 @@ export const CONFIG = {
     // Насколько за краем видимости появляются враги и боссы
     spawnMargin: 90, bossSpawnMargin: 160
   },
+  // МИР. Раньше он был бесконечным, и это ломало сложность: игрок быстрее
+  // почти всех врагов, поэтому оптимальной тактикой было бежать в одну
+  // сторону и стрелять назад — догнать его не мог никто. Плюс координаты
+  // росли без предела, а декорации привязаны к хешу клетки, который на
+  // больших индексах переполняется.
+  //
+  // Теперь арена конечна: 4000x3000 — это ~4.5 x 4.3 экрана. Хватает,
+  // чтобы разрывать дистанцию, но не хватает, чтобы убегать вечно.
+  // Центр мира — точка (0,0), там же появляется игрок.
+  world: {
+    width: 4000, height: 3000,
+    edgeFog: 260,        // ширина полосы тумана вдоль границы
+    voidColor: "#05080a"  // за границей мира земли нет
+  },
+  // КАРТА. Земля — бесшовный тайл, декорации раскладываются процедурно по
+  // клеткам мира (см. systems/mapSystem.js).
+  map: {
+    tileSize: 320,          // размер тайла земли в мировых пикселях
+    wavesPerBiome: 3,       // через сколько волн меняется биом
+    vignette: 0.45,         // затемнение по краям экрана
+    // Биомы идут по кругу: мох → грязь → костяная гниль.
+    // tint приглушает текстуру, чтобы враги и снаряды читались поверх неё.
+    biomes: [
+      { key: "moss",   tile: "groundMoss",   tint: "rgba(13,31,21,0.30)" },
+      { key: "dirt",   tile: "groundDirt",   tint: "rgba(24,14,8,0.28)" },
+      { key: "biolum", tile: "groundBiolum", tint: "rgba(6,24,26,0.34)" },
+      { key: "bone",   tile: "groundBone",   tint: "rgba(14,10,28,0.62)" }
+    ],
+    // Декорации: чистый фон, коллизий у них нет.
+    // width — ширина на экране, высота считается по пропорциям картинки.
+    // flat — объект лежит на земле: без тени и с центром в точке, а не низом.
+    // frames — анимированный лист (кадры в один ряд).
+    props: {
+      spore_tree: {
+        image: "propSporeTree", width: 118, weight: 3,
+        glow: "rgba(150,110,255,0.5)", glowBlur: 26
+      },
+      dead_tree: {
+        image: "propDeadTree", width: 150, weight: 3,
+        glow: "rgba(190,90,220,0.4)", glowBlur: 30
+      },
+      mushroom_cart: {
+        image: "propMushroomCart", width: 168, weight: 2
+      },
+      mossy_rock: {
+        image: "propMossyRock", width: 96, weight: 4
+      },
+      glow_shrooms: {
+        image: "propGlowShrooms", width: 88, weight: 3,
+        glow: "rgba(230,90,255,0.55)", glowBlur: 22
+      },
+      acid_pool: {
+        // weight ниже остальных: лужа не украшение, а опасность —
+        // на каждом шагу она превращает арену в минное поле
+        image: "propAcidPool", width: 120, weight: 2,
+        flat: true, frames: 4, animSpeed: 11,
+        // Лужа жжёт всех, кто в неё зашёл, — и игрока, и врагов.
+        // hazardRadius — доля от width: у спрайта есть каменный бортик,
+        // поэтому урон идёт только по зелёной середине.
+        hazard: { radius: 0.36, dps: 9, spore: 4, enemyDps: 14 }
+      }
+    },
+    decorCell: 300,         // сторона клетки мира: не больше одной декорации на клетку
+    decorChance: 0.5,       // доля клеток с декорацией
+    decorClearRadius: 150,  // радиус вокруг точки старта без декораций
+  },
+  // ЛУТ. Опыт больше не начисляется в момент смерти врага — он выпадает
+  // шариками, за которыми надо идти. Значения кристаллов растут по кадрам
+  // листа: мелкий → крупный.
+  // Вспышка при получении уровня: 4 кадра — вихрь, пламя, надпись, искры
+  levelUp: { key: "fx_levelup", frame: 192, cols: 4, display: 220, speed: 7 },
+  loot: {
+    magnetRadius: 70,     // с какого расстояния предмет летит к игроку
+    magnetForce: 0.55,
+    friction: 0.9,        // затухание разлёта из точки смерти
+    defaultLife: 900,     // 15 секунд при 60 fps
+    despawnMargin: 500,   // за этим краем от камеры предмет выбрасывается
+    crystalTiers: [10, 25, 60, 150],  // опыт по кадрам drop_crystal
+    maxDrops: 12,         // страховка от сотни предметов с жирного босса
+    antidoteChance: 0.08,
+    potionChance: 0.05,
+    coinChance: 0.12,
+    types: {
+      xp_orb:   { image:"dropXpOrb",   size:26, radius:11, xp:true, value:1,
+                  frames:5, animSpeed:6, particle:"#ffd24a" },
+      crystal:  { image:"dropCrystal", size:40, radius:14, xp:true, value:10,
+                  frames:4, particle:"#c08cff" },
+      antidote: { image:"dropAntidote", size:26, radius:12, spore:25,
+                  particle:"#00d4aa" },
+      potion:   { image:"dropPotion",  size:28, radius:12, heal:25,
+                  particle:"#ff4455" },
+      coin:     { image:"dropCoin",    size:24, radius:11, coin:1,
+                  particle:"#ffcc33" }
+    }
+  },
   assets: {
     images: {
       player: "assets/images/player/alchemist_purple.png",
@@ -154,8 +249,24 @@ export const CONFIG = {
       enemy_mushroom_wolf: "assets/images/enemies/mushroom_wolf.png",
       enemy_spore_bat: "assets/images/enemies/spore_bat.png",
       boss_mother_cap: "assets/images/bosses/mother_cap.png",
-      boss_mycelium_heart: "assets/images/bosses/mycelium_heart.png"
+      boss_mycelium_heart: "assets/images/bosses/mycelium_heart.png",
       // fruit_body и mycelium_tentacle пока без спрайтов — рисуются примитивами
+      groundMoss: "assets/images/map/ground_moss.png",
+      groundDirt: "assets/images/map/ground_dirt.png",
+      groundBone: "assets/images/map/ground_bone.png",
+      groundBiolum: "assets/images/map/ground_biolum.png",
+      propSporeTree: "assets/images/props/prop_spore_tree.png",
+      propDeadTree: "assets/images/props/prop_dead_tree.png",
+      propMushroomCart: "assets/images/props/prop_mushroom_cart.png",
+      propMossyRock: "assets/images/props/prop_mossy_rock.png",
+      propGlowShrooms: "assets/images/props/prop_glow_shrooms.png",
+      propAcidPool: "assets/images/effects/acid_pool.png",
+      dropXpOrb: "assets/images/drops/drop_xp_orb.png",
+      dropCrystal: "assets/images/drops/drop_crystal.png",
+      dropAntidote: "assets/images/drops/drop_antidote.png",
+      dropPotion: "assets/images/drops/drop_potion.png",
+      dropCoin: "assets/images/drops/drop_coin.png",
+      fx_levelup: "assets/images/effects/levelup.png"
     },
     sounds: {}
   }

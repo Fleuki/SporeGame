@@ -16,7 +16,8 @@ canvas {
   background: #1a3d2e;
   border: 3px solid #6b2d5c;
   box-shadow: 0 0 30px rgba(107,45,92,0.3);
-  cursor: crosshair;
+  /* Курсор-гриб вместо системного: hotspot в центре шляпки */
+  cursor: url("../assets/images/ui/cursor.png") 27 32, crosshair;
   max-width: 100vw;
   max-height: 100vh;
   width: auto;
@@ -31,18 +32,52 @@ canvas {
   z-index: 10;
   text-shadow: 0 0 8px rgba(0,212,170,0.5);
 }
-.bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
-.label { width: 70px; }
+.bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+.label { width: 52px; }
+/* Иконка есть не у каждой шкалы, но место под неё держим всегда —
+   иначе подписи разъезжаются по строкам */
+.icon-slot { width: 20px; display: inline-flex; justify-content: center; }
+
+/* ШКАЛЫ.
+   Рамка — одна картинка на все три шкалы, растянутая через border-image:
+   углы остаются целыми, тянется только середина, поэтому шкала любой
+   длины выглядит одинаково.
+   Заливка — отдельная картинка на 100%, и обрезается шириной элемента.
+   background-size задан в пикселях полной шкалы, а не в процентах: иначе
+   при убывании HP рисунок сжимался бы, вместо того чтобы убывать. */
 .bar-bg {
-  width: 120px; height: 14px;
-  background: #1a1a1a;
-  border: 1px solid #333;
-  border-radius: 2px;
-  overflow: hidden;
+  --bar-w: 190px;
+  /* content-box, а не общий border-box: ширина заливки должна совпадать с
+     внутренним окном рамки, иначе картинка заливки обрезается ещё на 100% */
+  box-sizing: content-box;
+  width: var(--bar-w); height: 16px;
+  border-style: solid;
+  border-width: 13px 16px 7px 16px;
+  /* без ключевого слова fill: середину рамки рисовать не надо,
+     там пустая часть шкалы — её красит фон элемента */
+  border-image: url("../assets/images/ui/bar_frame.png") 25 31 14 32 / 13px 16px 7px 16px stretch;
+  background: rgba(6,9,11,0.9);
+  image-rendering: pixelated;
 }
-.bar-hp { height: 100%; background: linear-gradient(90deg,#ff3333,#ff6666); width: 100%; transition: width 0.2s; }
-.bar-spore { height: 100%; background: linear-gradient(90deg,#6b2d5c,#c4a000); width: 0%; transition: width 0.2s; }
-.stats { margin-top: 6px; color: #8a8a8a; font-size: 13px; }
+.bar-fill {
+  height: 100%;
+  background-repeat: no-repeat;
+  background-size: var(--bar-w) 100%;
+  image-rendering: pixelated;
+  transition: width 0.2s;
+}
+.bar-hp    { background-image: url("../assets/images/ui/bar_fill_hp.png");    width: 100%; }
+.bar-spore { background-image: url("../assets/images/ui/bar_fill_spore.png"); width: 0%; }
+.bar-xp    { background-image: url("../assets/images/ui/bar_fill_xp.png");    width: 0%; }
+.stats { margin-top: 6px; color: #8a8a8a; font-size: 13px; display: flex; align-items: center; gap: 10px; }
+.stat { display: flex; align-items: center; gap: 4px; }
+/* Иконки — пиксель-арт, сглаживание при уменьшении его мылит */
+.icon {
+  width: 18px; height: 18px;
+  image-rendering: pixelated;
+  vertical-align: middle;
+}
+.bar-row .icon { width: 20px; height: 20px; }
 #upgradeMenu {
   position: absolute; top: 50%; left: 50%;
   transform: translate(-50%,-50%);

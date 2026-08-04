@@ -8,12 +8,14 @@ import { Effect } from "../entities/effect.js";
 // Раньше это был один блок на 50 строк внутри main.update() вперемешку с
 // обновлением интерфейса.
 export class BattleSystem {
-  constructor(particles,sporeSystem){
+  constructor(particles,sporeSystem,loot){
     this.particles=particles;
     this.sporeSystem=sporeSystem;
+    this.loot=loot;
     this.grid=new SpatialGrid(96);
     this._near=[];        // переиспользуемый буфер, чтобы не мусорить в GC
     this.effects=[];      // одноразовые анимации взрывов
+    this.kills=0;         // счётчик убитых, его показывает интерфейс
   }
 
   updateEffects(){
@@ -24,6 +26,9 @@ export class BattleSystem {
   }
 
   drawEffects(renderer){ for(const e of this.effects) e.draw(renderer); }
+
+  // Разовая анимация в точке — вспышка уровня, взрыв склянки
+  addEffect(x,y,def){ this.effects.push(new Effect(x,y,def)); }
 
   // Попадание: вспышка, урон по области и яд, если оружие их даёт
   impact(p,enemies){
@@ -37,8 +42,8 @@ export class BattleSystem {
     }
   }
 
-  // Возвращает { leveledUp } — открытие меню прокачки остаётся за main,
-  // потому что оно ставит игру на паузу.
+  // Уровень теперь поднимается не здесь: опыт выпадает предметами, и
+  // LootSystem сообщает о левел-апе в момент подбора.
   update(dt,{player,enemies,projectiles,sporeEffects,camera}){
     const ctx={player,enemies,camera,particles:this.particles,sporeLevel:player.sporeLevel,events:[]};
 
@@ -50,14 +55,12 @@ export class BattleSystem {
     this.updateProjectiles(projectiles,enemies,player,camera);
     this.updateEffects();
 
-    let leveledUp=false;
     for(let i=enemies.length-1;i>=0;i--){
       const e=enemies[i];
       if(e.hp>0) continue;
-      if(this.killEnemy(e,enemies,player,sporeEffects)) leveledUp=true;
+      this.killEnemy(e,enemies,player,sporeEffects);
       enemies.splice(i,1);
     }
-    return {leveledUp};
   }
 
   handleBossEvent(ev,enemies,player,camera){
@@ -126,9 +129,8 @@ export class BattleSystem {
     }
   }
 
-  // Возвращает true, если игрок поднял уровень
   killEnemy(e,enemies,player,sporeEffects){
-    e.dead=true;
+    e.dead=true; this.kills++;
     const t=e.def||{};
     this.particles.emit(e.x,e.y,"#39ff14",t.sporeCloudAmount||8);
 
@@ -148,9 +150,6 @@ export class BattleSystem {
     let xp=e.xpReward;
     if(sporeEffects.lootMult) xp*=sporeEffects.lootMult;
     if(player.xpMult) xp*=player.xpMult;
-    const leveledUp=player.addXp(xp);
-
-    if(Math.random()<0.08||(e instanceof Boss)) this.sporeSystem.spawnAntidote(e.x,e.y);
-    return leveledUp;
+    this.loot.dropFor(e,xp,e instanceof Boss);
   }
 }

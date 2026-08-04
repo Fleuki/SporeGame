@@ -49,6 +49,62 @@ export class Renderer {
     }
   }
 
+  // Затемнение по краям экрана: рисуется в экранном слое, после end()
+  drawVignette(strength=0.5){
+    if(strength<=0) return;
+    const w=this.canvas.width, h=this.canvas.height;
+    const grad=this.ctx.createRadialGradient(w/2,h/2,Math.min(w,h)*0.35,w/2,h/2,Math.max(w,h)*0.72);
+    grad.addColorStop(0,"rgba(0,0,0,0)"); grad.addColorStop(1,`rgba(0,0,0,${strength})`);
+    this.ctx.fillStyle=grad; this.ctx.fillRect(0,0,w,h);
+  }
+
+  // --- декорации карты -----------------------------------------------
+  // shadowBlur считается заново на каждый вызов и заметно проседает по FPS,
+  // поэтому светящийся вариант спрайта один раз готовится в offscreen-канвасе.
+  glowSprite(img,key,color,blur){
+    if(!this._glowCache) this._glowCache=new Map();
+    let g=this._glowCache.get(key);
+    if(!g){
+      const pad=Math.ceil(blur*1.5);
+      const cv=document.createElement("canvas");
+      cv.width=img.width+pad*2; cv.height=img.height+pad*2;
+      const gc=cv.getContext("2d");
+      gc.shadowBlur=blur; gc.shadowColor=color;
+      gc.drawImage(img,pad,pad);
+      gc.drawImage(img,pad,pad); // второй проход — свечение плотнее
+      g={canvas:cv,pad}; this._glowCache.set(key,g);
+    }
+    return g;
+  }
+
+  // Декорация стоит на земле: (x,y) — точка опоры, низ по центру спрайта.
+  // opts.flat — объект лежит на земле (лужа): рисуется по центру и без тени.
+  // opts.frames/opts.frame — кадр из листа, кадры идут в один ряд.
+  drawProp(key,x,y,w,h,opts={}){
+    const img=this.loader?.getImage(key);
+    if(!img||!img.width) return;
+    const ctx=this.ctx;
+    ctx.save();
+    if(!opts.flat){
+      ctx.beginPath();
+      ctx.ellipse(x,y-h*0.03,w*0.36,h*0.09,0,0,Math.PI*2);
+      ctx.fillStyle="rgba(0,0,0,0.35)"; ctx.fill();
+    }
+    ctx.translate(x,opts.flat?y-h/2:y-h);
+    if(opts.flip) ctx.scale(-1,1);
+    if(opts.frames){
+      const fw=img.width/opts.frames;
+      ctx.drawImage(img,(opts.frame||0)*fw,0,fw,img.height,-w/2,0,w,h);
+    }else if(opts.glow){
+      const g=this.glowSprite(img,key,opts.glow,opts.glowBlur||20);
+      const px=g.pad*(w/img.width), py=g.pad*(h/img.height);
+      ctx.drawImage(g.canvas,-w/2-px,-py,w+px*2,h+py*2);
+    }else{
+      ctx.drawImage(img,-w/2,0,w,h);
+    }
+    ctx.restore();
+  }
+
   // --- примитивы -----------------------------------------------------
   drawGradientCircle(x,y,r,colors){
     if(!colors||colors.length<2) colors=["#fff","#000"];

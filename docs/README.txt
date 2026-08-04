@@ -23,17 +23,50 @@
    assets/images/enemies/spore_bearer.png
    В config.js enemies.types.spore_bearer.sprite = "..."
 
-3. ФОН:
-   assets/images/backgrounds/dungeon.png
-   В config.js assets.images.bg = "..."
-   В main.js замени drawGrid() на отрисовку фона.
+3. ЗЕМЛЯ (ТАЙЛ КАРТЫ):
+   Положи БЕСШОВНЫЙ квадратный PNG → assets/images/map/ground_swamp.png
+   В config.js assets.images.groundSwamp = "assets/images/map/ground_swamp.png"
+   Затем добавь биом в config.js map.biomes:
+     { key: "swamp", tile: "groundSwamp", tint: "rgba(10,25,20,0.35)" }
+   Биомы сменяются по кругу каждые map.wavesPerBiome волн.
+   tint — полупрозрачная заливка поверх текстуры: без неё яркая земля
+   забивает врагов и снаряды.
 
-4. МУЗЫКА:
+4. ДЕКОРАЦИИ КАРТЫ (пни, телеги, камни):
+   PNG С ПРОЗРАЧНЫМ ФОНОМ → assets/images/props/prop_rock.png
+   В config.js assets.images.propRock = "..."
+   И в config.js map.props:
+     rock: { image: "propRock", width: 90 }
+   width — ширина на экране, высота считается по пропорциям картинки.
+   Необязательные поля:
+     glow/glowBlur — свечение вокруг спрайта (как у грибного пня);
+     flat: true    — объект лежит на земле (лужа): без тени, центром в точке;
+     frames: 4 + animSpeed: 11 — анимация, кадры одним рядом в PNG.
+   Декорации раскладываются сами по клеткам мира (map.decorCell,
+   map.decorChance), коллизий у них нет. Точка опоры спрайта — низ по
+   центру, поэтому рисуй объект «стоящим на земле».
+
+5. ИНТЕРФЕЙС И КУРСОР:
+   Иконки HUD — обычные <img class="icon"> в index.html,
+   лежат в assets/images/ui/. Масштаб задаётся в css/style.css
+   (.icon), там же image-rendering: pixelated — без него
+   пиксель-арт мылится при уменьшении.
+   Курсор — тоже CSS: cursor: url(...) X Y, где X Y — точка
+   прицела внутри картинки.
+
+6. АНИМАЦИЯ-ВСПЫШКА (левел-ап, взрыв):
+   PNG с кадрами В ОДИН РЯД → assets/images/effects/levelup.png
+   В config.js:
+     levelUp: { key:"fx_levelup", frame:192, cols:4, display:220, speed:7 }
+   frame — сторона кадра в файле, display — размер на экране,
+   speed — сколько кадров игры держится один кадр анимации.
+
+7. МУЗЫКА:
    assets/sounds/music/battle.ogg
    В config.js assets.sounds.bgm = "..."
    В main.js раскомментируй audio.playMusic("bgm")
 
-5. ЗВУКИ:
+8. ЗВУКИ:
    Добавь пути в config.js assets.sounds
    Раскомментируй audio.playSfx() в main.js
 
