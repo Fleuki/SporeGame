@@ -105,6 +105,52 @@ export class Renderer {
     ctx.restore();
   }
 
+  // Контактная тень под существом. Земля здесь очень «шумная» — мох, грибы,
+  // жилы мицелия, — и тёмные силуэты врагов на ней просто терялись. Тень
+  // отделяет фигуру от фона и заодно показывает, где существо стоит.
+  drawShadow(x,y,rx,ry,alpha=0.4){
+    const ctx=this.ctx;
+    ctx.save();
+    ctx.beginPath(); ctx.ellipse(x,y,rx,ry,0,0,Math.PI*2);
+    ctx.fillStyle=`rgba(0,0,0,${alpha})`;
+    ctx.filter="blur(2px)";
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // --- вспышка попадания ----------------------------------------------
+  // Белый (или красный) силуэт спрайта, который кладётся поверх кадра на
+  // несколько кадров после урона. Перекрашивать спрайт фильтром на каждом
+  // кадре дорого, поэтому силуэт всего листа готовится один раз и кэшируется.
+  silhouette(img,key,color){
+    if(!this._tintCache) this._tintCache=new Map();
+    const id=key+"|"+color;
+    let cv=this._tintCache.get(id);
+    if(!cv){
+      cv=document.createElement("canvas");
+      cv.width=img.width; cv.height=img.height;
+      const c=cv.getContext("2d");
+      c.drawImage(img,0,0);
+      c.globalCompositeOperation="source-in";   // красим только непрозрачное
+      c.fillStyle=color; c.fillRect(0,0,cv.width,cv.height);
+      this._tintCache.set(id,cv);
+    }
+    return cv;
+  }
+
+  // Тот же кадр листа, что и drawSpriteSheet, но одним цветом и с прозрачностью
+  drawFlash(img,key,x,y,frameW,frameH,col,row,displaySize,flip=false,alpha=0.75,color="#ffffff"){
+    if(!img||!img.width||alpha<=0) return;
+    const sil=this.silhouette(img,key,color);
+    this.ctx.save();
+    this.ctx.globalAlpha=Math.min(1,alpha);
+    this.ctx.translate(x,y);
+    if(flip) this.ctx.scale(-1,1);
+    this.ctx.drawImage(sil,col*frameW,row*frameH,frameW,frameH,
+                       -displaySize/2,-displaySize/2,displaySize,displaySize);
+    this.ctx.restore();
+  }
+
   // --- примитивы -----------------------------------------------------
   drawGradientCircle(x,y,r,colors){
     if(!colors||colors.length<2) colors=["#fff","#000"];

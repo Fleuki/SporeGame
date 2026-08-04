@@ -22,15 +22,35 @@ export class Camera {
     this.x=0; this.y=0;          // левый верхний угол окна в мире
     this.w=viewW; this.h=viewH;
     this.smoothing=0.15;         // 0 — камера не движется, 1 — жёстко привязана
+    // Тряска: живёт отдельно от позиции, иначе clampToWorld гасил бы её у края
+    this.shakeMag=0; this.shakeTime=0; this.shakeMax=1; this.ox=0; this.oy=0;
   }
 
-  centerOn(target){ this.x=target.x-this.w/2; this.y=target.y-this.h/2; this.clampToWorld(); }
+  centerOn(target){
+    this.x=target.x-this.w/2; this.y=target.y-this.h/2; this.clampToWorld();
+    this.shakeMag=0; this.shakeTime=0; this.ox=0; this.oy=0;
+  }
+
+  // Сильный толчок перебивает слабый, слабый не сбрасывает сильный
+  shake(mag,frames=10){
+    if(mag<=0) return;
+    if(mag>=this.shakeMag||this.shakeTime<=0){ this.shakeMag=mag; this.shakeMax=frames; this.shakeTime=frames; }
+    else this.shakeTime=Math.max(this.shakeTime,Math.round(frames*0.5));
+  }
+
+  updateShake(){
+    if(this.shakeTime<=0){ this.ox=this.oy=0; return; }
+    this.shakeTime--;
+    const k=this.shakeMag*(this.shakeTime/this.shakeMax);   // затухает к нулю
+    this.ox=(Math.random()*2-1)*k; this.oy=(Math.random()*2-1)*k;
+  }
 
   follow(target){
     const tx=target.x-this.w/2, ty=target.y-this.h/2;
     this.x+=(tx-this.x)*this.smoothing;
     this.y+=(ty-this.y)*this.smoothing;
     this.clampToWorld();
+    this.updateShake();
   }
 
   // Окно не выезжает за арену: у края игрок смещается от центра экрана,
@@ -42,7 +62,7 @@ export class Camera {
 
   // Округляем сдвиг до целых пикселей: иначе пиксель-арт «плывёт» на
   // дробных смещениях и подрагивает при движении.
-  begin(ctx){ ctx.save(); ctx.translate(-Math.round(this.x),-Math.round(this.y)); }
+  begin(ctx){ ctx.save(); ctx.translate(-Math.round(this.x+this.ox),-Math.round(this.y+this.oy)); }
   end(ctx){ ctx.restore(); }
 
   toWorld(sx,sy){ return {x:sx+this.x, y:sy+this.y}; }

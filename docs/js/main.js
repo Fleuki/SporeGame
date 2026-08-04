@@ -26,13 +26,16 @@ renderer.loader=loader; renderer.camera=camera;
 const particles=new ParticleSystem();
 const sporeSystem=new SporeSystem();
 const upgradeSystem=new UpgradeSystem();
-const loot=new LootSystem(particles);
-const battle=new BattleSystem(particles,sporeSystem,loot);
+const loot=new LootSystem(particles,audio);
+const battle=new BattleSystem(particles,sporeSystem,loot,audio);
 const map=new MapSystem();
 
 input.onMutePress=()=>audio.toggleMute();
 input.onRestartPress=()=>{ if(gameOver) init(); };
-input.onPausePress=()=>{ if(upgradeSystem.isOpen){ upgradeSystem.hideMenu(); paused=false; } };
+// Escape раньше просто закрывал меню прокачки — это была бесплатная отмена
+// выбора. Теперь это честная пауза, а меню прокачки закрыть нельзя: выбрать
+// карточку всё равно придётся.
+input.onPausePress=()=>{ if(!gameOver&&!waitingForUpgrade) paused=!paused; };
 
 (async()=>{ await loader.loadAll(CONFIG.assets); })();
 
@@ -45,8 +48,15 @@ const LEVELUP_FRAMES=CONFIG.levelUp.cols*CONFIG.levelUp.speed+4;
 
 function init(){
   player=new Player(0,0);
+  // Игрок сам не знает про камеру и звук — обратную связь на урон вешаем здесь
+  player.onHurt=(amount,kind)=>{
+    if(kind==="shield"){ audio.sfx("shield"); return; }
+    audio.sfx("hurt");
+    camera.shake(CONFIG.feel.shakeHurt,12);
+    particles.emitText(player.x,player.y-player.radius-10,"-"+Math.round(amount),"#ff5566",15);
+  };
   camera.centerOn(player);
-  enemies=[]; projectiles=[]; loot.reset();
+  enemies=[]; projectiles=[]; loot.reset(); particles.reset(); battle.effects.length=0;
   battle.kills=0; runTime=0; levelUpDelay=0;
   waveSystem=new WaveSystem(camera);
   waveSystem.startWave(); gameOver=false; paused=false; waitingForUpgrade=false;
@@ -66,10 +76,17 @@ function update(dt){
   player.update(dt,{input,enemies,camera});
   camera.follow(player);
 
-  for(const shot of player.tryShoot(enemies)) projectiles.push(shot);
+  const shots=player.tryShoot(enemies);
+  for(const shot of shots) projectiles.push(shot);
+  if(shots.length) audio.sfx("shoot");
 
   const waveEvent=waveSystem.update(enemies,player,sporeEffects);
-  if(waveEvent&&waveEvent.type==="boss") enemies.push(waveEvent.boss);
+  if(waveEvent&&waveEvent.type==="boss"){
+    enemies.push(waveEvent.boss);
+    audio.sfx("boss"); camera.shake(CONFIG.feel.shakeBoss,40);
+  } else if(waveEvent&&waveEvent.type==="wave"){
+    audio.sfx("wave");
+  }
 
   battle.update(dt,{player,enemies,projectiles,sporeEffects,camera});
   // Опыт даёт не смерть врага, а подобранный предмет
@@ -87,6 +104,7 @@ function update(dt){
 function startLevelUp(){
   particles.emit(player.x,player.y,"#00d4aa",25);
   battle.addEffect(player.x,player.y-30,CONFIG.levelUp);
+  audio.sfx("levelup"); camera.shake(CONFIG.feel.shakeLevel,10);
   levelUpDelay=LEVELUP_FRAMES;
 }
 
@@ -109,18 +127,47 @@ function formatTime(sec){
   return m+":"+String(s).padStart(2,"0");
 }
 
+// Узлы интерфейса ищутся один раз: getElementById двенадцать раз в кадр —
+// это лишняя работа каждый кадр и заодно шум в коде
+const HUD={};
+for(const id of ["xpBar","xpText","levelDisplay","killDisplay","timeDisplay","waveDisplay",
+                 "coinDisplay","hpBar","hpText","sporeBar","sporeText"]){
+  HUD[id]=document.getElementById(id);
+}
+const hpRow=HUD.hpBar.closest(".bar-row"), sporeRow=HUD.sporeBar.closest(".bar-row");
+
 function syncHud(){
-  document.getElementById("xpBar").style.width=(player.xp/player.xpToNext*100)+"%";
-  document.getElementById("xpText").textContent=Math.floor(player.xp)+"/"+player.xpToNext;
-  document.getElementById("levelDisplay").textContent=player.level;
-  document.getElementById("killDisplay").textContent=battle.kills;
-  document.getElementById("timeDisplay").textContent=formatTime(runTime);
-  document.getElementById("waveDisplay").textContent=waveSystem.wave;
-  document.getElementById("coinDisplay").textContent=loot.coins;
-  document.getElementById("hpBar").style.width=(player.hp/player.maxHp*100)+"%";
-  document.getElementById("hpText").textContent=Math.floor(player.hp)+"/"+player.maxHp;
-  document.getElementById("sporeBar").style.width=player.sporeLevel+"%";
-  document.getElementById("sporeText").textContent=Math.floor(player.sporeLevel)+"%";
+  HUD.xpBar.style.width=(player.xp/player.xpToNext*100)+"%";
+  HUD.xpText.textContent=Math.floor(player.xp)+"/"+player.xpToNext;
+  HUD.levelDisplay.textContent=player.level;
+  HUD.killDisplay.textContent=battle.kills;
+  HUD.timeDisplay.textContent=formatTime(runTime);
+  HUD.waveDisplay.textContent=waveSystem.wave;
+  HUD.coinDisplay.textContent=loot.coins;
+
+  const hpPct=Math.max(0,player.hp/player.maxHp);
+  HUD.hpBar.style.width=(hpPct*100)+"%";
+  HUD.hpText.textContent=Math.max(0,Math.floor(player.hp))+"/"+Math.round(player.maxHp);
+  // Полоска пульсирует на последней четверти здоровья и на критическом
+  // заражении: цифры в углу экрана в бою никто не читает, движение — видно
+  hpRow.classList.toggle("critical",hpPct<=0.25);
+  HUD.sporeBar.style.width=player.sporeLevel+"%";
+  HUD.sporeText.textContent=Math.floor(player.sporeLevel)+"%";
+  sporeRow.classList.toggle("critical",player.sporeLevel>=CONFIG.sporeSystem.thresholds.danger);
+}
+
+// Красная рамка по краям экрана в момент удара. Самый дешёвый способ сказать
+// «в тебя попали» так, чтобы это было видно, даже когда смотришь на толпу
+// в другом углу экрана.
+function drawHurtVignette(){
+  const k=player.hurtFlash>0?player.hurtFlash/12
+         :(player.sporeLevel>=CONFIG.sporeSystem.thresholds.critical?0.35:0);
+  if(k<=0) return;
+  const ctx=renderer.ctx, w=CONFIG.screen.width, h=CONFIG.screen.height;
+  const g=ctx.createRadialGradient(w/2,h/2,Math.min(w,h)*0.28,w/2,h/2,Math.max(w,h)*0.62);
+  g.addColorStop(0,"rgba(255,40,60,0)");
+  g.addColorStop(1,`rgba(255,40,60,${0.55*k})`);
+  ctx.fillStyle=g; ctx.fillRect(0,0,w,h);
 }
 
 function draw(){
@@ -142,8 +189,15 @@ function draw(){
 
   // --- экранный слой: интерфейс и джойстик не ездят вместе с миром ---
   map.drawVignette(renderer);
+  drawHurtVignette();
   input.drawJoystick(renderer);
   renderer.drawText("Волна "+waveSystem.wave+"  |  Врагов: "+enemies.length,CONFIG.screen.width-240,30,{font:"16px monospace",color:"#8888ff"});
+
+  if(paused&&!waitingForUpgrade&&!gameOver){
+    renderer.drawOverlay(0.55);
+    renderer.drawText("ПАУЗА",CONFIG.screen.width/2,CONFIG.screen.height/2,{font:"bold 46px monospace",color:"#00d4aa",align:"center"});
+    renderer.drawText("Esc — продолжить",CONFIG.screen.width/2,CONFIG.screen.height/2+40,{font:"16px monospace",color:"#8a8a8a",align:"center"});
+  }
 
   if(gameOver){
     renderer.drawOverlay(0.7);

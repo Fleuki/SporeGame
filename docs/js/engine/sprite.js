@@ -55,4 +55,13 @@ export class SpriteAnim {
     renderer.drawSpriteSheet(img,x,y,d.frame,d.frame,this.frame,this.row,d.display,0,this.flip);
     return true;
   }
+
+  // Тот же кадр силуэтом — вспышка от попадания поверх спрайта
+  flash(renderer,x,y,alpha,color="#ffffff"){
+    const d=this.def; if(!d) return false;
+    const img=renderer.loader?.getImage(d.key);
+    if(!img) return false;
+    renderer.drawFlash(img,d.key,x,y,d.frame,d.frame,this.frame,this.row,d.display,this.flip,alpha,color);
+    return true;
+  }
 }

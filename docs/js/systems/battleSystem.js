@@ -8,10 +8,11 @@ import { Effect } from "../entities/effect.js";
 // Раньше это был один блок на 50 строк внутри main.update() вперемешку с
 // обновлением интерфейса.
 export class BattleSystem {
-  constructor(particles,sporeSystem,loot){
+  constructor(particles,sporeSystem,loot,audio){
     this.particles=particles;
     this.sporeSystem=sporeSystem;
     this.loot=loot;
+    this.audio=audio;
     this.grid=new SpatialGrid(96);
     this._near=[];        // переиспользуемый буфер, чтобы не мусорить в GC
     this.effects=[];      // одноразовые анимации взрывов
@@ -31,15 +32,32 @@ export class BattleSystem {
   addEffect(x,y,def){ this.effects.push(new Effect(x,y,def)); }
 
   // Попадание: вспышка, урон по области и яд, если оружие их даёт
-  impact(p,enemies){
+  impact(p,enemies,camera){
     const d=p.def;
     if(d.burst) this.effects.push(new Effect(p.x,p.y,d.burst));
     if(!d.area) return;
+    // Взрыв по области — заметное событие: его слышно и от него трясёт
+    this.audio?.sfx("boom",Math.min(1,d.area.radius/120));
+    camera?.shake(CONFIG.feel.shakeExplosion*Math.min(1,d.area.radius/120),9);
     for(const o of this.grid.query(p.x,p.y,d.area.radius,[])){
       if(o.dead||Math.hypot(o.x-p.x,o.y-p.y)>d.area.radius) continue;
-      o.hp-=p.damage*d.area.damage;
+      const dmg=p.damage*d.area.damage;
+      const a=Math.atan2(o.y-p.y,o.x-p.x);
+      o.takeDamage(dmg,a,CONFIG.feel.knockback*this.kbMult(o)*0.7);
+      this.showDamage(o,dmg,false);
       if(d.area.dot&&o.applyDot) o.applyDot(d.area.dot.dps,d.area.dot.time);
     }
+  }
+
+  // Босса отдача почти не двигает — иначе его можно было бы «выдувать» из
+  // арены очередями из зажигательных склянок
+  kbMult(e){ return e instanceof Boss ? CONFIG.feel.knockbackBoss : 1; }
+
+  showDamage(e,dmg,crit){
+    if(!CONFIG.feel.damageNumbers) return;
+    const v=Math.max(1,Math.round(dmg));
+    this.particles.emitText(e.x,e.y-e.radius-6,crit?v+"!":String(v),
+      crit?"#ffd24a":"#ffffff", crit?17:13);
   }
 
   // Уровень теперь поднимается не здесь: опыт выпадает предметами, и
@@ -52,14 +70,28 @@ export class BattleSystem {
 
     // Сетка строится после того, как все враги сдвинулись
     this.grid.rebuild(enemies);
+    this.separate(enemies);
     this.updateProjectiles(projectiles,enemies,player,camera);
     this.updateEffects();
 
     for(let i=enemies.length-1;i>=0;i--){
       const e=enemies[i];
       if(e.hp>0) continue;
-      this.killEnemy(e,enemies,player,sporeEffects);
+      this.killEnemy(e,enemies,player,sporeEffects,camera);
       enemies.splice(i,1);
+    }
+  }
+
+  // Расталкивание толпы. Пары берутся из той же сетки, что и попадания, —
+  // перебирать всех со всеми при сотне врагов было бы 10 000 проверок в кадр.
+  separate(enemies){
+    if(CONFIG.feel.separation<=0) return;
+    for(const e of enemies){
+      if(e.dead||e instanceof Boss) continue;
+      for(const o of this.grid.query(e.x,e.y,e.radius*2,this._near)){
+        if(o===e||o.dead||o instanceof Boss) continue;
+        e.separateFrom(o);
+      }
     }
   }
 
@@ -96,7 +128,13 @@ export class BattleSystem {
       for(const e of this.grid.query(p.x,p.y,p.radius+64,this._near)){
         if(e.dead||Math.hypot(p.x-e.x,p.y-e.y)>=p.radius+e.radius) continue;
 
-        e.takeDamage(p.damage);
+        // Крит — единственная причина, по которой цифры урона вообще стоит
+        // показывать: одинаковые числа не несут информации, разброс — несёт.
+        const crit=Math.random()<CONFIG.feel.critChance;
+        const dmg=p.damage*(crit?CONFIG.feel.critMult:1);
+        e.takeDamage(dmg,p.angle,CONFIG.feel.knockback*this.kbMult(e)*(crit?1.6:1));
+        this.showDamage(e,dmg,crit);
+        this.audio?.sfx(crit?"crit":"hit");
         if(player.poison) e.hp-=3;
         this.particles.emit(p.x,p.y,"#88ff88",5);
 
@@ -124,15 +162,17 @@ export class BattleSystem {
         hit=true; break;
       }
 
-      if(hit) this.impact(p,enemies);
+      if(hit) this.impact(p,enemies,camera);
       if(hit||p.isOffScreen(camera)||p.life<=0) projectiles.splice(i,1);
     }
   }
 
-  killEnemy(e,enemies,player,sporeEffects){
+  killEnemy(e,enemies,player,sporeEffects,camera){
     e.dead=true; this.kills++;
     const t=e.def||{};
     this.particles.emit(e.x,e.y,"#39ff14",t.sporeCloudAmount||8);
+    this.audio?.sfx("kill");
+    if(e instanceof Boss){ this.audio?.sfx("boom"); camera?.shake(CONFIG.feel.shakeBoss,26); }
 
     if(e.abilities.includes("spore_cloud_on_death")){
       this.particles.emitSporeCloud(e.x,e.y,t.sporeCloudRadius||50,"#6b2d5c");

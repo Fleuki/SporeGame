@@ -31,6 +31,10 @@ export class Boss extends Enemy {
   update(dt,ctx){
     if(this.dead) return;
     this.life++; this.timer++;
+    // Босс не проходит через Enemy.update, поэтому вспышку и отдачу гасим сами.
+    // Без этого flash после первого же попадания оставался бы навсегда, и босс
+    // светился белым до конца боя.
+    this.stepImpact();
     this.updatePhase();
     const {player,events}=ctx;
 
@@ -57,24 +61,32 @@ export class Boss extends Enemy {
       }
     }
 
-    if(this.overlaps(player)) player.takeDamage(this.damage*0.2);
+    // Урон больше не сыпется каждый кадр — неуязвимость игрока сама разводит
+    // удары по времени, поэтому и делить его на пять больше не нужно
+    if(this.overlaps(player)) player.takeDamage(this.damage);
   }
 
   draw(renderer){
     if(this.dead) return;
     // Свечение — сплошной диск, поверх него спрайт не читается.
     // Со спрайтом рисуем только мягкую тень под боссом.
+    const flashAlpha=this.flash>0?this.flash/CONFIG.feel.hitFlash*0.75:0;
     if(this.anim.ready(renderer)){
       renderer.ctx.save();
       renderer.ctx.globalAlpha=0.25;
       renderer.drawGlowCircle(this.x,this.y+this.radius*0.55,this.radius*0.7,this.color.body[0],30);
       renderer.ctx.restore();
       this.anim.draw(renderer,this.x,this.y);
+      if(flashAlpha) this.anim.flash(renderer,this.x,this.y,flashAlpha);
     } else {
       renderer.drawGlowCircle(this.x,this.y,this.radius+10,this.color.body[0],25);
       renderer.drawGradientCircle(this.x,this.y,this.radius,this.color.body);
       renderer.ctx.beginPath(); renderer.ctx.arc(this.x,this.y-this.radius*0.3,this.radius*0.8,Math.PI,0);
       renderer.ctx.fillStyle=this.color.body[1]; renderer.ctx.fill();
+      if(flashAlpha){
+        renderer.ctx.save(); renderer.ctx.globalAlpha=flashAlpha;
+        renderer.drawCircle(this.x,this.y,this.radius,"#ffffff"); renderer.ctx.restore();
+      }
     }
 
     if(this.isStunned) renderer.drawText("💫",this.x-6,this.y-this.radius-15,{font:"16px monospace",color:"#ff0"});
