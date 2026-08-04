@@ -151,6 +151,30 @@ export class Renderer {
     this.ctx.restore();
   }
 
+  // Контур вокруг кадра листа: тот же силуэт, отрисованный со сдвигом в
+  // восемь сторон ПОД самим спрайтом. Земля тут тёмная и очень пёстрая, а
+  // враги — тёмные силуэты: без контура их действительно «почти не видно».
+  //
+  // Восемь сдвигов, а не четыре: по диагоналям иначе остаются разрывы, и
+  // контур выглядит рваным. Силуэт берётся из того же кэша, что и вспышка
+  // попадания, поэтому перекраска листа происходит один раз за игру.
+  drawOutline(img,key,x,y,frameW,frameH,col,row,displaySize,flip,color,width=2,alpha=0.55){
+    if(!img||!img.width||alpha<=0||width<=0) return;
+    const sil=this.silhouette(img,key,color);
+    const ctx=this.ctx;
+    ctx.save();
+    ctx.globalAlpha=alpha;
+    ctx.translate(x,y);
+    if(flip) ctx.scale(-1,1);
+    const d=displaySize;
+    for(let i=0;i<8;i++){
+      const a=Math.PI/4*i;
+      ctx.drawImage(sil,col*frameW,row*frameH,frameW,frameH,
+        -d/2+Math.cos(a)*width, -d/2+Math.sin(a)*width, d, d);
+    }
+    ctx.restore();
+  }
+
   // --- примитивы -----------------------------------------------------
   drawGradientCircle(x,y,r,colors){
     if(!colors||colors.length<2) colors=["#fff","#000"];

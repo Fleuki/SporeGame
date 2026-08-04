@@ -4,6 +4,7 @@ import { Entity } from "./entity.js";
 import { WORLD } from "../core/camera.js";
 import { Weapon } from "./weapon.js";
 
+// Ряды листа алхимика: 0 — на камеру, 1 — влево, 2 — вправо, 3 — со спины
 function angleToRow(angle){
   if(angle>=-Math.PI/4 && angle<Math.PI/4) return 2;
   if(angle>=Math.PI/4 && angle<3*Math.PI/4) return 0;
@@ -11,11 +12,23 @@ function angleToRow(angle){
   return 1;
 }
 
+// Центральный угол каждого ряда — от него считается, насколько далеко
+// «уехало» желаемое направление, прежде чем разрешить разворот
+const ROW_ANGLE=[Math.PI/2, Math.PI, 0, -Math.PI/2];
+
+// Кратчайшая разница углов в диапазоне [-PI, PI]
+function angleDelta(a,b){
+  let d=(a-b)%(Math.PI*2);
+  if(d>Math.PI) d-=Math.PI*2;
+  if(d<-Math.PI) d+=Math.PI*2;
+  return d;
+}
+
 export class Player extends Entity {
   constructor(x,y){
     super(x,y,CONFIG.player.radius);
     this.speed=CONFIG.player.speed;
-    this.maxHp=CONFIG.player.maxHp; this.hp=this.maxHp; this.xp=0; this.level=1; this.xpToNext=10;
+    this.maxHp=CONFIG.player.maxHp; this.hp=this.maxHp; this.xp=0; this.level=1; this.xpToNext=14;
     this.damage=CONFIG.player.damage; this.attackCooldown=0; this.attackRate=CONFIG.player.attackRate;
     // Стволы стреляют одновременно, каждый по своему таймеру.
     // Остальные выдаются карточками прокачки.
@@ -37,6 +50,11 @@ export class Player extends Entity {
     // колоды выбранное до предела
     this.taken={};
     this.animTimer=0; this.animFrame=0; this.animSpeed=8; this.isMoving=false;
+    // Ряд листа, который показываем сейчас, и запрет на смену ряда в
+    // ближайшие кадры. Оба живут отдельно от angle: angle — это ПРИЦЕЛ, он
+    // висит на мыши и меняется каждый кадр, а разворот тела так часто
+    // происходить не должен.
+    this.faceRow=0; this.faceHold=0;
     // life читался проверкой регенерации, но нигде не задавался:
     // undefined%60 === NaN, поэтому апгрейд «Мицелиевое исцеление» не лечил.
     // Теперь счётчик приходит из Entity.
@@ -119,6 +137,10 @@ export class Player extends Entity {
 
     // Анимация ходьбы — крутится только когда игрок реально идёт
     this.isMoving=(dx!==0||dy!==0);
+    // Тело разворачивается по ходьбе, а не по прицелу: спрайт ходьбы должен
+    // показывать, куда персонаж ШАГАЕТ, иначе он идёт боком и спиной вперёд.
+    // Прицел решает только когда игрок стоит.
+    this.updateFacing(this.isMoving?Math.atan2(dy,dx):this.angle);
     if(this.isMoving){
       this.animTimer++;
       if(this.animTimer>=this.animSpeed){
@@ -128,6 +150,21 @@ export class Player extends Entity {
     } else {
       this.animTimer=0; this.animFrame=0;
     }
+  }
+
+  // Разворот с гистерезисом. Границы секторов проходят по диагоналям, и
+  // стоит направлению лечь рядом с границей — без запаса персонаж мигал бы
+  // между двумя рядами каждый кадр. Чтобы уйти из текущего ряда, надо
+  // отклониться больше чем на 45° + facingHysteresis, и не чаще, чем раз в
+  // facingHold кадров.
+  updateFacing(want){
+    if(this.faceHold>0) this.faceHold--;
+    const off=Math.abs(angleDelta(want,ROW_ANGLE[this.faceRow]));
+    if(off<=Math.PI/4+CONFIG.player.facingHysteresis) return;
+    if(this.faceHold>0) return;
+    const row=angleToRow(want);
+    if(row===this.faceRow) return;
+    this.faceRow=row; this.faceHold=CONFIG.player.facingHold;
   }
 
   hasWeapon(key){ return this.weapons.some(w=>w.def===CONFIG.weapons[key]); }
@@ -171,13 +208,21 @@ export class Player extends Entity {
     return true;
   }
 
+  // ОПЫТ И РОСТ. Прежняя кривая (старт 10, ×1.35+5, +2 урона и +8 HP за
+  // уровень) давала шестой уровень к тридцатой секунде забега: урон рос
+  // примерно на 20% за уровень и обгонял врагов, которые прибавляют 26% HP
+  // за минуту. К двум минутам любой враг умирал с одного попадания, и вся
+  // сложность держалась на том, что игрок сам подойдёт вплотную.
+  //
+  // Теперь уровни идут заметно реже, а прибавка за уровень меньше: развитие
+  // персонажа должно догонять сложность, а не обгонять её.
   addXp(a){
     this.xp+=a; let leveledUp=false;
     while(this.xp>=this.xpToNext){
       this.xp-=this.xpToNext; this.level++;
-      this.xpToNext=Math.floor(this.xpToNext*1.35)+5;
-      this.damage+=2; this.maxHp+=8;
-      this.hp=Math.min(this.hp+15,this.maxHp);
+      this.xpToNext=Math.floor(this.xpToNext*1.5)+10;
+      this.damage+=1.2; this.maxHp+=5;
+      this.hp=Math.min(this.hp+8,this.maxHp);
       leveledUp=true;
     }
     return leveledUp;
@@ -260,7 +305,7 @@ export class Player extends Entity {
       renderer.drawSpriteSheet(
         bodyImg, this.x, this.y,
         CONFIG.player.spriteFrameW, CONFIG.player.spriteFrameH,
-        this.animFrame, angleToRow(this.angle),
+        this.animFrame, this.faceRow,
         CONFIG.player.spriteDisplaySize,
         0
       );
@@ -296,7 +341,7 @@ export class Player extends Entity {
           CONFIG.player.attackDisplaySize,faceLeft,a,"#ff3344");
       } else if(bodyImg){
         renderer.drawFlash(bodyImg,"player",this.x,this.y,
-          CONFIG.player.spriteFrameW,CONFIG.player.spriteFrameH,this.animFrame,angleToRow(this.angle),
+          CONFIG.player.spriteFrameW,CONFIG.player.spriteFrameH,this.animFrame,this.faceRow,
           CONFIG.player.spriteDisplaySize,false,a,"#ff3344");
       } else {
         renderer.ctx.save(); renderer.ctx.globalAlpha=a;
@@ -309,6 +354,18 @@ export class Player extends Entity {
       renderer.ctx.lineWidth=2; renderer.ctx.beginPath();
       renderer.ctx.arc(this.x,this.y,this.radius+8,0,Math.PI*2); renderer.ctx.stroke();
     }
-    if(this.isGrabbed) renderer.drawText("⚠ ЗАХВАТ",this.x,this.y-this.radius-15,{font:"10px monospace",color:"#ff3333",align:"center"});
+    // Захват щупальцем. Эмодзи-предупреждение отсюда убрано: системный знак
+    // «⚠» рисуется своим шрифтом и на пиксель-арте смотрится наклейкой.
+    // Кольцо, стягивающееся к игроку, говорит то же самое и на языке игры.
+    if(this.isGrabbed){
+      const k=(this.life%30)/30;
+      renderer.ctx.save();
+      renderer.ctx.globalAlpha=0.8-k*0.6;
+      renderer.ctx.strokeStyle="#ff3355"; renderer.ctx.lineWidth=2;
+      renderer.ctx.beginPath();
+      renderer.ctx.arc(this.x,this.y,this.radius+16-k*12,0,Math.PI*2);
+      renderer.ctx.stroke();
+      renderer.ctx.restore();
+    }
   }
 }

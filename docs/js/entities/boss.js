@@ -76,6 +76,10 @@ export class Boss extends Enemy {
       renderer.ctx.globalAlpha=0.25;
       renderer.drawGlowCircle(this.x,this.y+this.radius*0.55,this.radius*0.7,this.color.body[0],30);
       renderer.ctx.restore();
+      // Тот же контур, что у рядовых врагов: босс нарисован тёмным и на
+      // тёмной арене сливался с землёй ничуть не меньше остальных
+      this.anim.outline(renderer,this.x,this.y,this.color.body[1],
+                        CONFIG.enemies.rimWidth+1,CONFIG.enemies.rimAlpha);
       this.anim.draw(renderer,this.x,this.y);
       if(flashAlpha) this.anim.flash(renderer,this.x,this.y,flashAlpha);
     } else {
@@ -89,7 +93,17 @@ export class Boss extends Enemy {
       }
     }
 
-    if(this.isStunned) renderer.drawText("💫",this.x-6,this.y-this.radius-15,{font:"16px monospace",color:"#ff0"});
+    // Оглушение раньше показывалось эмодзи «💫» — системный шрифт поверх
+    // пиксель-арта выглядит инородно и на разных платформах рисуется
+    // по-разному. Теперь это три искры, кружащие над боссом.
+    if(this.isStunned){
+      for(let i=0;i<3;i++){
+        const a=this.life*0.12+i*Math.PI*2/3;
+        renderer.drawGlowCircle(this.x+Math.cos(a)*this.radius*0.62,
+                                this.y-this.radius-10+Math.sin(a)*4,
+                                2.6,"#ffd24a",8);
+      }
+    }
     renderer.drawText(this.name,this.x,this.y-this.radius-20,{font:"12px monospace",color:"#00d4aa",align:"center"});
     const bw=100,bh=6;
     renderer.ctx.fillStyle="#1a1a1a"; renderer.ctx.fillRect(this.x-bw/2,this.y-this.radius-14,bw,bh);
