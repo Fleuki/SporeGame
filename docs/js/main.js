@@ -66,6 +66,7 @@ function update(dt){
   if(leveledUp) openUpgradeMenu();
 
   particles.update();
+  map.update();                    // кадры анимированных декораций
   sporeSystem.update(player);
   syncHud();
 

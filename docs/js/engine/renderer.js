@@ -77,18 +77,25 @@ export class Renderer {
     return g;
   }
 
-  // Декорация стоит на земле: (x,y) — точка опоры, низ по центру спрайта
+  // Декорация стоит на земле: (x,y) — точка опоры, низ по центру спрайта.
+  // opts.flat — объект лежит на земле (лужа): рисуется по центру и без тени.
+  // opts.frames/opts.frame — кадр из листа, кадры идут в один ряд.
   drawProp(key,x,y,w,h,opts={}){
     const img=this.loader?.getImage(key);
     if(!img||!img.width) return;
     const ctx=this.ctx;
     ctx.save();
-    ctx.beginPath();
-    ctx.ellipse(x,y-h*0.03,w*0.36,h*0.09,0,0,Math.PI*2);
-    ctx.fillStyle="rgba(0,0,0,0.35)"; ctx.fill();
-    ctx.translate(x,y-h);
+    if(!opts.flat){
+      ctx.beginPath();
+      ctx.ellipse(x,y-h*0.03,w*0.36,h*0.09,0,0,Math.PI*2);
+      ctx.fillStyle="rgba(0,0,0,0.35)"; ctx.fill();
+    }
+    ctx.translate(x,opts.flat?y-h/2:y-h);
     if(opts.flip) ctx.scale(-1,1);
-    if(opts.glow){
+    if(opts.frames){
+      const fw=img.width/opts.frames;
+      ctx.drawImage(img,(opts.frame||0)*fw,0,fw,img.height,-w/2,0,w,h);
+    }else if(opts.glow){
       const g=this.glowSprite(img,key,opts.glow,opts.glowBlur||20);
       const px=g.pad*(w/img.width), py=g.pad*(h/img.height);
       ctx.drawImage(g.canvas,-w/2-px,-py,w+px*2,h+py*2);

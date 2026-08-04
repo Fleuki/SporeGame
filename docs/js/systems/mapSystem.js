@@ -12,7 +12,9 @@ import { CONFIG } from "../config.js";
 //
 // Биом меняется по номеру волны и перекрашивает всю арену целиком.
 export class MapSystem {
-  constructor(){ this.patternKey=null; this.pattern=null; }
+  constructor(){ this.patternKey=null; this.pattern=null; this.tick=0; }
+
+  update(){ this.tick++; }
 
   biome(wave){
     const list=CONFIG.map.biomes;
@@ -63,7 +65,9 @@ export class MapSystem {
         if(Math.hypot(x,y)<M.decorClearRadius) continue;
         out.push({ def, x, y,
           w: def.width*(0.85+((h>>>23)%100)/300),
-          flip: ((h>>>17)&1)===1 });
+          flip: ((h>>>17)&1)===1,
+          // сдвиг фазы анимации, иначе все лужи булькают синхронно
+          phase: (h>>>5)%64 });
       }
     }
     out.sort((a,b)=>a.y-b.y);
@@ -73,10 +77,17 @@ export class MapSystem {
   drawDecor(renderer){
     if(!renderer.camera) return;
     for(const d of this.visibleProps(renderer.camera)){
-      const img=renderer.loader?.getImage(d.def.image);
+      const def=d.def;
+      const img=renderer.loader?.getImage(def.image);
       if(!img||!img.width) continue;
-      renderer.drawProp(d.def.image,d.x,d.y,d.w,d.w*img.height/img.width,
-        { flip:d.flip, glow:d.def.glow, glowBlur:d.def.glowBlur });
+      // у анимированного листа пропорции берутся с одного кадра, а не со всей полосы
+      const frameW=def.frames?img.width/def.frames:img.width;
+      const frame=def.frames
+        ? Math.floor((this.tick/def.animSpeed)+d.phase)%def.frames
+        : 0;
+      renderer.drawProp(def.image,d.x,d.y,d.w,d.w*img.height/frameW,
+        { flip:def.flat?false:d.flip, glow:def.glow, glowBlur:def.glowBlur,
+          flat:def.flat, frames:def.frames, frame });
     }
   }
 

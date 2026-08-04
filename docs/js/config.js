@@ -149,18 +149,37 @@ export const CONFIG = {
     // Биомы идут по кругу: мох → грязь → костяная гниль.
     // tint приглушает текстуру, чтобы враги и снаряды читались поверх неё.
     biomes: [
-      { key: "moss", tile: "groundMoss", tint: "rgba(13,31,21,0.30)" },
-      { key: "dirt", tile: "groundDirt", tint: "rgba(24,14,8,0.28)" },
-      { key: "bone", tile: "groundBone", tint: "rgba(14,10,28,0.62)" }
+      { key: "moss",   tile: "groundMoss",   tint: "rgba(13,31,21,0.30)" },
+      { key: "dirt",   tile: "groundDirt",   tint: "rgba(24,14,8,0.28)" },
+      { key: "biolum", tile: "groundBiolum", tint: "rgba(6,24,26,0.34)" },
+      { key: "bone",   tile: "groundBone",   tint: "rgba(14,10,28,0.62)" }
     ],
-    // Декорации: чистый фон, коллизий у них нет
+    // Декорации: чистый фон, коллизий у них нет.
+    // width — ширина на экране, высота считается по пропорциям картинки.
+    // flat — объект лежит на земле: без тени и с центром в точке, а не низом.
+    // frames — анимированный лист (кадры в один ряд).
     props: {
       spore_tree: {
         image: "propSporeTree", width: 118,
         glow: "rgba(150,110,255,0.5)", glowBlur: 26
       },
+      dead_tree: {
+        image: "propDeadTree", width: 150,
+        glow: "rgba(190,90,220,0.4)", glowBlur: 30
+      },
       mushroom_cart: {
         image: "propMushroomCart", width: 168
+      },
+      mossy_rock: {
+        image: "propMossyRock", width: 96
+      },
+      glow_shrooms: {
+        image: "propGlowShrooms", width: 88,
+        glow: "rgba(230,90,255,0.55)", glowBlur: 22
+      },
+      acid_pool: {
+        image: "propAcidPool", width: 120,
+        flat: true, frames: 4, animSpeed: 11
       }
     },
     decorCell: 300,         // сторона клетки мира: не больше одной декорации на клетку
@@ -186,8 +205,13 @@ export const CONFIG = {
       groundMoss: "assets/images/map/ground_moss.png",
       groundDirt: "assets/images/map/ground_dirt.png",
       groundBone: "assets/images/map/ground_bone.png",
+      groundBiolum: "assets/images/map/ground_biolum.png",
       propSporeTree: "assets/images/props/prop_spore_tree.png",
-      propMushroomCart: "assets/images/props/prop_mushroom_cart.png"
+      propDeadTree: "assets/images/props/prop_dead_tree.png",
+      propMushroomCart: "assets/images/props/prop_mushroom_cart.png",
+      propMossyRock: "assets/images/props/prop_mossy_rock.png",
+      propGlowShrooms: "assets/images/props/prop_glow_shrooms.png",
+      propAcidPool: "assets/images/effects/acid_pool.png"
     },
     sounds: {}
   }
