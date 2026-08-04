@@ -23,17 +23,32 @@
    assets/images/enemies/spore_bearer.png
    В config.js enemies.types.spore_bearer.sprite = "..."
 
-3. ФОН:
-   assets/images/backgrounds/dungeon.png
-   В config.js assets.images.bg = "..."
-   В main.js замени drawGrid() на отрисовку фона.
+3. ЗЕМЛЯ (ТАЙЛ КАРТЫ):
+   Положи БЕСШОВНЫЙ квадратный PNG → assets/images/map/ground_swamp.png
+   В config.js assets.images.groundSwamp = "assets/images/map/ground_swamp.png"
+   Затем добавь биом в config.js map.biomes:
+     { key: "swamp", tile: "groundSwamp", tint: "rgba(10,25,20,0.35)" }
+   Биомы сменяются по кругу каждые map.wavesPerBiome волн.
+   tint — полупрозрачная заливка поверх текстуры: без неё яркая земля
+   забивает врагов и снаряды.
 
-4. МУЗЫКА:
+4. ДЕКОРАЦИИ КАРТЫ (пни, телеги, камни):
+   PNG С ПРОЗРАЧНЫМ ФОНОМ → assets/images/props/prop_rock.png
+   В config.js assets.images.propRock = "..."
+   И в config.js map.props:
+     rock: { image: "propRock", width: 90 }
+   width — ширина на экране, высота считается по пропорциям картинки.
+   Необязательные glow/glowBlur добавляют свечение (как у грибного пня).
+   Декорации раскладываются сами по клеткам мира (map.decorCell,
+   map.decorChance), коллизий у них нет. Точка опоры спрайта — низ по
+   центру, поэтому рисуй объект «стоящим на земле».
+
+5. МУЗЫКА:
    assets/sounds/music/battle.ogg
    В config.js assets.sounds.bgm = "..."
    В main.js раскомментируй audio.playMusic("bgm")
 
-5. ЗВУКИ:
+6. ЗВУКИ:
    Добавь пути в config.js assets.sounds
    Раскомментируй audio.playSfx() в main.js
 

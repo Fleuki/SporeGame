@@ -140,6 +140,33 @@ export const CONFIG = {
     // Насколько за краем видимости появляются враги и боссы
     spawnMargin: 90, bossSpawnMargin: 160
   },
+  // КАРТА. Мир бесконечный, поэтому земля — бесшовный тайл, а декорации
+  // раскладываются процедурно по клеткам мира (см. systems/mapSystem.js).
+  map: {
+    tileSize: 320,          // размер тайла земли в мировых пикселях
+    wavesPerBiome: 3,       // через сколько волн меняется биом
+    vignette: 0.45,         // затемнение по краям экрана
+    // Биомы идут по кругу: мох → грязь → костяная гниль.
+    // tint приглушает текстуру, чтобы враги и снаряды читались поверх неё.
+    biomes: [
+      { key: "moss", tile: "groundMoss", tint: "rgba(13,31,21,0.30)" },
+      { key: "dirt", tile: "groundDirt", tint: "rgba(24,14,8,0.28)" },
+      { key: "bone", tile: "groundBone", tint: "rgba(14,10,28,0.62)" }
+    ],
+    // Декорации: чистый фон, коллизий у них нет
+    props: {
+      spore_tree: {
+        image: "propSporeTree", width: 118,
+        glow: "rgba(150,110,255,0.5)", glowBlur: 26
+      },
+      mushroom_cart: {
+        image: "propMushroomCart", width: 168
+      }
+    },
+    decorCell: 300,         // сторона клетки мира: не больше одной декорации на клетку
+    decorChance: 0.5,       // доля клеток с декорацией
+    decorClearRadius: 150,  // радиус вокруг точки старта без декораций
+  },
   assets: {
     images: {
       player: "assets/images/player/alchemist_purple.png",
@@ -154,8 +181,13 @@ export const CONFIG = {
       enemy_mushroom_wolf: "assets/images/enemies/mushroom_wolf.png",
       enemy_spore_bat: "assets/images/enemies/spore_bat.png",
       boss_mother_cap: "assets/images/bosses/mother_cap.png",
-      boss_mycelium_heart: "assets/images/bosses/mycelium_heart.png"
+      boss_mycelium_heart: "assets/images/bosses/mycelium_heart.png",
       // fruit_body и mycelium_tentacle пока без спрайтов — рисуются примитивами
+      groundMoss: "assets/images/map/ground_moss.png",
+      groundDirt: "assets/images/map/ground_dirt.png",
+      groundBone: "assets/images/map/ground_bone.png",
+      propSporeTree: "assets/images/props/prop_spore_tree.png",
+      propMushroomCart: "assets/images/props/prop_mushroom_cart.png"
     },
     sounds: {}
   }

@@ -11,6 +11,7 @@ import { WaveSystem } from "./systems/waveSystem.js";
 import { SporeSystem } from "./systems/sporeSystem.js";
 import { UpgradeSystem } from "./systems/upgradeSystem.js";
 import { BattleSystem } from "./systems/battleSystem.js";
+import { MapSystem } from "./systems/mapSystem.js";
 
 const canvas=document.getElementById("gameCanvas");
 canvas.width=CONFIG.screen.width; canvas.height=CONFIG.screen.height;
@@ -25,6 +26,7 @@ const particles=new ParticleSystem();
 const sporeSystem=new SporeSystem();
 const upgradeSystem=new UpgradeSystem();
 const battle=new BattleSystem(particles,sporeSystem);
+const map=new MapSystem();
 
 input.onMutePress=()=>audio.toggleMute();
 input.onRestartPress=()=>{ if(gameOver) init(); };
@@ -100,8 +102,8 @@ function draw(){
 
   // --- мировой слой: всё внутри begin/end сдвигается камерой ---
   renderer.begin();
-  renderer.drawMyceliumVeins();
-  renderer.drawGrid();
+  map.drawGround(renderer,waveSystem.wave);   // земля текущего биома
+  map.drawDecor(renderer);                    // пни и телеги под сущностями
   sporeSystem.draw(renderer);
   for(const e of enemies) e.draw(renderer);
   for(const p of projectiles) p.draw(renderer);
@@ -111,6 +113,7 @@ function draw(){
   renderer.end();
 
   // --- экранный слой: интерфейс и джойстик не ездят вместе с миром ---
+  map.drawVignette(renderer);
   input.drawJoystick(renderer);
   renderer.drawText("Уровень "+player.level+"  |  XP "+Math.floor(player.xp)+"/"+player.xpToNext,20,30,{font:"14px monospace",color:"#aaa"});
   renderer.drawText("Волна "+waveSystem.wave+"  |  Врагов: "+enemies.length,CONFIG.screen.width-240,30,{font:"16px monospace",color:"#8888ff"});
