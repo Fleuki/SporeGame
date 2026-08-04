@@ -32,6 +32,7 @@ export class Player extends Entity {
     // в следующие партии.
     this.sporeRate=1;
     this.iframes=0; this.hurtFlash=0; this.onHurt=null;
+    this.isDying=false; this.deathFrame=0; this.deathTimer=0;
     // Сколько раз взято каждое улучшение — по этому UpgradeSystem убирает из
     // колоды выбранное до предела
     this.taken={};
@@ -141,11 +142,15 @@ export class Player extends Entity {
       if(p) shots.push(p);
     }
     if(shots.length){
-      // Анимация броска общая: играет, когда выстрелил хоть один ствол
       this.attackCooldown=this.attackRate;
-      this.isAttacking=true;
-      this.attackAnimFrame=0;
-      this.attackAnimTimer=0;
+      // Анимация броска общая: играет, когда выстрелил хоть один ствол.
+      // При выключенном attackAnim в неё вообще не входим — иначе цикл ходьбы
+      // всё равно прерывался бы, просто уже незаметно для глаза.
+      if(CONFIG.player.attackAnim){
+        this.isAttacking=true;
+        this.attackAnimFrame=0;
+        this.attackAnimTimer=0;
+      }
     }
     return shots;
   }
@@ -180,9 +185,34 @@ export class Player extends Entity {
 
   reduceSpore(a){ this.sporeLevel=Math.max(0,this.sporeLevel-a); }
 
+  // --- смерть ---------------------------------------------------------
+  // Мир на это время замирает: главный цикл перестаёт обновлять врагов и
+  // крутит только эту анимацию (см. main.js, состояние dying).
+  startDeath(){
+    if(this.isDying) return;
+    this.isDying=true; this.hp=0;
+    this.deathFrame=0; this.deathTimer=0;
+    this.isAttacking=false; this.isGrabbed=false;
+  }
+
+  stepDeath(){
+    if(!this.isDying) return;
+    this.deathTimer++;
+    if(this.deathTimer<CONFIG.player.deathAnimSpeed) return;
+    this.deathTimer=0;
+    // На последнем кадре останавливаемся и держим его: зацикливать смерть,
+    // пока игрок читает итоги, было бы странно.
+    if(this.deathFrame<CONFIG.player.deathCols-1) this.deathFrame++;
+  }
+
+  // Сколько кадров игра должна оставаться в состоянии смерти
+  deathDuration(){
+    return CONFIG.player.deathCols*CONFIG.player.deathAnimSpeed+CONFIG.player.deathHold;
+  }
+
   draw(renderer){
     // Ключи загрузчика (CONFIG.assets.images), а не пути к файлам.
-    const atkImg=renderer.loader?.getImage("playerAttack");
+    const atkImg=CONFIG.player.attackAnim?renderer.loader?.getImage("playerAttack"):null;
     const bodyImg=renderer.loader?.getImage("player");
     // Спрайт броска нарисован лицом вправо: зеркалим его при стрельбе влево.
     // Вращать спрайт персонажа нельзя — направление уже задано рядом листа.
@@ -190,6 +220,27 @@ export class Player extends Entity {
 
     // Тень под ногами: без неё игрок сливается с землёй ровно так же, как враги
     renderer.drawShadow(this.x,this.y+this.radius*0.8,this.radius*0.8,this.radius*0.3,0.45);
+
+    // Смерть перекрывает всё остальное: ни ходьбы, ни щита, ни моргания
+    if(this.isDying){
+      const dImg=renderer.loader?.getImage("playerDeath");
+      if(dImg){
+        renderer.drawSpriteSheet(
+          dImg, this.x, this.y,
+          CONFIG.player.deathFrameW, CONFIG.player.deathFrameH,
+          this.deathFrame, 0,
+          CONFIG.player.deathDisplaySize,
+          0, faceLeft
+        );
+      } else {
+        // Листа нет — гасим игрока, чтобы смерть всё равно читалась
+        const k=1-this.deathFrame/Math.max(1,CONFIG.player.deathCols-1);
+        renderer.ctx.save(); renderer.ctx.globalAlpha=0.2+k*0.8;
+        renderer.drawGradientCircle(this.x,this.y,this.radius,this.color.body);
+        renderer.ctx.restore();
+      }
+      return;
+    }
 
     // Неуязвимость видно по морганию: иначе непонятно, почему второй удар
     // подряд не прошёл.

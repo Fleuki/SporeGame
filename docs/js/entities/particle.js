@@ -20,6 +20,19 @@ export class ParticleSystem {
       this.particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,radius:rand(rmin,rmax),life:30+rand(0,20),maxLife:50,color,type:"burst"});
     }
   }
+  // Вспышка у ствола. Заменяет анимацию броска: показать, что выстрел
+  // произошёл, дешевле искрами в точке вылета, чем позой всего персонажа —
+  // тем более что стреляем мы три раза в секунду и позу всё равно не разглядеть.
+  emitMuzzle(x,y,angle,color="#00d4aa"){
+    for(let i=0;i<5;i++){
+      const a=angle+rand(-0.45,0.45), s=rand(1.6,3.4);
+      this.particles.push({
+        x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,
+        radius:rand(1.5,3.2),life:9+rand(0,5),maxLife:14,color,type:"burst"
+      });
+    }
+  }
+
   emitSporeCloud(x,y,r,color="#6b2d5c"){ this.sporeClouds.push({x,y,radius:r,color,life:120,maxLife:120}); }
   emitToxicTrail(x,y){ this.particles.push({x,y,vx:rand(-0.3,0.3),vy:rand(-0.3,0.3),radius:rand(3,7),life:40,maxLife:40,color:"#c4a000",type:"trail"}); }
   update(){

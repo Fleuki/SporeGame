@@ -45,6 +45,10 @@ let runTime=0;   // секунды с начала забега, идут тол
 // уровня. При паузе кадры анимации не идут, поэтому иначе её никто не увидит.
 let levelUpDelay=0;
 const LEVELUP_FRAMES=CONFIG.levelUp.cols*CONFIG.levelUp.speed+4;
+// Кадры, оставшиеся до экрана поражения. Пока счётчик тикает, мир стоит и
+// доигрывает только анимация смерти: раньше экран появлялся в тот же кадр,
+// когда HP уходило в ноль, и нарисованную смерть никто ни разу не видел.
+let dying=0;
 
 function init(){
   player=new Player(0,0);
@@ -57,7 +61,7 @@ function init(){
   };
   camera.centerOn(player);
   enemies=[]; projectiles=[]; loot.reset(); particles.reset(); battle.effects.length=0;
-  battle.kills=0; runTime=0; levelUpDelay=0;
+  battle.kills=0; runTime=0; levelUpDelay=0; dying=0;
   waveSystem=new WaveSystem(camera);
   waveSystem.startWave(); gameOver=false; paused=false; waitingForUpgrade=false;
   document.getElementById("gameOverScreen").classList.add("hidden");
@@ -70,6 +74,20 @@ window.addEventListener("upgradeChosen",(e)=>{
 
 function update(dt){
   if(gameOver||paused||waitingForUpgrade) return;
+
+  // Смерть: враги, волны и стрельба остановлены, крутятся только анимация
+  // алхимика, частицы и карта — чтобы кадр не выглядел замороженным насмерть.
+  if(dying>0){
+    player.stepDeath();
+    particles.update();
+    battle.updateEffects();
+    map.update(camera);
+    camera.follow(player);
+    syncHud();
+    if(--dying<=0) endGame();
+    return;
+  }
+
   runTime+=dt;
 
   const sporeEffects=sporeSystem.getSporeEffects(player.sporeLevel);
@@ -77,7 +95,12 @@ function update(dt){
   camera.follow(player);
 
   const shots=player.tryShoot(enemies);
-  for(const shot of shots) projectiles.push(shot);
+  for(const shot of shots){
+    projectiles.push(shot);
+    // Вспышка в точке вылета — теперь это единственный признак выстрела на
+    // самом персонаже, анимация броска отключена (CONFIG.player.attackAnim)
+    particles.emitMuzzle(shot.x,shot.y,shot.angle,shot.def.glow||"#00d4aa");
+  }
   if(shots.length) audio.sfx("shoot");
 
   const waveEvent=waveSystem.update(enemies,player,sporeEffects);
@@ -98,7 +121,16 @@ function update(dt){
   map.applyHazards(dt,player,enemies,particles);   // кислотные лужи жгут всех
   syncHud();
 
-  if(player.hp<=0) endGame();
+  if(player.hp<=0) beginDeath();
+}
+
+function beginDeath(){
+  if(dying>0) return;
+  player.startDeath();
+  dying=player.deathDuration();
+  audio.sfx("hurt"); audio.sfx("boom");
+  camera.shake(CONFIG.feel.shakeBoss,30);
+  particles.emit(player.x,player.y,"#6b2d5c",30,1,5);
 }
 
 function startLevelUp(){
@@ -114,7 +146,7 @@ function openUpgradeMenu(){
 }
 
 function endGame(){
-  player.hp=0; gameOver=true;
+  player.hp=0; gameOver=true; dying=0;
   document.getElementById("finalWave").textContent=waveSystem.wave;
   document.getElementById("finalLevel").textContent=player.level;
   document.getElementById("finalKills").textContent=battle.kills;
@@ -199,12 +231,10 @@ function draw(){
     renderer.drawText("Esc — продолжить",CONFIG.screen.width/2,CONFIG.screen.height/2+40,{font:"16px monospace",color:"#8a8a8a",align:"center"});
   }
 
-  if(gameOver){
-    renderer.drawOverlay(0.7);
-    renderer.drawText("СПОРЫ ПОБЕДИЛИ",CONFIG.screen.width/2,CONFIG.screen.height/2-20,{font:"bold 60px monospace",color:"#ff3344",align:"center"});
-    renderer.drawText("Волна "+waveSystem.wave+" | Уровень "+player.level,CONFIG.screen.width/2,CONFIG.screen.height/2+50,{font:"20px monospace",color:"#aaa",align:"center"});
-    renderer.drawText("R — рестарт | M — звук",CONFIG.screen.width/2,CONFIG.screen.height/2+100,{font:"16px monospace",color:"#888",align:"center"});
-  }
+  // Экран поражения рисует #gameOverScreen из index.html. Раньше здесь же
+  // лежала вторая, канвасная копия того же текста — обе показывались
+  // одновременно и со смещением, буквы наезжали друг на друга.
+  if(gameOver) renderer.drawOverlay(0.35);
 }
 
 const loop=new Loop(update,draw);
