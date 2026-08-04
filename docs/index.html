@@ -9,19 +9,25 @@
 <body>
   <div id="ui">
     <div class="bar-row">
+      <span class="icon-slot"></span>
       <span class="label">HP</span>
-      <div class="bar-bg"><div class="bar-hp" id="hpBar"></div></div>
+      <div class="bar-bg"><div class="bar-fill bar-hp" id="hpBar"></div></div>
       <span id="hpText">100/100</span>
     </div>
     <div class="bar-row">
-      <img class="icon" src="assets/images/ui/icon_spore.png" alt="">
+      <span class="icon-slot"><img class="icon" src="assets/images/ui/icon_spore.png" alt=""></span>
       <span class="label">Споры</span>
-      <div class="bar-bg"><div class="bar-spore" id="sporeBar"></div></div>
+      <div class="bar-bg"><div class="bar-fill bar-spore" id="sporeBar"></div></div>
       <span id="sporeText">0%</span>
+    </div>
+    <div class="bar-row">
+      <span class="icon-slot"></span>
+      <span class="label">Опыт</span>
+      <div class="bar-bg"><div class="bar-fill bar-xp" id="xpBar"></div></div>
+      <span id="xpText">0/10</span>
     </div>
     <div class="stats">
       <span class="stat">LVL <span id="levelDisplay">1</span></span>
-      <span class="stat">XP <span id="xpDisplay">0</span></span>
       <span class="stat"><img class="icon" src="assets/images/ui/icon_kills.png" alt="убито"><span id="killDisplay">0</span></span>
       <span class="stat"><img class="icon" src="assets/images/ui/icon_time.png" alt="время"><span id="timeDisplay">0:00</span></span>
       <span class="stat">🌊 <span id="waveDisplay">1</span></span>

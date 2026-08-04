@@ -110,7 +110,8 @@ function formatTime(sec){
 }
 
 function syncHud(){
-  document.getElementById("xpDisplay").textContent=Math.floor(player.xp);
+  document.getElementById("xpBar").style.width=(player.xp/player.xpToNext*100)+"%";
+  document.getElementById("xpText").textContent=Math.floor(player.xp)+"/"+player.xpToNext;
   document.getElementById("levelDisplay").textContent=player.level;
   document.getElementById("killDisplay").textContent=battle.kills;
   document.getElementById("timeDisplay").textContent=formatTime(runTime);
@@ -142,7 +143,6 @@ function draw(){
   // --- экранный слой: интерфейс и джойстик не ездят вместе с миром ---
   map.drawVignette(renderer);
   input.drawJoystick(renderer);
-  renderer.drawText("Уровень "+player.level+"  |  XP "+Math.floor(player.xp)+"/"+player.xpToNext,20,30,{font:"14px monospace",color:"#aaa"});
   renderer.drawText("Волна "+waveSystem.wave+"  |  Врагов: "+enemies.length,CONFIG.screen.width-240,30,{font:"16px monospace",color:"#8888ff"});
 
   if(gameOver){
