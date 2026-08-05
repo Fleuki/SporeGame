@@ -204,8 +204,10 @@ export class Enemy extends Entity {
     // Тень рисуется до спрайта — иначе она легла бы поверх ног
     renderer.drawShadow(this.x,this.y+this.radius*0.72,this.radius*0.82,this.radius*0.3,0.42);
 
-    // Мутанты подсвечиваются золотой аурой независимо от способа отрисовки
-    if(this.isMutated) renderer.drawGlowCircle(this.x,this.y,this.radius+4,"#c4a000",10);
+    // ЭЛИТА. Венец шипов рисуется ДО спрайта: его середина прозрачна, и враг
+    // должен смотреть сквозь неё, а не из-под неё. Листа нет — остаётся
+    // прежняя золотая аура, чтобы элита не превратилась в обычного врага.
+    if(this.isMutated) this.drawCrown(renderer);
 
     // Замах стрелка виден и без спрайта: кольцо стягивается к врагу, пока
     // раздувается труба. Это единственное предупреждение перед выстрелом, и
@@ -248,6 +250,22 @@ export class Enemy extends Entity {
       this.anim.flash(renderer,this.x,this.y,this.flash/CONFIG.feel.hitFlash*0.85);
     }
     this.drawHpBar(renderer);
+  }
+
+  // Венец элиты. Кадр крутится по собственному счётчику жизни, а не по
+  // анимации врага: у волка шаг быстрый, у щупальца анимации нет вовсе, и
+  // пульсация венца не должна зависеть от того, на ком он сидит.
+  drawCrown(renderer){
+    const E=CONFIG.enemies.elite;
+    const img=E&&renderer.loader?.getImage(E.sprite.key);
+    if(!img||!img.width){
+      renderer.drawGlowCircle(this.x,this.y,this.radius+4,"#c4a000",10);
+      return;
+    }
+    const size=(this.def.sprite?.display||this.radius*4)*E.sizeMult;
+    const col=Math.floor(this.life/E.sprite.animSpeed)%E.sprite.cols;
+    renderer.drawSpriteSheet(img,this.x,this.y,
+      E.sprite.frame,E.sprite.frame,col,0,size);
   }
 
   drawHpBar(renderer){

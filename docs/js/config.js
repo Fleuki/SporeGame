@@ -295,6 +295,24 @@ export const CONFIG = {
     // же сцены. Полосок HP над ними тоже нет, пока по ним не попали.
     rimWidth: 1.2, rimAlpha: 0.42,
     rimNear: 95, rimFar: 195,
+
+    // ЭЛИТА (isMutated). У неё +50% HP и +30% урона, но до сих пор она
+    // отличалась только золотым свечением — а свечения на этой арене хватает
+    // и без неё: грибы, лужи, снаряды. В толпе элита терялась, и игрок
+    // получал в полтора раза больше урона, не понимая, от кого.
+    //
+    // Теперь поверх ЛЮБОГО врага рисуется отдельный лист: венец шипов с
+    // пустой серединой, сквозь которую виден сам враг. Отдельный спрайт на
+    // каждый тип рисовать не пришлось бы и незачем — элита обязана читаться
+    // как «тот же враг, но с наростом», а не как новое существо.
+    //
+    // sizeMult — во сколько раз венец крупнее спрайта врага: дырка в
+    // середине должна быть шире тела, иначе венец ляжет на него шапкой.
+    elite: {
+      sprite: { key:"enemy_elite_crown", frame:256, cols:4, animSpeed:9 },
+      sizeMult: 1.4
+    },
+
     types: {
       spore_bearer: {
         name: "Спороносец", hp: 28, speed: 0.85, radius: 14, damage: 8, xpReward: 6,
@@ -698,6 +716,7 @@ export const CONFIG = {
       fx_burst_purple: "assets/images/effects/burst_purple.png",
       fx_burst_toxic: "assets/images/effects/burst_toxic.png",
       fx_burst_big: "assets/images/effects/burst_big.png",
+      enemy_elite_crown: "assets/images/enemies/elite_crown.png",
       enemy_spore_bearer: "assets/images/enemies/spore_bearer.png",
       enemy_mushroom_wolf: "assets/images/enemies/mushroom_wolf.png",
       enemy_spore_bat: "assets/images/enemies/spore_bat.png",
