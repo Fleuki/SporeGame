@@ -243,8 +243,14 @@ export class Player extends Entity {
   bodyFrame(renderer){
     const P=CONFIG.player;
     const walk=this.isMoving?renderer.loader?.getImage("playerWalk"):null;
-    if(walk){
-      return { img:walk, fw:P.walkFrameW, fh:P.walkFrameH,
+    if(walk&&walk.width){
+      // Размер кадра считается ИЗ САМОЙ КАРТИНКИ по числу колонок и рядов, а
+      // не берётся из конфига числом. Лист рисует нейросеть, и его итоговое
+      // разрешение каждый раз другое: у первой версии вышло 2048x2048 вместо
+      // заказанных 1536x1024. Сетка (сколько кадров) — это осмысленное
+      // требование, точный размер файла — нет.
+      return { img:walk,
+               fw:walk.width/P.walkCols, fh:walk.height/P.walkRows,
                col:this.animFrame%P.walkCols, size:P.walkDisplaySize, key:"playerWalk" };
     }
     const img=renderer.loader?.getImage("player");
