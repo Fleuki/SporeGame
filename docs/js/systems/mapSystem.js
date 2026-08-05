@@ -1,6 +1,20 @@
 import { CONFIG } from "../config.js";
 import { WORLD } from "../core/camera.js";
 
+// Детерминированный «шум» по паре целых координат. Один и тот же участок мира
+// обязан выглядеть одинаково, сколько бы раз игрок туда ни вернулся, поэтому
+// ни один слой земли не имеет права звать Math.random().
+//
+// Мультипликативное перемешивание после xor обязательно: без него соседние
+// клетки дают близкие хеши, и «случайный» разворот тайлов ложится ровными
+// диагональными полосами — то есть сеткой, только косой.
+function hash2(x,y){
+  let h=(Math.round(x)*73856093)^(Math.round(y)*19349663);
+  h=Math.imul(h^(h>>>15),2246822519);
+  h=Math.imul(h^(h>>>13),3266489917);
+  return (h^(h>>>16))>>>0;
+}
+
 // КАРТА: земля и декорации арены.
 //
 // Арена большая (см. CONFIG.world), поэтому ни тайлы, ни декорации не
@@ -56,6 +70,20 @@ export class MapSystem {
   }
 
   // --- мировой слой ---------------------------------------------------
+  // ЗЕМЛЯ. Раньше это был один createPattern("repeat") на всю арену: одна и
+  // та же картинка, приклеенная к сетке 200x200 без единого отличия. Глаз
+  // ловит такую сетку мгновенно — «одна земля на всю карту с одинаковыми
+  // вырезами». Хуже того, все узнаваемые детали текстуры (пятна мха, камни)
+  // повторялись строго через 200 пикселей, и по ним было видно шаг сетки.
+  //
+  // Теперь земля собирается из трёх слоёв, и ни один не требует новых картинок:
+  //   1. сам тайл, но каждая клетка ОТРАЖЕНА и ПОВЁРНУТА по своему хешу —
+  //      одна текстура даёт восемь разных клеток, и сетка перестаёт читаться;
+  //   2. пятна соседнего биома — большие мягкие кляксы, из-за которых у
+  //      арены появляются места: мшистая низина, выжженная проплешина;
+  //   3. мелочь под ногами — камешки, трещины, споровая крошка, тропинки.
+  // Всё привязано к координатам мира через хеш клетки, поэтому одно и то же
+  // место выглядит одинаково, сколько бы раз игрок туда ни вернулся.
   drawGround(renderer,runTime){
     const c=renderer.camera, ctx=renderer.ctx;
     const biome=this.biome(runTime);
@@ -66,27 +94,207 @@ export class MapSystem {
       renderer.drawMyceliumVeins(); renderer.drawGrid();
       return;
     }
-    if(this.patternKey!==biome.tile){
-      this.pattern=ctx.createPattern(img,"repeat");
-      this.patternKey=biome.tile;
-    }
-    if(!this.pattern) return;
     // Земля есть только внутри арены — за границей пустота
     const x0=Math.max(c.x-1,WORLD.minX), y0=Math.max(c.y-1,WORLD.minY);
     const x1=Math.min(c.x+c.w+1,WORLD.maxX), y1=Math.min(c.y+c.h+1,WORLD.maxY);
-    if(x1<=x0||y1<=y0) return;
     ctx.fillStyle=CONFIG.world.voidColor;
     ctx.fillRect(c.x-1,c.y-1,c.w+2,c.h+2);
-    // Масштабируем холст, чтобы тайл лёг нужного размера; координаты делим
-    // на тот же множитель — на экране позиция не съезжает.
-    const s=CONFIG.map.tileSize/img.width;
+    if(x1<=x0||y1<=y0) return;
+
     ctx.save();
-    ctx.scale(s,s);
-    ctx.fillStyle=this.pattern;
-    ctx.fillRect(x0/s,y0/s,(x1-x0)/s,(y1-y0)/s);
+    ctx.beginPath(); ctx.rect(x0,y0,x1-x0,y1-y0); ctx.clip();
+    this.drawTiles(ctx,img,x0,y0,x1,y1);
+    this.drawPatches(renderer,ctx,biome,x0,y0,x1,y1);
+    this.drawTrails(ctx,x0,y0,x1,y1);
+    this.drawMottle(ctx,x0,y0,x1,y1);
     ctx.restore();
+
+    // Тинт кладётся ПОВЕРХ всех слоёв земли, включая тропы. Иначе тропа
+    // рисуется по уже затемнённой земле и выглядит бежевой наклейкой, а не
+    // протоптанным местом.
     ctx.fillStyle=biome.tint;
     ctx.fillRect(x0,y0,x1-x0,y1-y0);
+  }
+
+  // Слой 1. Тайлы с разворотом по хешу клетки.
+  //
+  // Тайл рисуется на полпикселя внахлёст (OVERLAP): при дробном зуме соседние
+  // клетки иначе расходятся на субпиксель, и по стыкам идёт сетка тонких
+  // тёмных швов — ровно то, от чего мы уходим.
+  drawTiles(ctx,img,x0,y0,x1,y1){
+    const T=CONFIG.map.tileSize, OVERLAP=0.75;
+    const gx0=Math.floor(x0/T), gx1=Math.floor((x1-0.001)/T);
+    const gy0=Math.floor(y0/T), gy1=Math.floor((y1-0.001)/T);
+    for(let gx=gx0;gx<=gx1;gx++){
+      for(let gy=gy0;gy<=gy1;gy++){
+        const h=hash2(gx,gy);
+        ctx.save();
+        ctx.translate(gx*T+T/2,gy*T+T/2);
+        // Поворот кратно 90° и отражение: восемь вариантов из одной картинки.
+        // Текстура земли бесшовная и «без верха», поэтому повороты законны.
+        ctx.rotate((h&3)*Math.PI/2);
+        if(h&4) ctx.scale(-1,1);
+        ctx.drawImage(img,-T/2-OVERLAP,-T/2-OVERLAP,T+OVERLAP*2,T+OVERLAP*2);
+        ctx.restore();
+      }
+    }
+  }
+
+  // Слой 2. Пятна соседнего биома — чтобы у арены были МЕСТА, а не ровное
+  // покрытие. Пятно рисуется текстурой другого биома через мягкую круглую
+  // маску, поэтому у него нет ни контура, ни узнаваемой формы.
+  drawPatches(renderer,ctx,biome,x0,y0,x1,y1){
+    const M=CONFIG.map, P=M.patch;
+    if(!P||P.chance<=0) return;
+    const list=M.biomes, cell=P.cell;
+    const other=list[(list.indexOf(biome)+P.from)%list.length];
+    const img=renderer.loader?.getImage(other.tile);
+    if(!img||!img.width) return;
+    const gx0=Math.floor((x0-cell)/cell), gx1=Math.floor(x1/cell);
+    const gy0=Math.floor((y0-cell)/cell), gy1=Math.floor(y1/cell);
+    for(let gx=gx0;gx<=gx1;gx++){
+      for(let gy=gy0;gy<=gy1;gy++){
+        const h=hash2(gx+7001,gy-3301);
+        if((h%1000)/1000>P.chance) continue;
+        const cx=gx*cell+(h>>>3)%cell, cy=gy*cell+(h>>>11)%cell;
+        const r=P.radius*(0.6+((h>>>19)%100)/125);
+        if(cx+r<x0||cx-r>x1||cy+r<y0||cy-r>y1) continue;
+        // Пятно уже готово с растушёванным краем — просто кладём сверху
+        const layer=this.patchLayer(img,r,h);
+        if(layer) ctx.drawImage(layer,cx-r,cy-r,r*2,r*2);
+      }
+    }
+  }
+
+  // Готовый кружок текстуры с растушёванным краем. Считается один раз на
+  // размер и кладётся в кэш: собирать маску каждый кадр для каждого пятна —
+  // это десятки градиентов и композитных операций в кадре.
+  patchLayer(img,r,h){
+    const P=CONFIG.map.patch;
+    const key=img.src+"|"+Math.round(r)+"|"+(h&7);
+    if(!this._patchCache) this._patchCache=new Map();
+    let cv=this._patchCache.get(key);
+    if(cv) return cv;
+    if(this._patchCache.size>48) this._patchCache.clear();
+    const size=Math.max(8,Math.round(r*2));
+    cv=document.createElement("canvas");
+    cv.width=cv.height=size;
+    const g2=cv.getContext("2d");
+    const T=CONFIG.map.tileSize;
+    g2.save();
+    g2.translate(size/2,size/2);
+    g2.rotate((h&3)*Math.PI/2);
+    const n=Math.ceil(size/T)+1;
+    for(let i=-n;i<=n;i++)
+      for(let j=-n;j<=n;j++)
+        g2.drawImage(img,i*T-T/2,j*T-T/2,T+1,T+1);
+    g2.restore();
+    // Растушёвка края
+    g2.globalCompositeOperation="destination-in";
+    const g=g2.createRadialGradient(size/2,size/2,size*0.08,size/2,size/2,size/2);
+    g.addColorStop(0,`rgba(0,0,0,${P.alpha})`);
+    g.addColorStop(0.6,`rgba(0,0,0,${P.alpha*0.6})`);
+    g.addColorStop(1,"rgba(0,0,0,0)");
+    g2.fillStyle=g;
+    g2.fillRect(0,0,size,size);
+    this._patchCache.set(key,cv);
+    return cv;
+  }
+
+  // Слой 3. КРУПНЫЕ ПЯТНА СВЕТА И ТЕНИ. Земля здесь нарисована очень плотно —
+  // мох, грибы, жилы мицелия в каждом пикселе, — и мелкая процедурная крошка
+  // (камешки, трещины, споровая пыль) на ней не читается вообще: пробовал,
+  // на скриншоте её не видно даже без темноты и тинта. Поэтому разнообразие
+  // добавляется на масштабе БОЛЬШЕ, чем детали самой текстуры: медленные
+  // светлые и тёмные пятна размером в пол-экрана. Они дают ощущение рельефа —
+  // низина, пригорок, — и стоят по паре градиентов на кадр.
+  drawMottle(ctx,x0,y0,x1,y1){
+    const M=CONFIG.map.mottle;
+    if(!M||M.cell<=0) return;
+    const cell=M.cell;
+    const gx0=Math.floor((x0-cell)/cell), gx1=Math.floor(x1/cell);
+    const gy0=Math.floor((y0-cell)/cell), gy1=Math.floor(y1/cell);
+    ctx.save();
+    for(let gx=gx0;gx<=gx1;gx++){
+      for(let gy=gy0;gy<=gy1;gy++){
+        const h=hash2(gx+4409,gy-8821);
+        const cx=gx*cell+(h>>>3)%cell, cy=gy*cell+(h>>>13)%cell;
+        const r=M.radius*(0.55+((h>>>21)%100)/110);
+        if(cx+r<x0||cx-r>x1||cy+r<y0||cy-r>y1) continue;
+        const dark=(h&1)===0;
+        const a=M.alpha*(0.5+((h>>>7)%100)/200);
+        const g=ctx.createRadialGradient(cx,cy,0,cx,cy,r);
+        g.addColorStop(0,(dark?M.darkColor:M.lightColor).replace("$A",a.toFixed(3)));
+        g.addColorStop(1,(dark?M.darkColor:M.lightColor).replace("$A","0"));
+        ctx.fillStyle=g;
+        ctx.fillRect(cx-r,cy-r,r*2,r*2);
+      }
+    }
+    ctx.restore();
+  }
+
+  // ТРОПИНКИ. Несколько длинных протоптанных полос через всю арену: они
+  // задают направление и не дают земле выглядеть равномерным ковром. Мир
+  // конечный, поэтому маршруты считаются ОДИН раз и потом только рисуются.
+  trails(){
+    if(this._trails) return this._trails;
+    const T=CONFIG.map.trail, out=[];
+    if(!T||T.count<=0){ this._trails=out; return out; }
+    for(let i=0;i<T.count;i++){
+      const h=hash2(i*7919,i*104729);
+      // Старт у случайного края, дальше — случайное блуждание поперёк арены
+      const vertical=(h&1)===1;
+      let x=vertical?WORLD.minX+(h>>>3)%CONFIG.world.width:WORLD.minX-40;
+      let y=vertical?WORLD.minY-40:WORLD.minY+(h>>>3)%CONFIG.world.height;
+      let a=vertical?Math.PI/2:0;
+      const pts=[[x,y]];
+      const steps=Math.ceil((vertical?CONFIG.world.height:CONFIG.world.width)/T.step)+2;
+      for(let s=0;s<steps;s++){
+        const hh=hash2(i*131+s,s*977);
+        a+=((hh%100)/100-0.5)*T.wander;
+        x+=Math.cos(a)*T.step; y+=Math.sin(a)*T.step;
+        pts.push([x,y]);
+      }
+      // Габариты маршрута считаем сразу: проверять их в каждом кадре по всем
+      // точкам — это тысячи сравнений на ровном месте
+      let minX=1e9,maxX=-1e9,minY=1e9,maxY=-1e9;
+      for(const [px,py] of pts){
+        if(px<minX) minX=px; if(px>maxX) maxX=px;
+        if(py<minY) minY=py; if(py>maxY) maxY=py;
+      }
+      const width=T.width*(0.7+((h>>>13)%100)/160);
+      out.push({ pts, width,
+                 minX:minX-width, maxX:maxX+width,
+                 minY:minY-width, maxY:maxY+width });
+    }
+    this._trails=out;
+    return out;
+  }
+
+  // Рисуется как слой ЗЕМЛИ, до тинта: тропа поверх затемнения выглядит
+  // бежевой полосой, наклеенной сверху, а под ним — вытоптанной землёй.
+  drawTrails(ctx,x0,y0,x1,y1){
+    const T=CONFIG.map.trail;
+    if(!T||T.count<=0) return;
+    ctx.save();
+    ctx.lineCap="round"; ctx.lineJoin="round";
+    for(const tr of this.trails()){
+      // Грубая отбраковка: маршрут тянется через всю арену, а в кадр попадает
+      // от силы пара его звеньев
+      if(tr.maxX<x0||tr.minX>x1||tr.maxY<y0||tr.minY>y1) continue;
+      // Три обводки одна в другой: широкая размытая «утоптанность», полоса
+      // плотнее и узкая тёмная колея. Одна линия читается как нарисованная
+      // мазком, три — как место, по которому ходят.
+      for(const [k,color] of [[1,T.color],[0.62,T.color],[0.22,T.coreColor]]){
+        ctx.strokeStyle=color;
+        ctx.lineWidth=tr.width*k;
+        ctx.beginPath();
+        ctx.moveTo(tr.pts[0][0],tr.pts[0][1]);
+        for(let i=1;i<tr.pts.length;i++) ctx.lineTo(tr.pts[i][0],tr.pts[i][1]);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
   }
 
   // Граница арены: не стена, а сгущающийся мрак. Рисуется поверх земли и
@@ -190,14 +398,19 @@ export class MapSystem {
     dc.fillRect(0,0,w,h);
 
     dc.globalCompositeOperation="destination-out";
+    // Радиусы света заданы в ЭКРАННЫХ пикселях эталонного кадра, а холст
+    // теперь любой: на телефоне он меньше, на большом мониторе больше.
+    // Пересчитываем через зум — тогда круг света всегда накрывает одинаковый
+    // кусок МИРА, и «видно на два шага вокруг» не зависит от размера окна.
+    const k=cam.zoom/CONFIG.camera.zoom;
     // Круг света дышит — иначе он выглядит трафаретом, приклеенным к игроку
     const pulse=Math.sin(this.tick*D.pulseSpeed)*(D.pulse||0);
     const p=cam.toScreen(player.x,player.y);
-    this.cutLight(dc,p.x,p.y,D.playerRadius+pulse,D.playerCore);
+    this.cutLight(dc,p.x,p.y,(D.playerRadius+pulse)*k,D.playerCore);
     for(const d of this.visible){
       if(!d.def.glow) continue;
       const s=cam.toScreen(d.x,d.y-d.w*0.3);
-      this.cutLight(dc,s.x,s.y,D.propRadius*(d.w/(d.def.width||d.w)),0.15);
+      this.cutLight(dc,s.x,s.y,D.propRadius*(d.w/(d.def.width||d.w))*k,0.15);
     }
 
     renderer.ctx.save();

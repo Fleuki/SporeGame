@@ -15,12 +15,40 @@ import { MapSystem } from "./systems/mapSystem.js";
 import { LootSystem } from "./systems/lootSystem.js";
 
 const canvas=document.getElementById("gameCanvas");
-canvas.width=CONFIG.screen.width; canvas.height=CONFIG.screen.height;
 
+// РАЗМЕР ХОЛСТА. Раньше он был прибит гвоздями: 900x700 всегда, а CSS потом
+// растягивал результат под окно. На телефоне это давало сразу две беды.
+// В альбомной ориентации картинка 900x700 масштабировалась в 844x390 —
+// нецелое дробное сжатие пиксель-арта, отсюда «размазывается». В портретной
+// холст по ширине упирался в экран и занимал треть высоты, а остальное было
+// пустотой.
+//
+// Теперь холст занимает всё окно, а видимая ПЛОЩАДЬ мира держится постоянной
+// (см. CONFIG.camera) — поэтому поворот телефона меняет форму кадра, но не
+// сложность.
+function fitCanvas(){
+  const cssW=Math.max(240,Math.round(canvas.clientWidth||window.innerWidth));
+  const cssH=Math.max(240,Math.round(canvas.clientHeight||window.innerHeight));
+  // Плотность отрисовки: экран Retina даёт резкий пиксель-арт, но платить за
+  // это четырьмя миллионами пикселей в кадре мы не готовы
+  const dpr=Math.min(window.devicePixelRatio||1,
+                     Math.sqrt(CONFIG.maxCanvasPixels/(cssW*cssH)));
+  const w=Math.round(cssW*dpr), h=Math.round(cssH*dpr);
+  if(canvas.width!==w||canvas.height!==h){ canvas.width=w; canvas.height=h; }
+  // Площадь кадра в мировых единицах фиксирована эталоном
+  const refArea=(CONFIG.screen.width/CONFIG.camera.zoom)*
+                (CONFIG.screen.height/CONFIG.camera.zoom);
+  const zoom=Math.min(CONFIG.camera.maxZoom,
+             Math.max(CONFIG.camera.minZoom,Math.sqrt(w*h/refArea)));
+  return {w,h,zoom};
+}
+
+const fit=fitCanvas();
 const loader=new AssetLoader();
 const audio=new AudioManager(loader);
 const input=new InputManager(canvas);
-const camera=new Camera(CONFIG.screen.width,CONFIG.screen.height,CONFIG.camera.zoom);
+const camera=new Camera(fit.w,fit.h,fit.zoom);
+input.scaleTo(fit.w,fit.h);
 const renderer=new Renderer(canvas);
 renderer.loader=loader; renderer.camera=camera;
 const particles=new ParticleSystem();
@@ -38,6 +66,21 @@ input.onRestartPress=()=>{ if(gameOver) init(); };
 input.onPausePress=()=>{ if(!gameOver&&!waitingForUpgrade) paused=!paused; };
 
 (async()=>{ await loader.loadAll(CONFIG.assets); })();
+
+// Поворот телефона, смена размера окна, появление адресной строки — всё это
+// приходит сюда. Камеру пересобираем и сразу центрируем на игроке: иначе
+// после поворота окно остаётся сдвинутым на полкадра.
+function onResize(){
+  const f=fitCanvas();
+  camera.resize(f.w,f.h,f.zoom);
+  input.scaleTo(f.w,f.h);
+  if(player) camera.centerOn(player);
+}
+window.addEventListener("resize",onResize);
+window.addEventListener("orientationchange",()=>setTimeout(onResize,120));
+// visualViewport ловит то, чего не ловит resize: скрытие панели браузера на
+// мобильных меняет высоту окна без события resize в части браузеров
+window.visualViewport?.addEventListener("resize",onResize);
 
 let player,enemies,projectiles,spawnSystem,gameOver,paused,waitingForUpgrade;
 let runTime=0;   // секунды с начала забега, идут только пока игра не на паузе
@@ -226,7 +269,7 @@ function drawHurtVignette(){
   const k=player.hurtFlash>0?player.hurtFlash/12
          :(player.sporeLevel>=CONFIG.sporeSystem.thresholds.critical?0.35:0);
   if(k<=0) return;
-  const ctx=renderer.ctx, w=CONFIG.screen.width, h=CONFIG.screen.height;
+  const ctx=renderer.ctx, w=canvas.width, h=canvas.height;
   const g=ctx.createRadialGradient(w/2,h/2,Math.min(w,h)*0.28,w/2,h/2,Math.max(w,h)*0.62);
   g.addColorStop(0,"rgba(255,40,60,0)");
   g.addColorStop(1,`rgba(255,40,60,${0.55*k})`);
@@ -239,7 +282,7 @@ function draw(){
 
   // --- мировой слой: всё внутри begin/end сдвигается камерой ---
   renderer.begin();
-  map.drawGround(renderer,runTime);           // земля текущего биома
+  map.drawGround(renderer,runTime);           // земля, тропы и пятна биомов
   map.drawDecor(renderer);                    // пни и телеги под сущностями
   map.drawEdge(renderer);                     // мрак на границе арены
   loot.draw(renderer);
@@ -261,8 +304,13 @@ function draw(){
 
   if(paused&&!waitingForUpgrade&&!gameOver){
     renderer.drawOverlay(0.55);
-    renderer.drawText("ПАУЗА",CONFIG.screen.width/2,CONFIG.screen.height/2,{font:"bold 46px monospace",color:"#00d4aa",align:"center"});
-    renderer.drawText("Esc — продолжить",CONFIG.screen.width/2,CONFIG.screen.height/2+40,{font:"16px monospace",color:"#8a8a8a",align:"center"});
+    // Надписи масштабируются вместе с холстом: на телефоне холст заметно
+    // меньше 900 пикселей, и кегль в 46px занял бы половину экрана
+    const k=Math.min(1.4,Math.max(0.55,canvas.width/CONFIG.screen.width));
+    renderer.drawText("ПАУЗА",canvas.width/2,canvas.height/2,
+      {font:"bold "+Math.round(46*k)+"px monospace",color:"#00d4aa",align:"center"});
+    renderer.drawText("Esc — продолжить",canvas.width/2,canvas.height/2+40*k,
+      {font:Math.round(16*k)+"px monospace",color:"#8a8a8a",align:"center"});
   }
 
   // Экран поражения рисует #gameOverScreen из index.html. Раньше здесь же
