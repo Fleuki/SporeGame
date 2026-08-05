@@ -149,9 +149,17 @@ Setting: a dark post-apocalyptic world swallowed by giant mutated fungi.
 Everything is grimy, damp and muted; the only bright light comes from
 glowing fungus. Grim but not gory.
 
-Fully transparent background, nothing behind the subject, no ground plane,
-no cast shadow, no border, no frame, no text, no watermark, no labels.
+Solid uniform pure magenta background #FF00FF, absolutely flat, no gradient,
+no texture, no shadow on the background. Do NOT draw a transparency
+checkerboard pattern, no grey and white squares, no chequered backdrop.
+Nothing behind the subject, no ground plane, no cast shadow, no border,
+no frame, no text, no watermark, no labels.
 ```
+
+**В этом блоке раньше стояло «Fully transparent background».** Именно эта
+строка и приводила к нарисованной шахматке — см. пункт 2 выше. Просить
+прозрачность бесполезно: модель рисует то, КАК прозрачность выглядит.
+Магента же снимается точно, скриптом `tools/cut_key.py`.
 
 ---
 
@@ -587,7 +595,7 @@ sprite: "projectile", frame: 256, display: 32, glow: "#00d4aa",
 ```
 [БАЗА СТИЛЯ]
 
-A single centred object on transparent background, 256x256 pixels, one
+A single centred object on solid magenta #FF00FF background, 256x256 pixels, one
 frame only, no grid, no sheet.
 
 Subject: a thrown alchemist's vial seen from above, flying to the RIGHT
@@ -614,7 +622,7 @@ streams off behind it to the left.
 ```
 [БАЗА СТИЛЯ]
 
-A single centred object on transparent background, 256x256 pixels, one
+A single centred object on solid magenta #FF00FF background, 256x256 pixels, one
 frame only.
 
 Subject: a single sharp spore shard flying to the RIGHT, seen from above.
@@ -634,7 +642,7 @@ motion streaks, no additional fragments.
 ```
 [БАЗА СТИЛЯ]
 
-A single centred object on transparent background, 256x256 pixels, one
+A single centred object on solid magenta #FF00FF background, 256x256 pixels, one
 frame only.
 
 Subject: a barbed harpoon of hardened white mycelium flying to the RIGHT
@@ -649,7 +657,7 @@ to the left.
 ```
 [БАЗА СТИЛЯ]
 
-A single centred object on transparent background, 256x256 pixels, one
+A single centred object on solid magenta #FF00FF background, 256x256 pixels, one
 frame only.
 
 Subject: a wobbling sphere of acid green #39ff14 caustic slime flying to the
@@ -800,7 +808,7 @@ sprouting from the top`
 ```
 [БАЗА СТИЛЯ]
 
-A horizontal UI progress bar, 236x44 pixels, on transparent background.
+A horizontal UI progress bar, 236x44 pixels, on solid magenta #FF00FF background.
 A carved dark stone frame with mushroom growths and mycelium tendrils
 climbing over both ends. Inside the frame a long rectangular window filled
 edge to edge with glowing purple spore energy, bright motes and swirling
@@ -824,7 +832,7 @@ either end. No text, no numbers, no scale marks.
 ```
 [БАЗА СТИЛЯ]
 
-A single game prop object, 512x512 pixels, transparent background, seen
+A single game prop object, 512x512 pixels, solid magenta #FF00FF background, seen
 from a three-quarter top-down angle. The object stands on the ground with
 its base at the bottom edge of the image, nothing floating.
 
@@ -900,8 +908,8 @@ The puddle must not touch the edges of the cell — leave transparent margin
 on all four sides.
 
 The edge fades into the ground: the outermost pixels are thin dark wet
-staining, not a hard outline. Fully transparent everywhere outside the
-puddle and its stains.
+staining, not a hard outline. Solid magenta #FF00FF everywhere outside the
+puddle and its stains — no transparency checkerboard, no grey squares.
 
 The 4 frames are a slow bubbling loop: bubbles swell and pop in different
 places, the outline stays exactly the same in all four frames.
@@ -931,8 +939,8 @@ in the world).
 
 The frame border is exactly 96 pixels thick on all four sides. The inner
 384x384 area is COMPLETELY EMPTY and fully transparent — no texture, no
-tint, no vignette inside, nothing but transparency. Fully transparent
-outside the frame as well.
+tint, no vignette inside — fill it with solid magenta #FF00FF. Solid magenta
+outside the frame as well. Do NOT draw a transparency checkerboard.
 
 Subject: a border of damp blackened wood grown through with pale mycelium
 threads and tiny fungal caps. Wood in near-black green #0d1f15 and worn
@@ -1015,7 +1023,7 @@ No text, no letters, no numbers, no watermark, no frame, no border, no UI.
 ```
 [БАЗА СТИЛЯ]
 
-A single emblem on a fully transparent background, 512x512 pixels, seen
+A single emblem on a solid magenta #FF00FF background, 512x512 pixels, seen
 flat from the front, symmetrical along the vertical axis.
 
 Subject: a heraldic emblem for a plague-alchemist order. A gas mask with
