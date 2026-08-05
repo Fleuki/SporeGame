@@ -25,8 +25,13 @@ const RECIPES = {
   hurt:    { type:"sawtooth", f0:240,  f1:70,   dur:0.20, gain:0.14 },
   shield:  { type:"triangle", f0:900,  f1:1500, dur:0.16, gain:0.10 },
   pickup:  { type:"triangle", f0:700,  f1:1150, dur:0.07, gain:0.05 },
+  // coin никем не проигрывается: монеты убраны до магазина (ЭТАП 2).
+  // Рецепт оставлен здесь же, где его искать, когда валюта вернётся.
   coin:    { type:"square",   f0:1050, f1:1750, dur:0.09, gain:0.05 },
   levelup: { type:"triangle", seq:[523,659,784,1047], step:0.065, dur:0.16, gain:0.10 },
+  // Эволюция ствола — событие раз в забег, и звучит она длиннее и выше
+  // обычного уровня: та же мажорная лесенка, но на октаву и с оттяжкой
+  evolve:  { type:"triangle", seq:[523,784,1047,1319,1568], step:0.075, dur:0.22, gain:0.12 },
   boss:    { noise:true,      f0:180,  f1:35,   dur:0.9,  gain:0.22 },
   wave:    { type:"triangle", seq:[392,523], step:0.10, dur:0.20, gain:0.08 }
 };

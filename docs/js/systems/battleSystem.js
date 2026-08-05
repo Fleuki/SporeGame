@@ -2,8 +2,13 @@ import { CONFIG } from "../config.js";
 import { Enemy } from "../entities/enemy.js";
 import { Boss } from "../entities/boss.js";
 import { SpatialGrid } from "../core/spatialGrid.js";
-import { EnemyShot } from "../entities/projectile.js";
+import { Projectile, EnemyShot } from "../entities/projectile.js";
 import { Effect, Dissolve } from "../entities/effect.js";
+
+// Сколько живых грибниц (эволюция токсичной склянки) держим одновременно.
+// Старейшая уступает место новой: пятно живёт впятеро дольше перезарядки,
+// и без предела арена заросла бы сплошным ковром урона.
+const MAX_FIELDS = 10;
 
 // Вся боевая часть кадра: враги, снаряды, попадания, смерти, лут и опыт.
 // Раньше это был один блок на 50 строк внутри main.update() вперемешку с
@@ -18,10 +23,14 @@ export class BattleSystem {
     this._near=[];        // переиспользуемый буфер, чтобы не мусорить в GC
     this.effects=[];      // одноразовые анимации взрывов
     this.enemyShots=[];   // облака спор, выпущенные трубачами
+    this.fields=[];       // живые грибницы: пятна урона, оставшиеся на земле
     this.kills=0;         // счётчик убитых, его показывает интерфейс
   }
 
-  reset(){ this.effects.length=0; this.enemyShots.length=0; this.kills=0; }
+  reset(){
+    this.effects.length=0; this.enemyShots.length=0;
+    this.fields.length=0; this.kills=0;
+  }
 
   updateEffects(){
     for(let i=this.effects.length-1;i>=0;i--){
@@ -38,9 +47,14 @@ export class BattleSystem {
   // Попадание: вспышка, урон по области и лужа, если оружие их даёт.
   // Радиус и сила лужи берутся с учётом прокачки ИМЕННО ЭТОГО ствола
   // (p.mods), а не общих флагов игрока.
-  impact(p,enemies,camera){
+  impact(p,enemies,camera,projectiles){
     const d=p.def;
     if(d.burst) this.effects.push(new Effect(p.x,p.y,d.burst));
+    // Эволюции: грибница остаётся на земле, вулкан разбрасывает осколки.
+    // Оба живут до проверки d.area — они не «часть взрыва», а отдельное
+    // поведение ствола, и работают даже там, где взрыва нет.
+    if(d.field) this.spawnField(p);
+    if(d.cluster&&projectiles) this.spawnCluster(p,projectiles);
     if(!d.area) return;
     const radius=d.area.radius*(p.mods.areaMult||1);
     // Взрыв по области — заметное событие: его слышно и от него трясёт
@@ -55,6 +69,75 @@ export class BattleSystem {
       if(d.area.dot&&o.applyDot){
         o.applyDot(d.area.dot.dps*(p.mods.dotMult||1),d.area.dot.time);
       }
+    }
+  }
+
+  // ЖИВАЯ ГРИБНИЦА (эволюция токсичной склянки). Пятно на земле, которое
+  // жжёт всех, кто в него зайдёт. Игрока не трогает: это его собственный
+  // ствол, а не кислотная лужа с карты.
+  //
+  // Потолок в MAX_FIELDS обязателен: перезарядка эволюции 76 кадров, а живёт
+  // пятно 300 — без предела к десятой минуте арена превратилась бы в сплошной
+  // ковёр урона, и врагам оставалось бы только умирать по дороге.
+  spawnField(p){
+    const f=p.def.field;
+    if(this.fields.length>=MAX_FIELDS) this.fields.shift();
+    this.fields.push({
+      x:p.x, y:p.y,
+      r:f.radius*(p.mods.areaMult||1),
+      dps:f.dps*(p.mods.dotMult||1),
+      life:f.life, maxLife:f.life,
+      color:f.color||"#a8ff6a"
+    });
+  }
+
+  updateFields(dt){
+    for(let i=this.fields.length-1;i>=0;i--){
+      const f=this.fields[i];
+      if(--f.life<=0){ this.fields.splice(i,1); continue; }
+      for(const e of this.grid.query(f.x,f.y,f.r,[])){
+        if(e.dead||Math.hypot(e.x-f.x,e.y-f.y)>f.r+e.radius*0.5) continue;
+        e.hp-=f.dps*dt;
+      }
+      // Грибница дышит спорами — иначе пятно на земле неотличимо от текстуры
+      if(f.life%9===0){
+        const a=Math.random()*Math.PI*2, rr=Math.sqrt(Math.random())*f.r;
+        this.particles?.emitToxicTrail(f.x+Math.cos(a)*rr,f.y+Math.sin(a)*rr);
+      }
+    }
+  }
+
+  // Рисуется ПОД сущностями (см. main.draw): это земля, а не эффект поверх боя
+  drawFields(renderer){
+    const ctx=renderer.ctx;
+    for(const f of this.fields){
+      // Последняя секунда — пятно гаснет, чтобы «оно ещё жжёт или уже нет»
+      // было видно заранее
+      const k=Math.min(1,f.life/60);
+      const pulse=1+Math.sin(f.life*0.07)*0.03;
+      ctx.save();
+      ctx.globalAlpha=0.16*k;
+      renderer.drawCircle(f.x,f.y,f.r*pulse,f.color);
+      ctx.globalAlpha=0.3*k;
+      ctx.strokeStyle=f.color; ctx.lineWidth=1.6;
+      ctx.beginPath(); ctx.arc(f.x,f.y,f.r*pulse,0,Math.PI*2); ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  // ОСКОЛКИ ВУЛКАНА (эволюция зажигательной склянки). Разлетаются веером от
+  // точки взрыва и рвутся сами — по фитилю или от первого встречного.
+  // Собственного cluster у осколка нет, поэтому цепочка обрывается на нём.
+  spawnCluster(p,projectiles){
+    const c=p.def.cluster;
+    const base=Math.random()*Math.PI*2;
+    for(let i=0;i<c.count;i++){
+      const a=base+i*(Math.PI*2/c.count);
+      projectiles.push(new Projectile(
+        p.x,p.y,a,p.damage*c.damage,c.shot,
+        { areaMult:p.mods.areaMult||1, dotMult:p.mods.dotMult||1,
+          pierce:0, bounces:0 }
+      ));
     }
   }
 
@@ -87,6 +170,7 @@ export class BattleSystem {
     this.separate(enemies);
     this.updateProjectiles(projectiles,enemies,player,camera);
     this.updateEnemyShots(player,camera);
+    this.updateFields(dt);
     this.updateEffects();
 
     for(let i=enemies.length-1;i>=0;i--){
@@ -136,7 +220,8 @@ export class BattleSystem {
   updateProjectiles(projectiles,enemies,player,camera){
     for(let i=projectiles.length-1;i>=0;i--){
       const p=projectiles[i];
-      p.update();
+      // Сетка нужна только самонаводящимся снарядам — остальные её не читают
+      p.update(this.grid);
       let spent=false;   // снаряд отработал и должен исчезнуть
 
       // Кандидаты берутся из сетки — перебирать всех врагов не нужно
@@ -153,7 +238,7 @@ export class BattleSystem {
         this.showDamage(e,dmg,crit);
         this.audio?.sfx(crit?"crit":"hit");
         this.particles.emit(p.x,p.y,"#88ff88",5);
-        this.impact(p,enemies,camera);
+        this.impact(p,enemies,camera,projectiles);
 
         // ПРОБИТИЕ идёт раньше ОТСКОКА: прошивающий снаряд летит дальше по
         // прямой и в кого-то ещё врежется сам, а отскок — это уже последнее
@@ -173,7 +258,15 @@ export class BattleSystem {
         spent=true; break;
       }
 
-      if(spent||p.isOffScreen(camera)||p.life<=0) projectiles.splice(i,1);
+      const gone=p.isOffScreen(camera);
+      if(spent||gone||p.life<=0){
+        // ФИТИЛЬ. Осколок вулкана рвётся и без попадания — иначе шесть спор
+        // разлетались бы в пустоту и тихо исчезали, а «взрыв разбрасывает
+        // рвущиеся споры» превращалось бы в «иногда разбрасывает».
+        // За экраном не рвём: этого взрыва всё равно никто не увидит.
+        if(!spent&&!gone&&p.def.fuse) this.impact(p,enemies,camera,projectiles);
+        projectiles.splice(i,1);
+      }
     }
   }
 

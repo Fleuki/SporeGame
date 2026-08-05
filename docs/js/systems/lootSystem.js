@@ -14,11 +14,10 @@ export class LootSystem {
     this.particles=particles;
     this.audio=audio;
     this.items=[];
-    this.coins=0;
     this.tick=0;
   }
 
-  reset(){ this.items.length=0; this.coins=0; }
+  reset(){ this.items.length=0; }
 
   spawn(type,x,y,extra={}){
     const def=CONFIG.loot.types[type];
@@ -54,9 +53,10 @@ export class LootSystem {
       this.spawn("xp",enemy.x,enemy.y,{value:total});
     }
 
+    // Монеты отсюда убраны вместе с самой валютой: копить то, что негде
+    // потратить, — ложное обещание. Вернутся с магазином (ЭТАП 2).
     if(isBoss||Math.random()<L.antidoteChance) this.spawn("antidote",enemy.x,enemy.y);
     if(Math.random()<L.potionChance) this.spawn("potion",enemy.x,enemy.y);
-    if(isBoss||Math.random()<L.coinChance) this.spawn("coin",enemy.x,enemy.y);
   }
 
   // Возвращает true, если поднятый опыт дал уровень
@@ -110,8 +110,7 @@ export class LootSystem {
       player.reduceSpore(def.spore);
       this.particles?.emitText(it.x,it.y-12,"−"+def.spore+"% спор","#00d4aa",12);
     }
-    if(def.coin){ this.coins+=def.coin; }
-    this.audio?.sfx(def.coin?"coin":"pickup");
+    this.audio?.sfx("pickup");
     this.particles?.emit(it.x,it.y,def.particle||"#ffffff",8);
     return false;
   }

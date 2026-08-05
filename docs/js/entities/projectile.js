@@ -11,16 +11,51 @@ export class Projectile {
     this.x=x; this.y=y;
     this.vx=Math.cos(angle)*def.speed; this.vy=Math.sin(angle)*def.speed;
     this.radius=def.radius;
-    this.damage=damage; this.life=100;
+    this.damage=damage; this.life=def.life||100;
     this.angle=angle;
     this.pierceLeft=this.mods.pierce;
     this.bouncesLeft=this.mods.bounces;
     // Кого уже задели: без этого прошивающий снаряд бьёт одного и того же
     // врага каждый кадр, пока пролетает сквозь него
     this.hit=new Set();
+    // Самонаведение (эволюция «Рой игл»): цель и счётчик до её пересмотра
+    this.target=null; this.retarget=0;
   }
 
-  update(){ this.x+=this.vx; this.y+=this.vy; this.life--; }
+  // grid — сетка врагов из боевой системы. Нужна только самонаводящимся
+  // снарядам; обычные её игнорируют и летят по прямой, как летели.
+  update(grid){
+    if(this.def.homing&&grid) this.steer(grid);
+    this.x+=this.vx; this.y+=this.vy; this.life--;
+  }
+
+  // ДОВОРОТ К ЦЕЛИ. Скорость не меняется — меняется только направление, и не
+  // мгновенно, а на turn радиан за кадр. Мгновенный доворот превратил бы иглу
+  // в трассер, который попадает всегда: промах должен оставаться возможным,
+  // иначе прицел перестаёт что-либо значить вообще.
+  steer(grid){
+    const h=this.def.homing;
+    if(this.target&&(this.target.dead||this.hit.has(this.target))) this.target=null;
+    if(!this.target&&--this.retarget<=0){
+      this.retarget=h.retarget||8;
+      let best=null,bestD=h.range;
+      for(const e of grid.query(this.x,this.y,h.range,[])){
+        if(e.dead||this.hit.has(e)) continue;
+        const d=Math.hypot(e.x-this.x,e.y-this.y);
+        if(d<bestD){ bestD=d; best=e; }
+      }
+      this.target=best;
+    }
+    if(!this.target) return;
+    const want=Math.atan2(this.target.y-this.y,this.target.x-this.x);
+    let diff=(want-this.angle)%(Math.PI*2);
+    if(diff>Math.PI) diff-=Math.PI*2;
+    if(diff<-Math.PI) diff+=Math.PI*2;
+    const turn=Math.max(-h.turn,Math.min(h.turn,diff));
+    this.angle+=turn;
+    const sp=Math.hypot(this.vx,this.vy);
+    this.vx=Math.cos(this.angle)*sp; this.vy=Math.sin(this.angle)*sp;
+  }
 
   // Мир не ограничен, поэтому «за экраном» считается относительно камеры
   isOffScreen(camera){ return camera?!camera.sees(this.x,this.y,60):false; }

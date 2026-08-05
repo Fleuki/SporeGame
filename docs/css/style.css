@@ -196,12 +196,24 @@ canvas {
 /* Категория читается и словом, и цветом: «жёлтая рамка = ветка антидота»
    приходится запоминать, а подпись читается сразу */
 .upgrade-card.cat-weapon     { --cat: #ffd24a; }
+.upgrade-card.cat-evolution  { --cat: #ff5ea8; }
 .upgrade-card.cat-antidote   { --cat: #00d4aa; }
 .upgrade-card.cat-toxic      { --cat: #a8ff6a; }
 .upgrade-card.cat-incendiary { --cat: #ff7722; }
 .upgrade-card.cat-extract    { --cat: #39ff14; }
 .upgrade-card.cat-mutation   { --cat: #c58cff; }
 .upgrade-card.cat-gear       { --cat: #7fc7ff; }
+/* Эволюция выпадает раз за забег и меняет ствол целиком — она обязана
+   отличаться от соседних карточек не только оттенком рамки. Своя подложка и
+   собственное свечение, не дожидающееся наведения: карточку видно раньше,
+   чем игрок успевает прочитать заголовки. */
+.upgrade-card.cat-evolution {
+  background: linear-gradient(180deg, #3d1c33 0%, #23111d 100%);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--cat) 38%, transparent);
+}
+.upgrade-card.cat-evolution:hover {
+  background: linear-gradient(180deg, #562947 0%, #2e1727 100%);
+}
 .upgrade-card .tag {
   color: var(--cat); font-size: 9px; letter-spacing: 1.5px;
   opacity: 0.85; margin-bottom: 5px;

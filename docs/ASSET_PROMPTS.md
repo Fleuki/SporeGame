@@ -258,7 +258,12 @@ PNG с полностью непрозрачным альфа-каналом. П
 
 ## ВРАГИ
 
-### Плодовое Тело — СПРАЙТА НЕТ, рисуется кружком
+### Плодовое Тело — НОСИТ ЧУЖОЙ СПРАЙТ
+
+Кружком с глазами оно больше не рисуется, но своего листа у него так и нет:
+сейчас берётся нулевой ряд листа Материнской Капли, уменьшенный до 82. То
+есть рядовой враг — это уменьшенный босс, и босс от этого перестаёт быть
+событием.
 
 Самый нужный из всех. Медленно ползёт, не бьёт при касании, взрывается ядом
 при смерти. Должен читаться как «ходячая бомба, к которой лучше не подходить».
@@ -294,10 +299,14 @@ sprite: { key:"enemy_fruit_body", frame:256, cols:4, rows:4,
           dirRows:{up:0,right:1,down:2,left:3}, animSpeed:12, display:76 },
 ```
 
-### Мицелиевое Щупальце — СПРАЙТА НЕТ, рисуется кружком
+### Мицелиевое Щупальце — НОСИТ ЧУЖОЙ СПРАЙТ
 
-Вырастает из земли и держит игрока. Неподвижное, направления не нужны —
-хватит одного ряда из четырёх кадров.
+Сейчас это нижний ряд листа Мицелиевой Сердцевины. Неподвижное, направления
+не нужны — хватит одного ряда из четырёх кадров.
+
+Важно для позы: щупальце больше **не держит игрока, а замедляет вдвое**.
+Значит нужна не хватка, а зацеп — барбы на конце загнуты назад, к земле,
+будто тянут за ноги, а не сомкнуты в кулак.
 
 ```
 [БАЗА СТИЛЯ]
@@ -694,10 +703,15 @@ Frame 4: only a few fading sparks remain.
 только шумит. Слот `.icon-slot` из разметки убран вместе со старыми
 текстурами `bar_frame.png` / `bar_fill_*.png`.
 
-**Эмодзи в интерфейсе не осталось.** Монеты на экране итогов рисует спрайт
-`drop_coin.png`, убитых — `icon_kills.png`, оглушение босса — три искры в
-канвасе. Системный шрифт поверх пиксель-арта выглядит наклейкой и на разных
-платформах рисуется по-разному, поэтому эмодзи здесь под запретом.
+**Эмодзи в интерфейсе не осталось.** Убитых на экране итогов рисует спрайт
+`icon_kills.png`, оглушение босса — три искры в канвасе. Системный шрифт
+поверх пиксель-арта выглядит наклейкой и на разных платформах рисуется
+по-разному, поэтому эмодзи здесь под запретом.
+
+**`drop_coin.png` сейчас не используется.** Монеты убраны из игры до
+магазина между забегами (ЭТАП 2 в ROADMAP): валюта, которую негде потратить,
+обещает накопление, которого не происходит. Файл лежит на месте и рисовать
+его заново не нужно — вернётся вместе с магазином.
 
 **Курсор** (`cursor.png`) — прицел, а не гриб: 32x32, hotspot ровно в центре
 (16,16), центральная точка обязана оставаться пустой, иначе курсор закрывает
@@ -791,3 +805,230 @@ visible seam.
 Где `[БИОМ]` — например:
 `A floor of dead pine needles and black soil threaded with pale glowing
 mycelium veins and scattered tiny purple mushrooms`
+
+---
+
+# ЧТО ГЕНЕРИРОВАТЬ ДАЛЬШЕ (по приоритету)
+
+Список собран не по вкусу, а по кадрам: сняты десктоп, телефон стоймя и лёжа,
+меню прокачки, экран смерти, все четыре биома. Порядок — от «это видно
+сразу» к «это приятно».
+
+**Сначала прочти оговорку про интерфейс.** Меню и экран смерти выглядят
+чужими не из-за отсутствия картинок, а из-за того, что они нарисованы
+средствами веб-страницы: системный шрифт Courier New, скруглённые углы,
+CSS-градиенты, мягкие тени. Никакая сгенерированная рамка это не вылечит,
+пока внутри неё стоит системный шрифт. Правильный порядок такой:
+
+1. пиксельный шрифт (`.woff2` в репозиторий, `@font-face` в CSS);
+2. убрать `border-radius`, градиенты и размытые тени — в пиксель-арте всё
+   это читается как «диалог браузера поверх игры»;
+3. и только потом — рамка-картинка ниже.
+
+Шрифт даёт больше, чем любая из картинок этого раздела, и стоит один файл.
+
+---
+
+## 1. КИСЛОТНАЯ ЛУЖА — ПЕРЕГЕНЕРАЦИЯ, ЭТО ДЕФЕКТ
+
+`effects/acid_pool.png` нарисован **квадратом со скруглёнными углами**. На
+арене он и читается квадратом: посреди мха лежит жёлто-зелёная плитка с
+ровной каменной каймой по периметру. Это самая заметная неаккуратность в
+кадре — единственный прямоугольный объект в мире, где всё остальное
+органическое.
+
+Лужа рисуется `flat: true` — центром в точке, без тени. Значит форма пятна
+и есть весь силуэт, и она обязана быть неровной.
+
+```
+[БАЗА СТИЛЯ]
+
+A single horizontal strip of 4 frames, each cell 256x256 pixels, evenly
+spaced, no gaps, no cell borders. The same puddle in every frame, identical
+position and scale, only the bubbles animate.
+
+Subject: a puddle of glowing acid-green #39ff14 and toxic yellow #c4a000
+fungal slime soaked into dark forest ground, seen straight from above.
+
+CRITICAL — the shape: an irregular organic blob with a ragged, uneven,
+lopsided outline, wider on one side than the other, with two or three thin
+runnels trickling out of the edge into the surrounding soil. Absolutely NOT
+a square, NOT a rectangle, NOT a rounded square, NOT a circle, no straight
+edges anywhere, no frame or rim running around the outside, no tile border.
+The puddle must not touch the edges of the cell — leave transparent margin
+on all four sides.
+
+The edge fades into the ground: the outermost pixels are thin dark wet
+staining, not a hard outline. Fully transparent everywhere outside the
+puddle and its stains.
+
+The 4 frames are a slow bubbling loop: bubbles swell and pop in different
+places, the outline stays exactly the same in all four frames.
+```
+
+Конфиг не меняется — файл кладётся на то же место, `map.props.acid_pool`
+уже настроен (`flat: true, frames: 4`).
+
+---
+
+## 2. РАМКА ИНТЕРФЕЙСА — ОДНА КАРТИНКА НА ВСЁ МЕНЮ
+
+Одна рамка обслуживает и панель прокачки, и экран смерти, и будущий магазин:
+в CSS она растягивается через `border-image` (девятислайс), то есть углы
+остаются целыми, а стороны тянутся. Поэтому важнее красоты — **равномерность
+краёв**, иначе слайсер разрежет её криво.
+
+Цвет ветки на карточках лучше оставить за CSS (`--cat`), а рамку сделать
+нейтрально-серо-фиолетовой: одна картинка, семь оттенков поверх.
+
+```
+[БАЗА СТИЛЯ]
+
+A square ornamental UI frame, 512x512 pixels, seen flat from the front (NOT
+three-quarter, NOT top-down — this is an interface element, not an object
+in the world).
+
+The frame border is exactly 96 pixels thick on all four sides. The inner
+384x384 area is COMPLETELY EMPTY and fully transparent — no texture, no
+tint, no vignette inside, nothing but transparency. Fully transparent
+outside the frame as well.
+
+Subject: a border of damp blackened wood grown through with pale mycelium
+threads and tiny fungal caps. Wood in near-black green #0d1f15 and worn
+brown #5c3a21, mycelium threads in spore grey #8a8a8a, small caps in fungal
+purple #6b2d5c with faint bioluminescent teal #00d4aa glow in the deepest
+crevices.
+
+CRITICAL for slicing: the top and bottom edges must carry the SAME repeating
+pattern so they can be stretched horizontally without a visible break; the
+left and right edges likewise, stretched vertically. The four corners are
+the only places with a distinct larger feature — one cluster of mushroom
+caps per corner, all four corners mirrored copies of each other. Do not put
+any large unique detail in the middle of an edge.
+```
+
+CSS после генерации (файл — `assets/images/ui/frame_panel.png`):
+
+```css
+#upgradeMenu {
+  border: 24px solid transparent;       /* толщина рамки на экране */
+  border-image: url("../assets/images/ui/frame_panel.png") 96 fill repeat;
+  border-radius: 0;                     /* скругления убрать обязательно */
+  background: rgba(8,16,12,0.94);
+}
+```
+
+`96` — та самая толщина из промпта в пикселях исходника. Если модель
+нарисует толще или тоньше, поменяй здесь число, а не картинку.
+
+---
+
+## 3. ЭКРАН СМЕРТИ — ФОНОВАЯ ИЛЛЮСТРАЦИЯ
+
+Сейчас это самый пустой кадр в игре: две строки системным шрифтом на ровной
+зелёной заливке. Между тем это единственный экран, который игрок разглядывает
+не в панике, — и единственное место, где картинке дают на себя посмотреть.
+
+Текст в промпт НЕ просим: модели корёжат кириллицу, а буквы всё равно
+рисуются шрифтом поверх.
+
+```
+Pixel art illustration, 16-bit SNES era style, 1024x576 pixels, landscape.
+Chunky readable pixels, hard edges, no anti-aliasing, no modern soft
+shading.
+
+Scene: an abandoned alchemist's gas mask lying half-sunk in black wet mud,
+seen up close from a low angle. The mask's round glass eye-lenses are
+cracked and dark. Fungal growth has taken it over: pale mycelium threads
+sew the mask to the ground, and a cluster of glowing purple #6b2d5c and
+bioluminescent teal #00d4aa mushrooms has burst out through the filter
+snout and the eye sockets. Spore dust drifts through the air.
+
+Colour palette, use only these: deep forest green #1a3d2e, near-black green
+#0d1f15, fungal purple #6b2d5c, toxic yellow #c4a000, bioluminescent teal
+#00d4aa, worn leather brown #5c3a21, gas-mask black #2a2a2a, spore grey
+#8a8a8a.
+
+Composition: the mask sits in the LOWER LEFT of the frame. The upper right
+two thirds are near-black empty gloom with only faint drifting spores —
+text will be placed there, so that area must stay dark, quiet and free of
+detail. Very dark overall, the mushrooms are the only light source.
+
+No text, no letters, no numbers, no watermark, no frame, no border, no UI.
+```
+
+Кладётся в `assets/images/ui/screen_death.png`, вешается фоном на
+`#gameOverScreen` (`background-size: cover`), поверх — затемнение и текст.
+
+---
+
+## 4. ЭМБЛЕМА ДЛЯ СТАРТОВОГО ЭКРАНА
+
+Стартового экрана пока нет вовсе (ЭТАП 4 в `ROADMAP.md`) — страница
+открывается сразу в бой. Когда он появится, ему нужна одна картинка.
+
+**Название — НЕ картинкой.** Кириллицу модели пишут с ошибками почти всегда:
+получишь «ГРИБНОЙ СУМPAK» и не заметишь. Слова ставим шрифтом, картинкой —
+только герб над ними.
+
+```
+[БАЗА СТИЛЯ]
+
+A single emblem on a fully transparent background, 512x512 pixels, seen
+flat from the front, symmetrical along the vertical axis.
+
+Subject: a heraldic emblem for a plague-alchemist order. A gas mask with
+round glass lenses and a filter snout, seen head-on, crowned by a single
+large mushroom cap growing straight out of the top of the skull. Behind the
+mask, two glass vials crossed like swords, one filled with bioluminescent
+teal #00d4aa liquid, one with toxic yellow #c4a000. Pale mycelium threads
+spread out behind everything like rays.
+
+Grim, worn, damp. Faint teal glow from the vials and from the gills under
+the mushroom cap. No text, no letters, no ribbon, no banner, no scroll.
+```
+
+---
+
+## 5. ДВА ВРАГА, КОТОРЫЕ НОСЯТ ЧУЖИЕ СПРАЙТЫ
+
+Плодовое Тело и Мицелиевое Щупальце рисуются **рядами из листов боссов**
+(`mother_cap` ряд 0 и `mycelium_heart` ряд 3). Это лучше кружка с глазами,
+которым они были раньше, но платится тем, что рядовой враг выглядит уменьшенным
+боссом — а босс от этого перестаёт быть событием.
+
+Промпты на обоих готовы выше, в разделе «ВРАГИ». Единственная правка к
+описанию Щупальца: оно больше **не держит игрока, а замедляет вдвое** —
+значит и поза нужна не «схватило», а «вцепилось и тянет»: барбы на конце
+загнуты назад, к земле, а не сомкнуты в кулак.
+
+---
+
+## 6. ЭЛИТА — ЕЁ НЕ ВИДНО
+
+Усиленный враг (`isMutated`) уже есть в коде: +50% HP, +30% урона, вокруг
+него рисуется золотая аура. И это всё — сам спрайт остаётся прежним, поэтому
+в толпе элита отличается только оттенком свечения, которое в темноте теряется
+среди грибов и луж.
+
+Отдельный лист рисовать не надо: элита обязана быть УЗНАВАЕМОЙ ВЕРСИЕЙ того
+же врага, а не новым существом. Дешевле и правильнее — нарост, который
+рисуется ПОВЕРХ любого спрайта в его координатах:
+
+```
+[БАЗА СТИЛЯ]
+
+A single horizontal strip of 4 frames, each cell 128x128 pixels, evenly
+spaced, no gaps, no borders.
+
+Subject: a crown of parasitic growth that will be drawn on top of another
+creature — a ring of five twisted fungal spines erupting outward, dripping
+toxic yellow #c4a000 light, with a haze of golden spores around them. The
+centre of the image is COMPLETELY EMPTY and transparent: only the ring of
+spines near the edges of the cell is drawn, because the creature itself
+shows through the middle.
+
+The 4 frames are a pulsing loop: the spines flare brighter and dim, spores
+drift outward.
+```
+

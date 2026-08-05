@@ -116,8 +116,20 @@ function init(){
 }
 
 window.addEventListener("upgradeChosen",(e)=>{
-  upgradeSystem.applyUpgrade(e.detail,player); waitingForUpgrade=false; paused=false;
+  const card=upgradeSystem.applyUpgrade(e.detail,player);
+  if(card?.category==="evolution") announceEvolution(card);
+  waitingForUpgrade=false; paused=false;
 });
+
+// ЭВОЛЮЦИЯ СТВОЛА. Единственная карточка за забег, после которой оружие в
+// руках у игрока становится ДРУГИМ, — и она обязана прозвучать иначе, чем
+// «+12% урона». Собрано из того же, чем говорит остальная игра: искры,
+// всплывающий текст, толчок камеры и отдельный звук.
+function announceEvolution(card){
+  particles.emit(player.x,player.y,"#ffd24a",34,1.5,6);
+  particles.emitText(player.x,player.y-player.radius-16,card.title,"#ffd24a",19);
+  audio.sfx("evolve"); camera.shake(CONFIG.feel.shakeLevel*1.6,16);
+}
 
 function update(dt){
   if(gameOver||paused||waitingForUpgrade) return;
@@ -205,11 +217,12 @@ function openUpgradeMenu(){
 
 function endGame(){
   player.hp=0; gameOver=true; dying=0;
-  // Убитые и монеты переехали сюда с игрового экрана: в бою на них не
-  // смотрят, а на экране итогов они как раз и есть итог
+  // Счётчик убитых переехал сюда с игрового экрана: в бою на него не
+  // смотрят, а на экране итогов он как раз и есть итог.
+  // Монет здесь больше нет — валюта убрана до магазина (ЭТАП 2 в ROADMAP):
+  // цифра, которую некуда потратить, обещает накопление, которого не будет.
   document.getElementById("finalLevel").textContent=player.level;
   document.getElementById("finalKills").textContent=battle.kills;
-  document.getElementById("finalCoins").textContent=loot.coins;
   document.getElementById("finalTime").textContent=formatTime(runTime);
   document.getElementById("gameOverScreen").classList.remove("hidden");
   // Боевой HUD на экране итогов не нужен: таймер и шкалы просвечивали
@@ -299,6 +312,7 @@ function draw(){
   map.drawGround(renderer,runTime);           // земля, тропы и пятна биомов
   map.drawDecor(renderer);                    // пни и телеги под сущностями
   map.drawEdge(renderer);                     // мрак на границе арены
+  battle.drawFields(renderer);                // живые грибницы лежат на земле
   loot.draw(renderer);
   for(const e of enemies) e.draw(renderer);
   for(const p of projectiles) p.draw(renderer);
@@ -344,6 +358,11 @@ if(new URLSearchParams(location.search).has("debug")){
     get player(){ return player; },
     get enemies(){ return enemies; },
     get spawn(){ return spawnSystem; },
+    // Колода прокачки. Проверить, что эволюция появляется на пятой карточке
+    // ветки, иначе как забегом до десятого уровня нельзя, а забег до
+    // десятого уровня — это десять минут на одну проверку одного числа.
+    upgrades:upgradeSystem,
+    battle,
     // Ввод: без него нельзя проверить джойстик иначе как пальцем по телефону
     input,
     // Живой конфиг: правки видны со следующего кадра, без перезагрузки.
@@ -361,7 +380,11 @@ if(new URLSearchParams(location.search).has("debug")){
       pipers:enemies.filter(e=>!e.dead&&e.typeKey==="spore_piper").length,
       enemyShots:battle.enemyShots.length,
       drops:loot.items.length,
-      damage:player.damage, weapons:player.weapons.length
+      fields:battle.fields.length,
+      damage:player.damage,
+      // Не просто «сколько стволов», а какие именно: эволюция подменяет
+      // описание ствола, и по числу её не видно
+      weapons:player.weapons.map(w=>w.def.key)
     })
   };
 }
