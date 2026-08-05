@@ -114,6 +114,68 @@ no cast shadow, no border, no frame, no text, no watermark, no labels.
 
 ---
 
+## ИГРОК
+
+### Лист БЕГА — САМЫЙ НУЖНЫЙ ИЗ ВСЕГО СПИСКА
+
+Сейчас в игре один лист алхимика, `alchemist_purple.png`. Он даёт четыре
+направления, но **шага в нём нет**: кадры внутри ряда — это лёгкое переминание
+плюс движение рук, а ноги закрыты плащом и почти не двигаются. Поэтому бег и
+не читается как бег.
+
+Движок уже готов принять отдельный лист бега. Положи файл как
+`assets/images/player/alchemist_run.png` — и он подхватится сам, без правок
+кода: на ходу играет он, на месте остаётся старый лист поз. Файла нет — игра
+работает как сейчас.
+
+**Формат жёсткий** (задан в `CONFIG.player.walk*`): сетка **6 колонок x 4
+ряда**, кадр **256x256**, итоговый файл **1536x1024**.
+
+Порядок рядов ОБЯЗАН совпадать с листом поз, иначе персонаж снова побежит
+влево, а смотреть будет вправо. Порядок такой:
+
+| ряд | что в нём |
+|-----|-----------|
+| 0   | лицом НА КАМЕРУ (герой бежит вниз, на зрителя) |
+| 1   | в три четверти ВПРАВО (маска и хобот смотрят вправо) |
+| 2   | в три четверти ВЛЕВО (зеркало ряда 1) |
+| 3   | СО СПИНЫ (виден капюшон, герой бежит вверх) |
+
+Внимание: у листа поз порядок именно такой — 1 вправо, 2 влево. В коде
+полгода стояло наоборот, и это был баг. Сверяй по картинке, а не по памяти.
+
+```
+[БАЗА СТИЛЯ]
+
+A 6x4 sprite sheet, 24 frames in a strict even grid, each cell 256x256
+pixels, character centred in every cell, identical scale and identical
+ground line in every cell.
+
+Subject: the same plague-alchemist as the reference — a short, stocky figure
+in a heavy brown hooded cloak over a dusty violet tunic, a round riveted gas
+mask with two green glass lenses and a ribbed hose curling down from the
+snout, a belt of glowing violet potion flasks, a brass-and-bone charm
+hanging at the hip.
+
+All four rows are a RUN CYCLE, six frames each: contact, down, passing,
+lift, contact on the other foot, passing back. The legs must clearly
+alternate and the cloak must swing behind the direction of travel — this is
+the whole point of the sheet. Slight vertical bob between frames, the hose
+and the flasks trail one frame behind the body.
+
+Rows top to bottom:
+  row 1 - running toward the camera, face and lenses fully visible
+  row 2 - running to the RIGHT in three-quarter view, mask and hose to the right
+  row 3 - running to the LEFT in three-quarter view, exact mirror of row 2
+  row 4 - running away from the camera, only the hood and cloak back visible
+```
+
+Если модель не тянет 24 кадра за раз — генерируй по одному ряду (лист
+1536x256) и склей четыре полосы в столбик. Главное, чтобы масштаб и линия ног
+совпадали: иначе персонаж будет прыгать при смене направления.
+
+---
+
 ## ВРАГИ
 
 ### Плодовое Тело — СПРАЙТА НЕТ, рисуется кружком

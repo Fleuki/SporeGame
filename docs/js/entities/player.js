@@ -4,17 +4,26 @@ import { Entity } from "./entity.js";
 import { WORLD } from "../core/camera.js";
 import { Weapon } from "./weapon.js";
 
-// Ряды листа алхимика: 0 — на камеру, 1 — влево, 2 — вправо, 3 — со спины
+// РЯДЫ ЛИСТА АЛХИМИКА, как они нарисованы на самом деле:
+//   0 — лицом на камеру (вниз)
+//   1 — три четверти, маска и хобот смотрят ВПРАВО
+//   2 — три четверти, маска и хобот смотрят ВЛЕВО
+//   3 — со спины, капюшон (вверх)
+//
+// Раньше здесь стояло «1 — влево, 2 — вправо», то есть ровно наоборот, и
+// персонаж бежал влево, а смотрел вправо. Комментарий никто не сверял с
+// картинкой — теперь сверено покадрово, см. ASSET_PROMPTS.md.
 function angleToRow(angle){
-  if(angle>=-Math.PI/4 && angle<Math.PI/4) return 2;
-  if(angle>=Math.PI/4 && angle<3*Math.PI/4) return 0;
-  if(angle>=-3*Math.PI/4 && angle<-Math.PI/4) return 3;
-  return 1;
+  if(angle>=-Math.PI/4 && angle<Math.PI/4) return 1;        // вправо
+  if(angle>=Math.PI/4 && angle<3*Math.PI/4) return 0;       // вниз
+  if(angle>=-3*Math.PI/4 && angle<-Math.PI/4) return 3;     // вверх
+  return 2;                                                 // влево
 }
 
 // Центральный угол каждого ряда — от него считается, насколько далеко
-// «уехало» желаемое направление, прежде чем разрешить разворот
-const ROW_ANGLE=[Math.PI/2, Math.PI, 0, -Math.PI/2];
+// «уехало» желаемое направление, прежде чем разрешить разворот.
+// Порядок обязан совпадать с angleToRow выше.
+const ROW_ANGLE=[Math.PI/2, 0, Math.PI, -Math.PI/2];
 
 // Кратчайшая разница углов в диапазоне [-PI, PI]
 function angleDelta(a,b){
@@ -54,7 +63,9 @@ export class Player extends Entity {
     // Сколько раз взято каждое улучшение — по этому UpgradeSystem убирает из
     // колоды выбранное до предела
     this.taken={};
-    this.animTimer=0; this.animFrame=0; this.animSpeed=8; this.isMoving=false;
+    this.animTimer=0; this.animFrame=0;
+    this.animSpeed=CONFIG.player.walkAnimSpeed||8;
+    this.isMoving=false;
     // Ряд листа, который показываем сейчас, и запрет на смену ряда в
     // ближайшие кадры. Оба живут отдельно от angle: angle — это ПРИЦЕЛ, он
     // висит на мыши и меняется каждый кадр, а разворот тела к нему не привязан
@@ -120,7 +131,10 @@ export class Player extends Entity {
       this.animTimer++;
       if(this.animTimer>=this.animSpeed){
         this.animTimer=0;
-        this.animFrame=(this.animFrame+1)%CONFIG.player.spriteCols;
+        // Счётчик РАСТЁТ без остатка, а по числу колонок его делят уже при
+        // отрисовке. Иначе пришлось бы знать здесь, какой лист сейчас в деле —
+        // а он зависит от того, догрузился ли необязательный лист бега.
+        this.animFrame++;
       }
     } else {
       if(this.faceHold>0) this.faceHold--;
@@ -221,13 +235,32 @@ export class Player extends Entity {
     return CONFIG.player.deathCols*CONFIG.player.deathAnimSpeed+CONFIG.player.deathHold;
   }
 
+  // Какой лист и какой его кадр показывать сейчас.
+  //
+  // Пока игрок идёт и лист бега загружен — берём его: у листа поз кадры это
+  // переминание на месте, ногами оно ничего не сообщает. Стоим или листа нет —
+  // лист поз. Ряд один и тот же в обоих: 0 вниз, 1 вправо, 2 влево, 3 вверх.
+  bodyFrame(renderer){
+    const P=CONFIG.player;
+    const walk=this.isMoving?renderer.loader?.getImage("playerWalk"):null;
+    if(walk){
+      return { img:walk, fw:P.walkFrameW, fh:P.walkFrameH,
+               col:this.animFrame%P.walkCols, size:P.walkDisplaySize, key:"playerWalk" };
+    }
+    const img=renderer.loader?.getImage("player");
+    if(!img) return null;
+    return { img, fw:P.spriteFrameW, fh:P.spriteFrameH,
+             col:this.isMoving?this.animFrame%P.spriteCols:0,
+             size:P.spriteDisplaySize, key:"player" };
+  }
+
   draw(renderer){
     // Ключи загрузчика (CONFIG.assets.images), а не пути к файлам.
-    const bodyImg=renderer.loader?.getImage("player");
+    const body=this.bodyFrame(renderer);
     // Лист смерти — один ряд лицом вправо, его зеркалим по последнему
-    // направлению взгляда. У листа ходьбы направление задано рядом, и
-    // зеркалить его нельзя.
-    const faceLeft=this.faceRow===1;
+    // направлению взгляда (ряд 2 — влево). У листа ходьбы направление задано
+    // рядом, и зеркалить его нельзя.
+    const faceLeft=this.faceRow===2;
 
     // Тень под ногами: без неё игрок сливается с землёй ровно так же, как враги
     renderer.drawShadow(this.x,this.y+this.radius*0.8,this.radius*0.8,this.radius*0.3,0.45);
@@ -258,13 +291,13 @@ export class Player extends Entity {
     const blink=this.iframes>0 && this.hurtFlash<=0 && Math.floor(this.iframes/4)%2===0;
     if(blink){ renderer.ctx.save(); renderer.ctx.globalAlpha=0.45; }
 
-    if(bodyImg){
-      // Обычный спрайт игрока: ряд листа = направление взгляда
+    if(body){
+      // Ряд листа = направление взгляда, вращать спрайт нельзя
       renderer.drawSpriteSheet(
-        bodyImg, this.x, this.y,
-        CONFIG.player.spriteFrameW, CONFIG.player.spriteFrameH,
-        this.animFrame, this.faceRow,
-        CONFIG.player.spriteDisplaySize,
+        body.img, this.x, this.y,
+        body.fw, body.fh,
+        body.col, this.faceRow,
+        body.size,
         0
       );
     } else {
@@ -293,10 +326,10 @@ export class Player extends Entity {
     // Красный силуэт в момент удара — самая заметная часть обратной связи
     if(this.hurtFlash>0){
       const a=this.hurtFlash/12*0.8;
-      if(bodyImg){
-        renderer.drawFlash(bodyImg,"player",this.x,this.y,
-          CONFIG.player.spriteFrameW,CONFIG.player.spriteFrameH,this.animFrame,this.faceRow,
-          CONFIG.player.spriteDisplaySize,false,a,"#ff3344");
+      if(body){
+        renderer.drawFlash(body.img,body.key,this.x,this.y,
+          body.fw,body.fh,body.col,this.faceRow,
+          body.size,false,a,"#ff3344");
       } else {
         renderer.ctx.save(); renderer.ctx.globalAlpha=a;
         renderer.drawCircle(this.x,this.y,this.radius,"#ff3344"); renderer.ctx.restore();

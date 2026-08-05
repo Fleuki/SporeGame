@@ -28,11 +28,19 @@ export class Camera {
   // отдельно, и любое забытое стало бы багом видимости.
   constructor(viewW,viewH,zoom=1){
     this.x=0; this.y=0;          // левый верхний угол окна в мире
-    this.zoom=zoom||1;
-    this.w=viewW/this.zoom; this.h=viewH/this.zoom;
     this.smoothing=0.15;         // 0 — камера не движется, 1 — жёстко привязана
     // Тряска: живёт отдельно от позиции, иначе clampToWorld гасил бы её у края
     this.shakeMag=0; this.shakeTime=0; this.shakeMax=1; this.ox=0; this.oy=0;
+    this.resize(viewW,viewH,zoom);
+  }
+
+  // Холст больше не фиксированный: он подстраивается под окно, а на телефоне
+  // ещё и меняет пропорции при повороте. Пересчитывать w/h надо в одном месте,
+  // иначе спавн за краем экрана, отсечение лута и снарядов начинают считать
+  // по старому размеру.
+  resize(viewW,viewH,zoom){
+    if(zoom) this.zoom=zoom||1;
+    this.w=viewW/this.zoom; this.h=viewH/this.zoom;
   }
 
   centerOn(target){

@@ -27,51 +27,75 @@ export class InputManager {
     });
     canvas.addEventListener("contextmenu",(e)=>e.preventDefault());
 
-    // Touch: виртуальный джойстик (левая половина)
+    // TOUCH. Джойстик появляется ТАМ, ГДЕ ПАЛЕЦ КОСНУЛСЯ ЭКРАНА, в любой его
+    // точке. Раньше он ловил касания только на левой половине холста, и
+    // правая половина не делала вообще ничего: стрельба здесь автоматическая,
+    // прицел на мобильных тоже автоматический, — то есть пол-экрана было
+    // мёртвой зоной, а играть приходилось одной рукой в одном углу.
+    //
+    // Отслеживаем КОНКРЕТНЫЙ палец по identifier: иначе второе касание
+    // (например, случайное касание ладонью) перехватывало управление.
+    this.touchId=null;
+    const at=(t)=>{
+      const rect=canvas.getBoundingClientRect();
+      const sx=canvas.width/rect.width, sy=canvas.height/rect.height;
+      return { x:(t.clientX-rect.left)*sx, y:(t.clientY-rect.top)*sy };
+    };
     canvas.addEventListener("touchstart",(e)=>{
       e.preventDefault();
-      for(const t of e.changedTouches){
-        const rect=canvas.getBoundingClientRect();
-        const sx=canvas.width/rect.width, sy=canvas.height/rect.height;
-        const tx=(t.clientX-rect.left)*sx, ty=(t.clientY-rect.top)*sy;
-        if(tx<canvas.width*0.5){
-          this.joystick.active=true;
-          this.joystick.cx=tx; this.joystick.cy=ty;
-          this.joystick.dx=0; this.joystick.dy=0;
-        }
-      }
+      if(this.touchId!==null) return;
+      const t=e.changedTouches[0];
+      if(!t) return;
+      const p=at(t);
+      this.touchId=t.identifier;
+      this.joystick.active=true;
+      this.joystick.cx=p.x; this.joystick.cy=p.y;
+      this.joystick.dx=0; this.joystick.dy=0;
     },{passive:false});
     canvas.addEventListener("touchmove",(e)=>{
       e.preventDefault();
       for(const t of e.changedTouches){
-        const rect=canvas.getBoundingClientRect();
-        const sx=canvas.width/rect.width, sy=canvas.height/rect.height;
-        const tx=(t.clientX-rect.left)*sx, ty=(t.clientY-rect.top)*sy;
-        if(this.joystick.active){
-          const dx=tx-this.joystick.cx, dy=ty-this.joystick.cy;
-          const dist=Math.hypot(dx,dy);
-          const max=this.joystick.radius;
-          if(dist>max){ this.joystick.dx=dx/dist*max; this.joystick.dy=dy/dist*max; }
-          else { this.joystick.dx=dx; this.joystick.dy=dy; }
-          // Преобразуем в WASD
-          this.keys.w=this.joystick.dy<-10;
-          this.keys.s=this.joystick.dy>10;
-          this.keys.a=this.joystick.dx<-10;
-          this.keys.d=this.joystick.dx>10;
-        }
+        if(t.identifier!==this.touchId) continue;
+        const p=at(t);
+        const dx=p.x-this.joystick.cx, dy=p.y-this.joystick.cy;
+        const dist=Math.hypot(dx,dy);
+        const max=this.joystick.radius;
+        if(dist>max){
+          this.joystick.dx=dx/dist*max; this.joystick.dy=dy/dist*max;
+          // База едет за пальцем, если он ушёл дальше кольца: без этого
+          // длинный свайп упирается в край и направление перестаёт меняться
+          this.joystick.cx=p.x-this.joystick.dx;
+          this.joystick.cy=p.y-this.joystick.dy;
+        } else { this.joystick.dx=dx; this.joystick.dy=dy; }
+        // Порог в долях радиуса, а не в пикселях: холст теперь любого размера,
+        // и фиксированные 10 пикселей на плотном экране — это «не шевелится»
+        const dead=max*0.2;
+        this.keys.w=this.joystick.dy<-dead;
+        this.keys.s=this.joystick.dy>dead;
+        this.keys.a=this.joystick.dx<-dead;
+        this.keys.d=this.joystick.dx>dead;
       }
     },{passive:false});
-    canvas.addEventListener("touchend",(e)=>{
-      e.preventDefault();
-      this.joystick.active=false;
-      this.joystick.dx=0; this.joystick.dy=0;
-      this.keys.w=this.keys.a=this.keys.s=this.keys.d=false;
-    },{passive:false});
-    canvas.addEventListener("touchcancel",(e)=>{
-      this.joystick.active=false;
-      this.joystick.dx=0; this.joystick.dy=0;
-      this.keys.w=this.keys.a=this.keys.s=this.keys.d=false;
-    });
+    const endTouch=(e)=>{
+      for(const t of e.changedTouches){
+        if(t.identifier!==this.touchId) continue;
+        this.touchId=null;
+        this.joystick.active=false;
+        this.joystick.dx=0; this.joystick.dy=0;
+        this.keys.w=this.keys.a=this.keys.s=this.keys.d=false;
+      }
+    };
+    canvas.addEventListener("touchend",(e)=>{ e.preventDefault(); endTouch(e); },{passive:false});
+    canvas.addEventListener("touchcancel",endTouch);
+  }
+
+  // Джойстик рисуется в пикселях холста, а холст на телефоне другого размера,
+  // чем на мониторе. Без пересчёта кольцо в 50 пикселей на плотном экране
+  // превращается в еле заметную точку под пальцем.
+  scaleTo(canvasW,canvasH){
+    const k=Math.min(2.2,Math.max(0.7,Math.hypot(canvasW,canvasH)/Math.hypot(900,700)));
+    this.joystick.radius=Math.round(56*k);
+    this.joystick.stickRadius=Math.round(24*k);
   }
 
   // Для авто-прицеливания на мобильных

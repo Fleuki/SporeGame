@@ -12,21 +12,33 @@ html, body {
   -webkit-user-select: none;
   user-select: none;
 }
-/* Коробка игрового кадра: холст и HUD поверх него. Нужна, чтобы интерфейс
-   лип к краям кадра, а не окна — иначе нижняя полоса опыта и таймер сверху
-   разъезжаются с картинкой на широких экранах. */
-#stage { position: relative; display: inline-block; line-height: 0; }
+/* Коробка игрового кадра: холст и HUD поверх него. Нужна, чтобы интерфейс лип
+   к краям кадра, а не окна — иначе нижняя полоса опыта и таймер сверху
+   разъезжаются с картинкой на широких экранах.
+   На десктопе это окно с рамкой посреди страницы, на телефоне — весь экран
+   целиком (см. медиазапросы внизу). Размер холста в ПИКСЕЛЯХ подстраивается
+   под эту коробку из JS: см. fitCanvas() в main.js. */
+#stage {
+  position: relative; line-height: 0;
+  width: min(100vw, 1280px);
+  height: min(100vh, 860px);
+  /* Пропорции не фиксируем: игра сама подстраивает кадр под любую форму окна,
+     а видимая площадь мира при этом остаётся постоянной */
+}
 canvas {
   display: block;
+  width: 100%; height: 100%;
   background: #1a3d2e;
   border: 3px solid #6b2d5c;
   box-shadow: 0 0 30px rgba(107,45,92,0.3);
   /* Курсор-гриб вместо системного: hotspot в центре шляпки */
   cursor: url("../assets/images/ui/cursor.png") 27 32, crosshair;
-  max-width: 100vw;
-  max-height: 100vh;
-  width: auto;
-  height: auto;
+  /* Пиксель-арт нельзя сглаживать при масштабировании: без этой строки
+     картинка на телефоне «размазывается», потому что холст почти никогда не
+     совпадает с экраном ровно один к одному */
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  touch-action: none;
 }
 /* HUD.
    Раньше всё было свалено в левый верхний угол: три подписанные шкалы в
@@ -215,10 +227,23 @@ canvas {
 #gameOverScreen .hint { color: #00d4aa; font-size: 14px; margin-top: 20px; }
 .hidden { display: none !important; }
 
-/* Мобильная адаптация */
-@media (max-width: 950px) {
-  #stage { width: 100vw; }
-  canvas { width: 100vw !important; height: auto !important; border: none; }
+/* МОБИЛЬНАЯ АДАПТАЦИЯ.
+   Раньше здесь стояло `canvas { width:100vw !important; height:auto !important }`
+   при жёстком холсте 900x700. Из-за height:auto холст брал высоту из СВОИХ
+   пропорций: на экране 390x844 это 390x303, то есть игра занимала треть
+   экрана и ходить приходилось в одном его углу. В альбомной ориентации те же
+   900x700 растягивались в 844x656 — нецелое дробное масштабирование
+   пиксель-арта, отсюда «размазывается и качество странное».
+   Теперь кадр занимает экран целиком в обеих ориентациях, а форму кадра
+   отрабатывает камера (площадь видимого мира при этом постоянна). */
+@media (max-width: 950px), (max-height: 620px) {
+  #stage {
+    width: 100vw; height: 100vh;
+    /* dvh учитывает уезжающую адресную строку: без него внизу остаётся полоса,
+       а при её скрытии кадр прыгает */
+    height: 100dvh;
+  }
+  canvas { border: none; }
   #ui { font-size: 12px; }
   #timer { font-size: 22px; top: 6px; }
   #timer .icon { width: 16px; height: 16px; }
@@ -229,4 +254,22 @@ canvas {
   .upgrade-card { width: 136px; padding: 9px 9px 10px; }
   .upgrade-card .pips i { width: 9px; }
   #upgradeMenu { padding: 16px; max-width: 96vw; }
+}
+/* Телефон стоймя: три карточки по 136 пикселей в 390 не помещаются и
+   переносятся вразнобой — ставим их в столбик */
+@media (max-width: 460px) {
+  #upgradeCards { flex-direction: column; align-items: stretch; }
+  .upgrade-card { width: auto; min-width: 200px; }
+  #upgradeMenu { padding: 14px 16px; }
+  #upgradeMenu h2 { font-size: 18px; margin-bottom: 10px; }
+}
+/* Телефон лёжа: экран низкий, столбик из карточек в него уже не влезет */
+@media (max-height: 500px) {
+  #upgradeCards { flex-direction: row; }
+  .upgrade-card { width: 150px; padding: 7px 8px 8px; }
+  .upgrade-card .desc { font-size: 10px; }
+  #upgradeMenu { padding: 10px 14px; }
+  #upgradeMenu h2 { font-size: 16px; margin-bottom: 8px; }
+  #timer { font-size: 18px; }
+  .orn-bar { width: 120px; height: 23px; }
 }
