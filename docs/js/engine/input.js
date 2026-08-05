@@ -60,13 +60,13 @@ export class InputManager {
         const dx=p.x-this.joystick.cx, dy=p.y-this.joystick.cy;
         const dist=Math.hypot(dx,dy);
         const max=this.joystick.radius;
-        if(dist>max){
-          this.joystick.dx=dx/dist*max; this.joystick.dy=dy/dist*max;
-          // База едет за пальцем, если он ушёл дальше кольца: без этого
-          // длинный свайп упирается в край и направление перестаёт меняться
-          this.joystick.cx=p.x-this.joystick.dx;
-          this.joystick.cy=p.y-this.joystick.dy;
-        } else { this.joystick.dx=dx; this.joystick.dy=dy; }
+        // БАЗА СТОИТ ТАМ, ГДЕ КОСНУЛСЯ ПАЛЕЦ, и больше не двигается. Раньше
+        // она ехала за пальцем, если он уходил дальше кольца, — джойстик
+        // расползался по всему экрану и терялся из виду. Теперь уехал палец
+        // далеко — ручка просто упирается в край кольца, а направление
+        // считается от неподвижного центра.
+        if(dist>max){ this.joystick.dx=dx/dist*max; this.joystick.dy=dy/dist*max; }
+        else { this.joystick.dx=dx; this.joystick.dy=dy; }
         // Порог в долях радиуса, а не в пикселях: холст теперь любого размера,
         // и фиксированные 10 пикселей на плотном экране — это «не шевелится»
         const dead=max*0.2;
