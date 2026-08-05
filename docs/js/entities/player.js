@@ -29,7 +29,11 @@ export class Player extends Entity {
     super(x,y,CONFIG.player.radius);
     this.speed=CONFIG.player.speed;
     this.maxHp=CONFIG.player.maxHp; this.hp=this.maxHp; this.xp=0; this.level=1; this.xpToNext=14;
-    this.damage=CONFIG.player.damage; this.attackCooldown=0; this.attackRate=CONFIG.player.attackRate;
+    this.damage=CONFIG.player.damage;
+    // Общий множитель перезарядки ВСЕХ стволов: 1 — как в конфиге, меньше —
+    // быстрее. Карточка «Ускоренный экстракт» умножает именно его, а каждый
+    // ствол сверху крутит ещё и свой (Weapon.rateMult).
+    this.rateMult=1;
     // Стволы стреляют одновременно, каждый по своему таймеру.
     // Остальные выдаются карточками прокачки.
     this.weapons=[new Weapon(CONFIG.weapons.antidote)];
@@ -37,9 +41,10 @@ export class Player extends Entity {
     // hasShield — щит вообще получен, shieldActive — заряд на месте.
     // Раньше был только shieldActive: заблокировал один удар — и всё, апгрейд
     // навсегда превращался в пустую карточку вопреки описанию.
-    this.hasShield=false; this.shieldActive=false; this.shieldCd=0; this.dashCooldown=0;
-    this.ricochet=false; this.explosive=false; this.poison=false; this.autoLoot=false; this.lootRadius=40;
-    this.canDash=false; this.regen=0; this.xpMult=1; this.lastKeyTime={w:0,a:0,s:0,d:0}; this.lastKey="";
+    this.hasShield=false; this.shieldActive=false; this.shieldCd=0;
+    // Прибавка к радиусу притяжения лута от карточек «Магнит мицелия»
+    this.lootRadius=0;
+    this.regen=0; this.xpMult=1;
     // Мутации ускоряют заражение через свой множитель, а не правкой CONFIG:
     // глобальный конфиг живёт дольше забега, и правки в нём переносились
     // в следующие партии.
@@ -52,23 +57,12 @@ export class Player extends Entity {
     this.animTimer=0; this.animFrame=0; this.animSpeed=8; this.isMoving=false;
     // Ряд листа, который показываем сейчас, и запрет на смену ряда в
     // ближайшие кадры. Оба живут отдельно от angle: angle — это ПРИЦЕЛ, он
-    // висит на мыши и меняется каждый кадр, а разворот тела так часто
-    // происходить не должен.
+    // висит на мыши и меняется каждый кадр, а разворот тела к нему не привязан
+    // вообще (см. updateFacing).
     this.faceRow=0; this.faceHold=0;
     // life читался проверкой регенерации, но нигде не задавался:
     // undefined%60 === NaN, поэтому апгрейд «Мицелиевое исцеление» не лечил.
     // Теперь счётчик приходит из Entity.
-    // === НОВОЕ: анимация броска ===
-    this.attackAnimTimer=0;
-    this.attackAnimFrame=0;
-    this.isAttacking=false;
-    // Анимация броска обязана доигрывать быстрее, чем перезаряжается атака.
-    // Иначе isAttacking больше никогда не сбрасывается и игрок навсегда
-    // остаётся в кадре броска.
-    this.attackAnimSpeed=Math.max(1,Math.min(
-      CONFIG.player.attackAnimSpeed,
-      Math.floor((CONFIG.player.attackRate-1)/CONFIG.player.attackCols)
-    ));
   }
 
   update(dt,ctx){
@@ -83,15 +77,13 @@ export class Player extends Entity {
     if(input.keys.w) dy=-1; if(input.keys.s) dy=1; if(input.keys.a) dx=-1; if(input.keys.d) dx=1;
     if(dx!==0&&dy!==0){ dx*=0.707; dy*=0.707; }
 
-    if(this.canDash){
-      for(const k of ["w","a","s","d"]){
-        if(input.keys[k]){
-          const now=Date.now();
-          if(this.lastKey===k && now-this.lastKeyTime[k]<250){ this.x+=dx*40; this.y+=dy*40; }
-          this.lastKey=k; this.lastKeyTime[k]=now;
-        }
-      }
-    }
+    // РЫВОК УБРАН. Он срабатывал по двойному нажатию WASD и телепортировал на
+    // 40 единиц — но проверка стояла ВНУТРИ цикла по четырём клавишам и на
+    // нажатой клавише срабатывала КАЖДЫЙ кадр, пока укладывалась в свои 250 мс.
+    // На диагонали засчитывались обе клавиши сразу. В итоге вместо рывка
+    // получался неуправляемый прыжок через полэкрана, иногда сквозь толпу.
+    // Кулдауна у него не было вовсе. Возвращать это стоит уже как нормальный
+    // рывок: отдельная кнопка, кадры неуязвимости, перезарядка.
 
     // Мир не привязан к размеру холста, но и не бесконечен: игрок ходит
     // свободно внутри арены, а на её границе упирается.
@@ -107,8 +99,6 @@ export class Player extends Entity {
       this.angle=angleTo(this.x,this.y,m.x,m.y);
     }
 
-    if(this.attackCooldown>0) this.attackCooldown--;
-    if(this.dashCooldown>0) this.dashCooldown--;
     // Щит копит заряд, пока его нет
     if(this.hasShield&&!this.shieldActive&&--this.shieldCd<=0) this.shieldActive=true;
     if(this.regen>0 && this.hp<this.maxHp && this.life%60===0) this.hp+=this.regen;
@@ -119,35 +109,21 @@ export class Player extends Entity {
       this.sporeLevel+CONFIG.player.sporeGrowth*this.sporeRate*dt);
     if(this.sporeLevel>=75) this.hp-=CONFIG.sporeSystem.effects.critical.hpDrain*dt;
 
-    // === НОВОЕ: обновление анимации атаки ===
-    if(this.isAttacking){
-      this.attackAnimTimer++;
-      if(this.attackAnimTimer>=this.attackAnimSpeed){
-        this.attackAnimTimer=0;
-        if(this.attackAnimFrame<CONFIG.player.attackCols-1) this.attackAnimFrame++;
-      }
-      // Анимация доиграла — держим последний кадр до конца перезарядки.
-      // Возвращаться к спрайту ходьбы на пару кадров нельзя: стрельба
-      // автоматическая, и спрайт бы дёргался туда-сюда каждый выстрел.
-      if(this.attackCooldown<=0 && this.attackAnimFrame>=CONFIG.player.attackCols-1){
-        this.isAttacking=false;
-        this.attackAnimFrame=0;
-      }
-    }
-
-    // Анимация ходьбы — крутится только когда игрок реально идёт
+    // Анимация ходьбы — крутится только когда игрок реально идёт.
+    // Стоит на месте — первый кадр ряда и никаких других движений: ни
+    // разворота вслед за мышью, ни позы броска.
     this.isMoving=(dx!==0||dy!==0);
-    // Тело разворачивается по ходьбе, а не по прицелу: спрайт ходьбы должен
-    // показывать, куда персонаж ШАГАЕТ, иначе он идёт боком и спиной вперёд.
-    // Прицел решает только когда игрок стоит.
-    this.updateFacing(this.isMoving?Math.atan2(dy,dx):this.angle);
     if(this.isMoving){
+      // Разворот только по ходьбе. Спрайт ходьбы обязан показывать, куда
+      // персонаж ШАГАЕТ, иначе он идёт боком и спиной вперёд.
+      this.updateFacing(Math.atan2(dy,dx));
       this.animTimer++;
       if(this.animTimer>=this.animSpeed){
         this.animTimer=0;
         this.animFrame=(this.animFrame+1)%CONFIG.player.spriteCols;
       }
     } else {
+      if(this.faceHold>0) this.faceHold--;
       this.animTimer=0; this.animFrame=0;
     }
   }
@@ -170,24 +146,14 @@ export class Player extends Entity {
   hasWeapon(key){ return this.weapons.some(w=>w.def===CONFIG.weapons[key]); }
   addWeapon(key){ if(!this.hasWeapon(key)) this.weapons.push(new Weapon(CONFIG.weapons[key])); }
 
-  // Опрашивает все стволы и возвращает вылетевшие снаряды
+  // Опрашивает все стволы и возвращает вылетевшие снаряды.
+  // Ствол может выпустить сразу несколько (карточка «Раздвоенный бросок»),
+  // поэтому fire отдаёт массив.
   tryShoot(enemies){
     const shots=[];
     for(const w of this.weapons){
       w.update();
-      const p=w.fire(this,enemies);
-      if(p) shots.push(p);
-    }
-    if(shots.length){
-      this.attackCooldown=this.attackRate;
-      // Анимация броска общая: играет, когда выстрелил хоть один ствол.
-      // При выключенном attackAnim в неё вообще не входим — иначе цикл ходьбы
-      // всё равно прерывался бы, просто уже незаметно для глаза.
-      if(CONFIG.player.attackAnim){
-        this.isAttacking=true;
-        this.attackAnimFrame=0;
-        this.attackAnimTimer=0;
-      }
+      for(const p of w.fire(this,enemies)) shots.push(p);
     }
     return shots;
   }
@@ -237,7 +203,7 @@ export class Player extends Entity {
     if(this.isDying) return;
     this.isDying=true; this.hp=0;
     this.deathFrame=0; this.deathTimer=0;
-    this.isAttacking=false; this.isGrabbed=false;
+    this.isGrabbed=false;
   }
 
   stepDeath(){
@@ -257,11 +223,11 @@ export class Player extends Entity {
 
   draw(renderer){
     // Ключи загрузчика (CONFIG.assets.images), а не пути к файлам.
-    const atkImg=CONFIG.player.attackAnim?renderer.loader?.getImage("playerAttack"):null;
     const bodyImg=renderer.loader?.getImage("player");
-    // Спрайт броска нарисован лицом вправо: зеркалим его при стрельбе влево.
-    // Вращать спрайт персонажа нельзя — направление уже задано рядом листа.
-    const faceLeft=Math.cos(this.angle)<0;
+    // Лист смерти — один ряд лицом вправо, его зеркалим по последнему
+    // направлению взгляда. У листа ходьбы направление задано рядом, и
+    // зеркалить его нельзя.
+    const faceLeft=this.faceRow===1;
 
     // Тень под ногами: без неё игрок сливается с землёй ровно так же, как враги
     renderer.drawShadow(this.x,this.y+this.radius*0.8,this.radius*0.8,this.radius*0.3,0.45);
@@ -292,15 +258,7 @@ export class Player extends Entity {
     const blink=this.iframes>0 && this.hurtFlash<=0 && Math.floor(this.iframes/4)%2===0;
     if(blink){ renderer.ctx.save(); renderer.ctx.globalAlpha=0.45; }
 
-    if(this.isAttacking && atkImg){
-      renderer.drawSpriteSheet(
-        atkImg, this.x, this.y,
-        CONFIG.player.attackFrameW, CONFIG.player.attackFrameH,
-        this.attackAnimFrame, 0,
-        CONFIG.player.attackDisplaySize,
-        0, faceLeft
-      );
-    } else if(bodyImg){
+    if(bodyImg){
       // Обычный спрайт игрока: ряд листа = направление взгляда
       renderer.drawSpriteSheet(
         bodyImg, this.x, this.y,
@@ -335,11 +293,7 @@ export class Player extends Entity {
     // Красный силуэт в момент удара — самая заметная часть обратной связи
     if(this.hurtFlash>0){
       const a=this.hurtFlash/12*0.8;
-      if(this.isAttacking&&atkImg){
-        renderer.drawFlash(atkImg,"playerAttack",this.x,this.y,
-          CONFIG.player.attackFrameW,CONFIG.player.attackFrameH,this.attackAnimFrame,0,
-          CONFIG.player.attackDisplaySize,faceLeft,a,"#ff3344");
-      } else if(bodyImg){
+      if(bodyImg){
         renderer.drawFlash(bodyImg,"player",this.x,this.y,
           CONFIG.player.spriteFrameW,CONFIG.player.spriteFrameH,this.animFrame,this.faceRow,
           CONFIG.player.spriteDisplaySize,false,a,"#ff3344");

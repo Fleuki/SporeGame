@@ -222,6 +222,30 @@ Rows top to bottom: back to camera, facing right, facing camera, facing
 left. Columns are a fast four-beat running cycle.
 ```
 
+**Споровый Трубач** (дальнобойный) — лист уже есть, промпт на случай
+перегенерации. У этого листа **колонки — не шаги, а фазы одного действия**:
+мешок на спине раскрывается в раструб. Движок крутит их не по таймеру, а по
+прогрессу замаха (`SpriteAnim.hold`, см. `enemy.js`), поэтому кадр 0 обязан
+быть «труба закрыта» — именно его враг показывает, пока просто идёт.
+
+```
+[БАЗА СТИЛЯ]
+
+A 4x4 sprite sheet, 16 frames in a strict even grid, each cell 256x256
+pixels, creature centred, identical scale in every cell, feet on a common
+baseline.
+
+Subject: "Spore Piper" — a gaunt, long-limbed humanoid the colour of wet
+moss #7d8f6a, hunched forward on four thin limbs. A dusty violet #6b2d5c
+spore sac grows from its shoulders; the sac opens into a wide funnel whose
+throat glows toxic yellow #c4a000. A crown of pale bone spikes on the skull.
+
+Rows top to bottom: back to camera, facing right, facing camera, facing
+left. Columns are NOT a walk cycle: they are one inflation of the funnel —
+sac fully closed, cracking open, half open with the throat lit, fully flared
+and about to fire.
+```
+
 **Летучая Спора** (зигзаг, токсичный след):
 
 ```
@@ -467,9 +491,9 @@ acid: {
 Эффект — **4 кадра в один горизонтальный ряд**, файл 1024x256.
 Кадры идут от вспышки к затуханию, последний почти прозрачный.
 
-**Вспышка выстрела.** Анимация броска у героя отключена
-(`CONFIG.player.attackAnim: false`) — выстрел отмечается вспышкой в точке
-вылета. Сейчас она собрана из частиц; спрайт её заменит и будет наряднее:
+**Вспышка выстрела.** Анимации броска у героя нет вообще — выстрел
+отмечается вспышкой в точке вылета. Сейчас она собрана из частиц; спрайт её
+заменит и будет наряднее:
 
 ```
 [БАЗА СТИЛЯ]

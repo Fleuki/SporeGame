@@ -60,8 +60,8 @@ function init(){
     particles.emitText(player.x,player.y-player.radius-10,"-"+Math.round(amount),"#ff5566",15);
   };
   camera.centerOn(player);
-  enemies=[]; projectiles=[]; loot.reset(); particles.reset(); battle.effects.length=0;
-  battle.kills=0; runTime=0; levelUpDelay=0; dying=0;
+  enemies=[]; projectiles=[]; loot.reset(); particles.reset(); battle.reset();
+  runTime=0; levelUpDelay=0; dying=0;
   spawnSystem=new SpawnSystem(camera);
   gameOver=false; paused=false; waitingForUpgrade=false;
   document.getElementById("gameOverScreen").classList.add("hidden");
@@ -98,8 +98,8 @@ function update(dt){
   const shots=player.tryShoot(enemies);
   for(const shot of shots){
     projectiles.push(shot);
-    // Вспышка в точке вылета — теперь это единственный признак выстрела на
-    // самом персонаже, анимация броска отключена (CONFIG.player.attackAnim)
+    // Вспышка в точке вылета — единственный признак выстрела на самом
+    // персонаже: анимации броска больше нет, он всегда в спрайте ходьбы
     particles.emitMuzzle(shot.x,shot.y,shot.angle,shot.def.glow||"#00d4aa");
   }
   if(shots.length) audio.sfx("shoot");
@@ -143,7 +143,7 @@ function startLevelUp(){
 
 function openUpgradeMenu(){
   waitingForUpgrade=true; paused=true;
-  upgradeSystem.showMenu(upgradeSystem.generateCards(player));
+  upgradeSystem.showMenu(upgradeSystem.generateCards(player),player);
 }
 
 function endGame(){
@@ -245,6 +245,7 @@ function draw(){
   loot.draw(renderer);
   for(const e of enemies) e.draw(renderer);
   for(const p of projectiles) p.draw(renderer);
+  battle.drawShots(renderer);     // облака спор трубачей
   particles.draw(renderer);
   player.draw(renderer);
   battle.drawEffects(renderer);   // взрывы поверх всего
@@ -281,6 +282,11 @@ if(new URLSearchParams(location.search).has("debug")){
     get player(){ return player; },
     get enemies(){ return enemies; },
     get spawn(){ return spawnSystem; },
+    // Живой конфиг: правки видны со следующего кадра, без перезагрузки.
+    // Нужен для подбора того, что оценивается только глазами — контур врагов,
+    // сила темноты, размеры. Поставить игру на паузу (Esc), покрутить число,
+    // сравнить два кадра одной и той же сцены — иначе сравниваешь разные.
+    config:CONFIG,
     stats:()=>({
       time:runTime, level:player.level, hp:player.hp, maxHp:player.maxHp,
       spore:player.sporeLevel, kills:battle.kills, gameOver,
@@ -288,6 +294,9 @@ if(new URLSearchParams(location.search).has("debug")){
       aliveLimit:spawnSystem.aliveLimit(),
       interval:spawnSystem.interval(),
       onScreen:enemies.filter(e=>!e.dead&&camera.sees(e.x,e.y,0)).length,
+      pipers:enemies.filter(e=>!e.dead&&e.typeKey==="spore_piper").length,
+      enemyShots:battle.enemyShots.length,
+      drops:loot.items.length,
       damage:player.damage, weapons:player.weapons.length
     })
   };

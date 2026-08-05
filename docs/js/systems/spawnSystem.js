@@ -108,16 +108,38 @@ export class SpawnSystem {
     return {type:"boss",boss};
   }
 
-  // Какие типы врагов уже вошли в поток. Пороги — в секундах забега
-  // (CONFIG.spawn.unlock), раньше это были номера волн.
-  pickType(){
-    const U=CONFIG.spawn.unlock, t=this.time;
-    let type="spore_bearer";
-    if(t>U.mushroom_wolf) type=Math.random()>0.6?"mushroom_wolf":"spore_bearer";
-    if(t>U.fruit_body){ const r=Math.random(); if(r>0.7) type="fruit_body"; else if(r>0.4) type="mushroom_wolf"; }
-    if(t>U.mycelium_tentacle&&Math.random()>0.7) type="mycelium_tentacle";
-    if(t>U.spore_bat&&Math.random()>0.75) type="spore_bat";
-    return type;
+  // Кого выпускаем. Типы входят в поток по времени (unlock.<тип>.at), а их
+  // доли плавно меняются от стартовых к поздним (unlock.<тип>.weight).
+  //
+  // Раньше здесь стояла лесенка из вложенных Math.random() с порогами
+  // 0.6/0.7/0.75, где каждое следующее условие перетирало предыдущее.
+  // Посчитать по ней реальную долю типа было невозможно, а именно доли и есть
+  // сложность: толпа медленных мешков и толпа волков с трубачами — это два
+  // совершенно разных боя при одинаковом числе врагов на экране.
+  pickType(enemies){
+    const S=CONFIG.spawn;
+    const k=Math.min(1,this.time/S.weightRamp);
+    let total=0;
+    const pool=[];
+    for(const key in S.unlock){
+      const u=S.unlock[key];
+      if(this.time<u.at) continue;
+      // Тип, упёршийся в свой потолок живых, из розыгрыша выпадает
+      if(u.maxAlive!=null&&this.countAlive(enemies,key)>=u.maxAlive) continue;
+      const w=u.weight[0]+(u.weight[1]-u.weight[0])*k;
+      if(w<=0) continue;
+      total+=w; pool.push([key,total]);
+    }
+    if(!pool.length) return "spore_bearer";
+    const r=Math.random()*total;
+    for(const [key,acc] of pool) if(r<acc) return key;
+    return pool[pool.length-1][0];
+  }
+
+  countAlive(enemies,key){
+    let n=0;
+    for(const e of enemies) if(!e.dead&&e.typeKey===key) n++;
+    return n;
   }
 
   spawnEnemy(enemies,sporeEffects){
@@ -125,6 +147,6 @@ export class SpawnSystem {
     // появляются сразу за краем экрана, куда бы игрок ни ушёл.
     const p=this.camera.pointOutside(CONFIG.spawn.spawnMargin);
     const isMutated=Math.random()<(sporeEffects.mutateChance||0);
-    enemies.push(new Enemy(p.x,p.y,this.pickType(),isMutated,this.scale()));
+    enemies.push(new Enemy(p.x,p.y,this.pickType(enemies),isMutated,this.scale()));
   }
 }

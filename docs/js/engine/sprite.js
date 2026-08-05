@@ -43,6 +43,15 @@ export class SpriteAnim {
     }
   }
 
+  // Кадр задаётся снаружи, а не таймером. Нужно там, где кадры листа — это не
+  // цикл ходьбы, а стадии одного действия: труба спорового трубача
+  // раскрывается ровно по прогрессу его замаха, и крутить её по кругу нельзя.
+  hold(angle,frame){
+    this.step(angle,false);
+    const cols=this.def?.cols||1;
+    this.frame=Math.max(0,Math.min(cols-1,Math.floor(frame)));
+  }
+
   // Есть ли чем рисовать — чтобы решить это ДО отрисовки подложки
   ready(renderer){ return !!(this.def && renderer.loader?.getImage(this.def.key)); }
 
