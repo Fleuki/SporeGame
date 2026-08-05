@@ -282,6 +282,11 @@ if(new URLSearchParams(location.search).has("debug")){
     get player(){ return player; },
     get enemies(){ return enemies; },
     get spawn(){ return spawnSystem; },
+    // Живой конфиг: правки видны со следующего кадра, без перезагрузки.
+    // Нужен для подбора того, что оценивается только глазами — контур врагов,
+    // сила темноты, размеры. Поставить игру на паузу (Esc), покрутить число,
+    // сравнить два кадра одной и той же сцены — иначе сравниваешь разные.
+    config:CONFIG,
     stats:()=>({
       time:runTime, level:player.level, hp:player.hp, maxHp:player.maxHp,
       spore:player.sporeLevel, kills:battle.kills, gameOver,

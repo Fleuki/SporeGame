@@ -1,5 +1,5 @@
 import { CONFIG } from "../config.js";
-import { Enemy } from "./enemy.js";
+import { Enemy, rimAlphaAt } from "./enemy.js";
 import { SpriteAnim } from "../engine/sprite.js";
 
 // Босс — тот же враг, но со сценарием способностей. Наследование от Enemy
@@ -76,10 +76,12 @@ export class Boss extends Enemy {
       renderer.ctx.globalAlpha=0.25;
       renderer.drawGlowCircle(this.x,this.y+this.radius*0.55,this.radius*0.7,this.color.body[0],30);
       renderer.ctx.restore();
-      // Тот же контур, что у рядовых врагов: босс нарисован тёмным и на
-      // тёмной арене сливался с землёй ничуть не меньше остальных
+      // Тот же контур и то же затухание вблизи, что у рядовых врагов: босс
+      // нарисован тёмным и на тёмной арене сливался с землёй ничуть не
+      // меньше остальных. Вблизи контур не нужен — у босса есть имя и полоса
+      // здоровья над головой, потерять его невозможно.
       this.anim.outline(renderer,this.x,this.y,this.color.body[1],
-                        CONFIG.enemies.rimWidth+1,CONFIG.enemies.rimAlpha);
+                        CONFIG.enemies.rimWidth+1,rimAlphaAt(renderer,this.x,this.y));
       this.anim.draw(renderer,this.x,this.y);
       if(flashAlpha) this.anim.flash(renderer,this.x,this.y,flashAlpha);
     } else {

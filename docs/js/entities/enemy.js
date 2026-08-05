@@ -3,6 +3,24 @@ import { CONFIG } from "../config.js";
 import { Entity } from "./entity.js";
 import { SpriteAnim } from "../engine/sprite.js";
 
+// Насколько ярким должен быть контур существа в этой точке.
+//
+// Ноль вблизи игрока и полный rimAlpha вдали. Смысл в том, что контур решает
+// одну задачу — «врага в темноте не видно», — и вблизи, в круге света, эта
+// задача не стоит: там спрайт читается сам, а ободок вокруг каждого тела
+// превращает бой в набор цветных наклеек.
+//
+// Координаты игрока лежат на рендерере (их выставляет main.draw): тащить
+// ссылку на игрока в каждого врага ради одного числа не стоит.
+export function rimAlphaAt(renderer,x,y){
+  const R=CONFIG.enemies;
+  if(!(R.rimAlpha>0)) return 0;
+  const d=Math.hypot(x-(renderer.playerX||0), y-(renderer.playerY||0));
+  if(d<=R.rimNear) return 0;
+  const k=Math.min(1,(d-R.rimNear)/Math.max(1,R.rimFar-R.rimNear));
+  return R.rimAlpha*k;
+}
+
 export class Enemy extends Entity {
   // scale — множители сложности от времени забега, см. SpawnSystem.scale()
   constructor(x,y,typeKey,isMutated=false,scale=null){
@@ -208,7 +226,7 @@ export class Enemy extends Entity {
     // Он рисуется до спрайта, поэтому наружу торчит только ободок.
     this.anim.outline(renderer,this.x,this.y,
       this.isMutated?"#ffd24a":(this.def.rim||"#b98cff"),
-      CONFIG.enemies.rimWidth, CONFIG.enemies.rimAlpha);
+      CONFIG.enemies.rimWidth, rimAlphaAt(renderer,this.x,this.y));
 
     if(!this.anim.draw(renderer,this.x,this.y)){
       // Запасная отрисовка примитивами для типов без спрайта
