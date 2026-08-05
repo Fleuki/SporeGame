@@ -42,7 +42,7 @@ export class Enemy extends Entity {
     this.anim=new SpriteAnim(t.sprite); this.moveAngle=0;
     this.abilities=t.abilities||[];
     this.trailTimer=0; this.emergeTimer=t.emergeDelay||0;
-    this.grabTimer=0; this.zigzagOffset=0; this.zigzagDir=1;
+    this.zigzagOffset=0; this.zigzagDir=1;
     this.dotTime=0; this.dotDps=0;   // урон по времени от токсичной склянки
     this.touchCd=0;                  // перезарядка контактного удара
     // Стрелок: кадров до следующего выстрела и текущий прогресс замаха
@@ -75,7 +75,6 @@ export class Enemy extends Entity {
     this.speed=this.baseSpeed*sm;
 
     if(this.abilities.includes("emerge_from_ground")){ this.emergeTimer--; if(this.emergeTimer>0) return; }
-    if(this.grabTimer>0){ this.grabTimer--; player.isGrabbed=this.grabTimer>0; return; }
 
     if(this.abilities.includes("ranged_attack")){ this.updateRanged(ctx); return; }
 
@@ -95,8 +94,10 @@ export class Enemy extends Entity {
     this.updateTrail(particles);
 
     if(this.overlaps(player)){
-      if(this.abilities.includes("grab_player")){
-        this.grabTimer=CONFIG.enemies.types.mycelium_tentacle.grabDuration; player.isGrabbed=true;
+      // Щупальце не держит, а волочёт: пока стоишь в нём, замедление
+      // продлевается, вышел — доигрывает остаток и отпускает.
+      if(this.abilities.includes("snare_player")){
+        player.applySlow(this.def.slowMult||0.5,this.def.slowDuration||90);
       }
       // Удар не каждый кадр, а раз в touchInterval. Раньше урон шёл 60 раз в
       // секунду — волк снимал всё здоровье за секунду касания, и игрок не

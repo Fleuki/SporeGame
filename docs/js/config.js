@@ -161,6 +161,73 @@ export const CONFIG = {
       interval: 100, damage: 1.6, speed: 5.5, radius: 6, range: 200,
       burst: { key: "fx_burst_big", frame: 256, cols: 4, display: 170, speed: 4 },
       area: { radius: 115, damage: 1.7 }
+    },
+
+    // === ЭВОЛЮЦИИ ====================================================
+    // Пятая карточка одной ветки не прибавляет процент, а МЕНЯЕТ СТВОЛ.
+    // Раньше ветка просто кончалась: карточки упирались в свои max, и дальше
+    // колода по третьему разу предлагала «+12% урона».
+    //
+    // Эволюция — не «то же самое, но сильнее». У каждой своё поведение,
+    // которого нет ни у одного обычного ствола:
+    //   needle_swarm — иглы САМИ доворачивают к целям (homing);
+    //   spore_bloom  — взрыв оставляет живую грибницу, и она жжёт всех, кто
+    //                  зайдёт в неё потом (field);
+    //   volcano      — взрыв разбрасывает горящие споры, каждая рвётся своим
+    //                  взрывом (cluster).
+    //
+    // evolves — из какого ствола вырастает. По нему прокачка находит ветку, а
+    //   player.weaponOf() продолжает узнавать эволюцию под старым ключом —
+    //   иначе карточка «новый ствол» предложила бы выдать второй такой же.
+    // evolveAt — сколько карточек ветки надо взять, чтобы эволюция появилась
+    //   в колоде.
+    needle_swarm: {
+      key: "needle_swarm", evolves: "antidote", evolveAt: 4,
+      name: "Рой игл", desc: "Иглы сами доворачивают к целям",
+      sprite: "projectile", frame: 256, display: 26, glow: "#7fe9ff",
+      interval: 34, damage: 1.3, speed: 8.4, radius: 5, range: 0,
+      life: 150,
+      // Стартовый веер и пробитие эволюции. Взятое в ветке НЕ теряется:
+      // shots и pierce берутся по максимуму со старым стволом (Weapon.evolve).
+      shots: 2, spread: 0.22, pierce: 1,
+      // turn — сколько радиан за кадр игла доворачивает к цели, range — с
+      // какого расстояния она вообще ищет цель, retarget — как часто
+      // переспрашивает: каждый кадр это перебор сетки на каждую иглу и ровно
+      // ничего сверх.
+      homing: { turn: 0.16, range: 320, retarget: 8 },
+      burst: { key: "fx_burst_purple", frame: 128, cols: 4, display: 56, speed: 3 }
+    },
+    spore_bloom: {
+      key: "spore_bloom", evolves: "toxic", evolveAt: 4,
+      name: "Живая грибница", desc: "Лужа остаётся на земле и жжёт вошедших",
+      sprite: "vial_toxic", frame: 128, display: 32, glow: "#a8ff6a",
+      interval: 76, damage: 0.9, speed: 4.5, radius: 6, range: 340,
+      burst: { key: "fx_burst_toxic", frame: 128, cols: 4, display: 110, speed: 4 },
+      area: { radius: 84, damage: 0.55, dot: { dps: 5, time: 120 } },
+      // Главное отличие от токсичной склянки: та бьёт в момент взрыва, эта
+      // ОСТАВЛЯЕТ МЕСТО. Пять секунд грибница держит пятачок земли, и толпа,
+      // идущая на игрока, входит в неё сама.
+      field: { radius: 92, life: 300, dps: 7, color: "#a8ff6a" }
+    },
+    volcano: {
+      key: "volcano", evolves: "incendiary", evolveAt: 4,
+      name: "Гриб-вулкан", desc: "Взрыв разбрасывает рвущиеся споры",
+      sprite: "vial_fire", frame: 128, display: 32, glow: "#ff9a33",
+      interval: 112, damage: 1.5, speed: 5.5, radius: 6, range: 210,
+      burst: { key: "fx_burst_big", frame: 256, cols: 4, display: 180, speed: 4 },
+      area: { radius: 100, damage: 1.5 },
+      // Осколки разлетаются веером от точки взрыва и рвутся сами: по фитилю
+      // (fuse) или от первого встречного. Второго уровня осколков нет — у
+      // shot своего cluster не задано, и рекурсия невозможна.
+      cluster: {
+        count: 6, damage: 0.5,
+        shot: {
+          sprite: "vial_fire", frame: 128, display: 18, glow: "#ffcc55",
+          speed: 4.2, radius: 5, life: 26, fuse: true,
+          burst: { key: "fx_burst_big", frame: 256, cols: 4, display: 84, speed: 4 },
+          area: { radius: 62, damage: 0.9 }
+        }
+      }
     }
   },
   // ОЩУЩЕНИЕ ОТ БОЯ. В играх жанра половина удовольствия — не цифры урона, а
@@ -302,8 +369,18 @@ export const CONFIG = {
         // Нижний ряд листа Сердцевины — отросток с длинными щупальцами.
         sprite: { key:"boss_mycelium_heart", frame:256, cols:4, rows:4,
                   row:3, animSpeed:8, display:56 },
-        abilities: ["emerge_from_ground","grab_player"],
-        grabDuration: 60, emergeDelay: 45
+        // ЗАМЕДЛЕНИЕ, А НЕ ЗАХВАТ. Раньше щупальце отнимало управление на
+        // секунду (grab_player, grabDuration 60): игрок не мог двигаться
+        // вообще. Вся выживаемость в этой игре построена на движении, и
+        // отъём движения — самое злое, что можно сделать; особенно когда
+        // рядом стоит трубач и спокойно доводит замах по неподвижной цели.
+        //
+        // Теперь щупальце вцепляется и ВОЛОЧЁТСЯ: скорость вдвое ниже на
+        // полторы секунды, обновляется, пока стоишь в нём. Угроза та же —
+        // из плотной толпы на половинной скорости так просто не выйдешь, —
+        // но решение остаётся за игроком, а не отбирается у него.
+        abilities: ["emerge_from_ground","snare_player"],
+        slowMult: 0.5, slowDuration: 90, emergeDelay: 45
       },
       spore_bat: {
         name: "Летучая Спора", hp: 22, speed: 1.9, radius: 11, damage: 10, xpReward: 9,
@@ -441,8 +518,8 @@ export const CONFIG = {
       spore_piper:       { at: 55,  weight: [14, 18], maxAlive: 3 },
       spore_bat:         { at: 95,  weight: [14, 18] },
       fruit_body:        { at: 130, weight: [10, 14], maxAlive: 5 },
-      // Щупальце неподвижно и держит игрока на месте: несколько разом — это
-      // цепь захватов, из которой нет выхода
+      // Щупальце неподвижно и замедляет вдвое: несколько разом — это ковёр
+      // из замедления, по которому уже не убежать ни от кого
       mycelium_tentacle: { at: 190, weight: [8, 12], maxAlive: 3 }
     }
   },
@@ -592,7 +669,12 @@ export const CONFIG = {
     // заражение, и он должен быть событием, а не фоном.
     antidoteChance: 0.022,
     potionChance: 0.018,
-    coinChance: 0.05,
+    // МОНЕТ БОЛЬШЕ НЕТ. Они падали, подбирались и считались — и не делали
+    // ровно ничего: цифра на экране смерти, которую некуда потратить. Это
+    // ложное обещание: игрок видит валюту и думает, что копит.
+    // Монета вернётся вместе с магазином между забегами (ЭТАП 2 в ROADMAP) —
+    // то есть в тот момент, когда её станет на что тратить, и ни минутой
+    // раньше. Спрайт drop_coin.png и звук «coin» ждут в репозитории.
     types: {
       // dot — рисуется точкой, а не спрайтом. tiers: [порог опыта, радиус,
       // цвет]; чем жирнее враг, тем крупнее и «дороже» выглядит точка.
@@ -602,9 +684,7 @@ export const CONFIG = {
       antidote: { image:"dropAntidote", size:20, radius:12, spore:25,
                   particle:"#00d4aa" },
       potion:   { image:"dropPotion",  size:21, radius:12, heal:25,
-                  particle:"#ff4455" },
-      coin:     { image:"dropCoin",    size:17, radius:11, coin:1,
-                  particle:"#ffcc33" }
+                  particle:"#ff4455" }
     }
   },
   assets: {
@@ -638,8 +718,9 @@ export const CONFIG = {
       // drop_xp_orb.png и drop_crystal.png больше не грузятся: опыт рисуется
       // точкой (см. loot.types.xp). Файлы остались в assets.
       dropAntidote: "assets/images/drops/drop_antidote.png",
-      dropPotion: "assets/images/drops/drop_potion.png",
-      dropCoin: "assets/images/drops/drop_coin.png"
+      dropPotion: "assets/images/drops/drop_potion.png"
+      // drop_coin.png больше не грузится: монеты убраны до магазина
+      // (см. loot.types). Файл остался в assets.
       // fx_levelup больше не грузится: спрайтовая вспышка уровня убрана,
       // она рисовалась втрое крупнее игрока и читалась как наклейка.
       // Файл остался в assets.

@@ -46,7 +46,14 @@ export class Player extends Entity {
     // Стволы стреляют одновременно, каждый по своему таймеру.
     // Остальные выдаются карточками прокачки.
     this.weapons=[new Weapon(CONFIG.weapons.antidote)];
-    this.angle=0; this.color=CONFIG.player.color; this.sporeLevel=0; this.isGrabbed=false;
+    this.angle=0; this.color=CONFIG.player.color; this.sporeLevel=0;
+    // ЗАМЕДЛЕНИЕ ВМЕСТО ЗАХВАТА. Раньше здесь был флаг isGrabbed: щупальце
+    // выставляло его, и Player.update выходил в первой же строке — управления
+    // не было вообще целую секунду. В игре, где всё выживание держится на
+    // движении, это не угроза, а отъём игры.
+    // Теперь то же щупальце вешает slowMult на slowTimer кадров: идти можно,
+    // но вдвое медленнее. Решение остаётся у игрока.
+    this.slowTimer=0; this.slowMult=1;
     // hasShield — щит вообще получен, shieldActive — заряд на месте.
     // Раньше был только shieldActive: заблокировал один удар — и всё, апгрейд
     // навсегда превращался в пустую карточку вопреки описанию.
@@ -79,11 +86,9 @@ export class Player extends Entity {
   update(dt,ctx){
     const {input,enemies,camera}=ctx;
     this.life++;
-    // Таймеры тикают даже в захвате щупальца: иначе неуязвимость «замерзала»
-    // на всю его длительность, и захват парадоксально защищал игрока
     if(this.iframes>0) this.iframes--;
     if(this.hurtFlash>0) this.hurtFlash--;
-    if(this.isGrabbed) return;
+    if(this.slowTimer>0&&--this.slowTimer<=0) this.slowMult=1;
     let dx=0,dy=0;
     if(input.keys.w) dy=-1; if(input.keys.s) dy=1; if(input.keys.a) dx=-1; if(input.keys.d) dx=1;
     if(dx!==0&&dy!==0){ dx*=0.707; dy*=0.707; }
@@ -98,7 +103,8 @@ export class Player extends Entity {
 
     // Мир не привязан к размеру холста, но и не бесконечен: игрок ходит
     // свободно внутри арены, а на её границе упирается.
-    this.x+=dx*this.speed; this.y+=dy*this.speed;
+    const speed=this.speed*this.slowMult;
+    this.x+=dx*speed; this.y+=dy*speed;
     this.x=Math.min(Math.max(this.x,WORLD.minX+this.radius),WORLD.maxX-this.radius);
     this.y=Math.min(Math.max(this.y,WORLD.minY+this.radius),WORLD.maxY-this.radius);
 
@@ -157,7 +163,21 @@ export class Player extends Entity {
     this.faceRow=row; this.faceHold=CONFIG.player.facingHold;
   }
 
-  hasWeapon(key){ return this.weapons.some(w=>w.def===CONFIG.weapons[key]); }
+  // Замедление от щупальца. Оно ОБНОВЛЯЕТСЯ, а не складывается: стоя в
+  // щупальце, игрок остаётся медленным, но два щупальца рядом не превращают
+  // половинную скорость в четвертную — из такого уже не выйти, а это ровно
+  // тот же отъём движения, только другими словами.
+  applySlow(mult,frames){
+    this.slowMult=Math.min(this.slowMult,mult);
+    this.slowTimer=Math.max(this.slowTimer,frames);
+  }
+
+  // Ствол по ключу из CONFIG.weapons. Эволюция откликается на ключ СВОЕГО
+  // предка (def.evolves): для прокачки «Рой игл» — это по-прежнему ветка
+  // антидота, а карточка «новый ствол» не должна выдать второй антидот тому,
+  // кто первый уже эволюционировал.
+  weaponOf(key){ return this.weapons.find(w=>w.def.key===key||w.def.evolves===key); }
+  hasWeapon(key){ return !!this.weaponOf(key); }
   addWeapon(key){ if(!this.hasWeapon(key)) this.weapons.push(new Weapon(CONFIG.weapons[key])); }
 
   // Опрашивает все стволы и возвращает вылетевшие снаряды.
@@ -217,7 +237,7 @@ export class Player extends Entity {
     if(this.isDying) return;
     this.isDying=true; this.hp=0;
     this.deathFrame=0; this.deathTimer=0;
-    this.isGrabbed=false;
+    this.slowTimer=0; this.slowMult=1;
   }
 
   stepDeath(){
@@ -347,18 +367,28 @@ export class Player extends Entity {
       renderer.ctx.lineWidth=2; renderer.ctx.beginPath();
       renderer.ctx.arc(this.x,this.y,this.radius+8,0,Math.PI*2); renderer.ctx.stroke();
     }
-    // Захват щупальцем. Эмодзи-предупреждение отсюда убрано: системный знак
-    // «⚠» рисуется своим шрифтом и на пиксель-арте смотрится наклейкой.
-    // Кольцо, стягивающееся к игроку, говорит то же самое и на языке игры.
-    if(this.isGrabbed){
-      const k=(this.life%30)/30;
-      renderer.ctx.save();
-      renderer.ctx.globalAlpha=0.8-k*0.6;
-      renderer.ctx.strokeStyle="#ff3355"; renderer.ctx.lineWidth=2;
-      renderer.ctx.beginPath();
-      renderer.ctx.arc(this.x,this.y,this.radius+16-k*12,0,Math.PI*2);
-      renderer.ctx.stroke();
-      renderer.ctx.restore();
+    // ЗАМЕДЛЕНИЕ ОТ ЩУПАЛЬЦА. Раньше здесь стягивалось красное кольцо —
+    // знак тревоги для состояния «управление отобрано». Отбирать больше
+    // нечего, и знак другой: грибница цепляется за НОГИ. Низкий приплюснутый
+    // овал у самой земли и пара нитей, которые тянутся назад, — видно, что
+    // тебя держат, но взгляд от боя это не отвлекает.
+    if(this.slowTimer>0){
+      const ctx=renderer.ctx, k=(this.life%40)/40;
+      ctx.save();
+      ctx.globalAlpha=0.25+Math.sin(k*Math.PI*2)*0.12+0.2;
+      ctx.strokeStyle="#8affe0"; ctx.lineWidth=1.6;
+      ctx.beginPath();
+      ctx.ellipse(this.x,this.y+this.radius*0.75,this.radius*0.95,this.radius*0.38,0,0,Math.PI*2);
+      ctx.stroke();
+      // Нити грибницы: три коротких усика, подрагивающих у подошв
+      for(let i=0;i<3;i++){
+        const a=Math.PI*0.25+i*Math.PI*0.25+Math.sin(this.life*0.08+i)*0.12;
+        ctx.beginPath();
+        ctx.moveTo(this.x+Math.cos(a)*this.radius*0.9,this.y+this.radius*0.75+Math.sin(a)*this.radius*0.3);
+        ctx.lineTo(this.x+Math.cos(a)*this.radius*1.5,this.y+this.radius*0.9+Math.sin(a)*this.radius*0.45);
+        ctx.stroke();
+      }
+      ctx.restore();
     }
   }
 }

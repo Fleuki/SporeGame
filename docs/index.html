@@ -52,11 +52,11 @@
   <div id="gameOverScreen" class="hidden">
     <h1>СПОРЫ ПОБЕДИЛИ</h1>
     <p>Продержался <span id="finalTime">0:00</span>, уровень <span id="finalLevel">1</span></p>
-    <!-- Раньше здесь стоял эмодзи-кругляш «🪙»: системный шрифт поверх
-         пиксель-арта, да ещё и разный на каждой платформе. Теперь это те же
-         спрайты, что валяются на арене. -->
-    <p><img class="icon" src="assets/images/ui/icon_kills.png" alt="Убито"> <span id="finalKills">0</span>
-       &nbsp; <img class="icon" src="assets/images/drops/drop_coin.png" alt="Монет"> <span id="finalCoins">0</span></p>
+    <!-- Счётчика монет здесь больше нет: валюта убрана до магазина между
+         забегами (ЭТАП 2 в ROADMAP). Цифра, которую некуда потратить,
+         обещает накопление, которого не происходит. Вернётся вместе с тем,
+         на что её тратить. -->
+    <p><img class="icon" src="assets/images/ui/icon_kills.png" alt="Убито"> <span id="finalKills">0</span></p>
     <p class="hint">R — рестарт</p>
   </div>
   <script type="module" src="js/main.js"></script>
