@@ -149,17 +149,31 @@ canvas {
    в 178 пикселей туда не влезали: третья переносилась на вторую строку и
    выглядела «более важной», чем первые две. Выбор из трёх равных вариантов
    обязан выглядеть как выбор из трёх равных вариантов. */
+/* РАМКА ПАНЕЛИ.
+   Раньше это была коробка средствами браузера: сплошная линия в 2 пикселя,
+   скруглённые углы и размытая тень. Поверх пиксель-арта такое читается как
+   диалог браузера, всплывший над игрой.
+
+   Теперь рамка — картинка, нарезанная девятью кусками (border-image): углы
+   остаются целыми, стороны тянутся под любой размер панели. Одна картинка
+   обслуживает и прокачку, и будущий магазин.
+
+   Число 64 — это толщина рамки В ИСХОДНИКЕ (512x512, кайма 64 по каждой
+   стороне, ровно 12.5%). border-width — её толщина НА ЭКРАНЕ; отношение
+   между ними и есть масштаб рисунка рамки. Менять их надо парой.
+   repeat: round — стороны повторяются целым числом раз, поэтому грибы по
+   краям не режутся пополам. */
 #upgradeMenu {
   position: absolute; top: 50%; left: 50%;
   transform: translate(-50%,-50%);
   width: max-content; max-width: 96vw;
-  background: rgba(13,31,21,0.95);
-  border: 2px solid #6b2d5c;
-  padding: 24px 32px;
-  border-radius: 8px;
+  background: rgba(8,16,12,0.95);
+  border: 34px solid transparent;
+  border-image: url("../assets/images/ui/frame_panel.png") 64 round;
+  border-radius: 0;
+  padding: 4px 14px 14px;
   text-align: center;
   z-index: 100;
-  box-shadow: 0 0 40px rgba(107,45,92,0.5);
 }
 #upgradeMenu h2 { color: #00d4aa; margin-bottom: 16px; text-shadow: 0 0 10px rgba(0,212,170,0.6); }
 #upgradeCards { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
@@ -174,7 +188,8 @@ canvas {
   width: 178px; padding: 11px 12px 12px;
   background: linear-gradient(180deg, #1c4133 0%, #12291f 100%);
   border: 1px solid var(--cat);
-  border-radius: 6px;
+  /* Скруглений в пиксель-арте не бывает: они выдают браузер сразу */
+  border-radius: 0;
   cursor: pointer;
   transition: transform 0.15s, box-shadow 0.15s, background 0.15s;
   color: #ccc;
@@ -186,7 +201,7 @@ canvas {
    а на выбор карточки даётся полсекунды */
 .upgrade-card::before {
   content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
-  background: var(--cat); border-radius: 6px 0 0 6px;
+  background: var(--cat);
 }
 .upgrade-card:hover {
   background: linear-gradient(180deg, #275845 0%, #163326 100%);
@@ -223,20 +238,45 @@ canvas {
 /* Точки уровней: сколько раз улучшение уже взято и сколько ещё влезет */
 .upgrade-card .pips { display: flex; gap: 4px; margin-top: 9px; }
 .upgrade-card .pips i {
-  width: 12px; height: 4px; border-radius: 2px;
+  width: 12px; height: 4px;
   background: rgba(255,255,255,0.14);
 }
 .upgrade-card .pips i.on { background: var(--cat); box-shadow: 0 0 6px var(--cat); }
+/* ЭКРАН СМЕРТИ.
+   Раньше — две строки системным шрифтом на ровной зелёной заливке, самый
+   пустой кадр в игре. Между тем это единственный экран, который игрок
+   разглядывает не в панике.
+
+   Теперь под текстом лежит иллюстрация: противогаз, проросший грибами.
+   Она нарисована СО СМЕЩЕНИЕМ ВЛЕВО, а правая треть намеренно оставлена
+   тёмной и пустой — под текст. Поэтому текст и прижат вправо, а не стоит
+   по центру: по центру он ложился бы прямо на грибы. */
 #gameOverScreen {
   position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(13,31,21,0.9);
+  background: linear-gradient(rgba(6,14,10,0.45), rgba(6,14,10,0.7)),
+              url("../assets/images/ui/screen_death.png") center/cover no-repeat;
   display: flex; flex-direction: column;
-  justify-content: center; align-items: center;
+  justify-content: center; align-items: flex-end;
+  padding-right: 6vw;
+  text-align: right;
   z-index: 200; color: #ff3333;
 }
-#gameOverScreen h1 { font-size: 48px; text-shadow: 0 0 20px rgba(255,51,51,0.5); margin-bottom: 16px; }
-#gameOverScreen p { color: #8a8a8a; font-size: 18px; margin-bottom: 8px; }
+#gameOverScreen h1 { font-size: 48px; text-shadow: 0 0 20px rgba(255,51,51,0.5), 0 2px 6px #000; margin-bottom: 16px; }
+#gameOverScreen p { color: #cbd8d0; font-size: 18px; margin-bottom: 8px; text-shadow: 0 2px 6px #000; }
 #gameOverScreen .hint { color: #00d4aa; font-size: 14px; margin-top: 20px; }
+/* Телефон стоймя. Здесь cover не годится в принципе: широкую иллюстрацию он
+   обрезает до узкой вертикальной полосы, и от противогаза остаётся кусок
+   фильтра — картинку не узнать. Поэтому она кладётся ЦЕЛИКОМ по ширине и
+   прижимается к нижнему краю, а текст встаёт над ней. */
+@media (max-aspect-ratio: 5/4) {
+  #gameOverScreen {
+    align-items: center; text-align: center; padding-right: 0;
+    justify-content: center; padding-bottom: 30vh;
+    background: linear-gradient(rgba(6,14,10,0.35), rgba(6,14,10,0.55)),
+                url("../assets/images/ui/screen_death.png") center bottom / 100% auto no-repeat,
+                #0d1f15;
+  }
+}
 .hidden { display: none !important; }
 
 /* МОБИЛЬНАЯ АДАПТАЦИЯ.
