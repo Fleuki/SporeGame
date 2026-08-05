@@ -49,6 +49,17 @@
     <h2>ПРОКАЧКА</h2>
     <div id="upgradeCards"></div>
   </div>
+  <!-- СТАРТОВЫЙ ЭКРАН. Раньше страница открывалась сразу в бой: не было ни
+       момента «я начинаю забег», ни места для названия, ни повода нажать
+       что-либо самому. Заодно первое касание здесь разблокирует звук —
+       браузер не даёт создать его до действия пользователя. -->
+  <div id="startScreen">
+    <img id="emblem" src="assets/images/ui/emblem.png" alt="">
+    <h1>ГРИБНОЙ СУМРАК</h1>
+    <p class="sub">Споры в воздухе. Держись, сколько сможешь.</p>
+    <button id="playBtn" class="big-btn">ИГРАТЬ</button>
+    <p class="hint">WASD или палец по экрану — движение. Стреляет само.</p>
+  </div>
   <div id="gameOverScreen" class="hidden">
     <h1>СПОРЫ ПОБЕДИЛИ</h1>
     <p>Продержался <span id="finalTime">0:00</span>, уровень <span id="finalLevel">1</span></p>
@@ -57,7 +68,11 @@
          обещает накопление, которого не происходит. Вернётся вместе с тем,
          на что её тратить. -->
     <p><img class="icon" src="assets/images/ui/icon_kills.png" alt="Убито"> <span id="finalKills">0</span></p>
-    <p class="hint">R — рестарт</p>
+    <!-- КНОПКА, А НЕ ПОДПИСЬ. Здесь было написано «R — рестарт», и на
+         телефоне это был тупик: клавиши нет, забег не перезапустить иначе
+         как перезагрузкой страницы. -->
+    <button id="restartBtn" class="big-btn">ЗАНОВО</button>
+    <p class="hint">или клавиша R</p>
   </div>
   <script type="module" src="js/main.js"></script>
 </body>

@@ -59,7 +59,7 @@ const battle=new BattleSystem(particles,sporeSystem,loot,audio);
 const map=new MapSystem();
 
 input.onMutePress=()=>audio.toggleMute();
-input.onRestartPress=()=>{ if(gameOver) init(); };
+input.onRestartPress=()=>{ if(started&&gameOver) init(); };
 // Escape раньше просто закрывал меню прокачки — это была бесплатная отмена
 // выбора. Теперь это честная пауза, а меню прокачки закрыть нельзя: выбрать
 // карточку всё равно придётся.
@@ -83,6 +83,10 @@ window.addEventListener("orientationchange",()=>setTimeout(onResize,120));
 window.visualViewport?.addEventListener("resize",onResize);
 
 let player,enemies,projectiles,spawnSystem,gameOver,paused,waitingForUpgrade;
+// Забег ещё не начат: страница открывается на стартовом экране, а мир под
+// ним стоит неподвижно и работает фоном. До нажатия «Играть» симуляция не
+// идёт вообще — иначе игрок к моменту старта уже был бы обстрелян.
+let started=false;
 let runTime=0;   // секунды с начала забега, идут только пока игра не на паузе
 // Меню прокачки открывается не мгновенно: сначала должно дойти, что уровень
 // вообще взят. При паузе кадры не идут, поэтому иначе искры и надпись никто
@@ -132,7 +136,7 @@ function announceEvolution(card){
 }
 
 function update(dt){
-  if(gameOver||paused||waitingForUpgrade) return;
+  if(!started||gameOver||paused||waitingForUpgrade) return;
 
   // Смерть: враги, волны и стрельба остановлены, крутятся только анимация
   // алхимика, частицы и карта — чтобы кадр не выглядел замороженным насмерть.
@@ -389,6 +393,20 @@ if(new URLSearchParams(location.search).has("debug")){
   };
 }
 
+// НАЧАЛО ЗАБЕГА. init() зовётся и здесь, до старта: мир нужен нарисованным,
+// чтобы за стартовым экраном стояла игра, а не чёрный прямоугольник. Но HUD
+// до нажатия «Играть» прячем — показывать шкалы поверх названия незачем.
+function startRun(){
+  document.getElementById("startScreen").classList.add("hidden");
+  started=true; init();
+}
+document.getElementById("playBtn").onclick=startRun;
+// Кнопка вместо надписи «R — рестарт»: на телефоне клавиши нет, и экран
+// смерти был тупиком — забег не перезапустить иначе как перезагрузкой.
+document.getElementById("restartBtn").onclick=()=>{ if(gameOver) init(); };
+
 const loop=new Loop(update,draw);
-init(); loop.start();
+init();
+document.getElementById("ui").classList.add("hidden");
+loop.start();
 console.log("Грибной Сумрак запущен! WASD/джойстик — движение, мышь/авто-прицел — стрельба, M — звук, R — рестарт");

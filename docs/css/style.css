@@ -277,6 +277,49 @@ canvas {
                 #0d1f15;
   }
 }
+/* СТАРТОВЫЙ ЭКРАН.
+   Название набрано шрифтом, а не нарисовано картинкой намеренно: кириллицу
+   генераторы пишут с ошибками почти всегда, и «ГРИБНОЙ СУМPAK» заметишь не
+   сразу. Картинкой — только герб над ним. */
+#startScreen {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  background: radial-gradient(circle at 50% 42%, #14301f 0%, #0a1710 55%, #060d09 100%);
+  display: flex; flex-direction: column;
+  justify-content: center; align-items: center;
+  z-index: 300; text-align: center;
+  padding: 4vh 5vw;
+}
+#emblem {
+  width: min(38vh, 300px); height: auto;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 0 26px rgba(0,212,170,0.32));
+  -webkit-user-drag: none;
+}
+#startScreen h1 {
+  margin-top: 10px;
+  font-size: clamp(26px, 6vw, 46px);
+  letter-spacing: 4px; color: #eaf7f1;
+  text-shadow: 0 0 16px rgba(0,212,170,0.55), 0 3px 8px #000;
+}
+#startScreen .sub { color: #7e948a; font-size: 14px; margin-top: 8px; }
+#startScreen .hint { color: #5d7168; font-size: 12px; margin-top: 16px; }
+
+/* КНОПКА. Никаких скруглений и градиентов: рядом пиксель-арт, и то и другое
+   выдаёт браузер мгновенно. Высота с запасом — по ней попадают пальцем. */
+.big-btn {
+  margin-top: 22px;
+  min-height: 52px; padding: 0 40px;
+  font-family: inherit; font-size: 19px; font-weight: bold; letter-spacing: 3px;
+  color: #061009; background: #00d4aa;
+  border: 2px solid #7dffca; border-radius: 0;
+  cursor: pointer; pointer-events: auto;
+  box-shadow: 0 0 22px rgba(0,212,170,0.35);
+  transition: background 0.12s, transform 0.08s;
+}
+.big-btn:hover { background: #7dffca; }
+.big-btn:active { transform: translateY(2px); }
+#gameOverScreen .big-btn { margin-top: 18px; }
+
 .hidden { display: none !important; }
 
 /* МОБИЛЬНАЯ АДАПТАЦИЯ.
