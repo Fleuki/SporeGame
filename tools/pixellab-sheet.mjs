@@ -119,28 +119,37 @@ const img64=(o)=>decodePng(Buffer.from(
 
 if(flag("dry")){
   console.log(`референс ${refPath} клетка ${cc},${cr} из сетки ${gc}x${gr} -> ${size}x${size}`);
-  console.log(`лист: 4 ряда x ${frames} кадров, действие «${action}»`);
-  console.log(`итог: assets-raw/${out} (${frames*size}x${4*size})`);
+  console.log(`лист: ${flag("dirs",4)>1?4:1} ряд(ов) x ${frames} кадров, действие «${action}»`);
+  console.log(`итог: assets-raw/${out} (${frames*size}x${(flag("dirs",4)>1?4:1)*size})`);
   process.exit(0);
 }
 
-process.stdout.write("повороты ");
 const seed=flag("seed")?+flag("seed"):null;
-const rot=await wait(await post("/generate-8-rotations-v3",{
-  first_frame:{type:"base64",base64:b64(first)},
-  description:flag("who","")||undefined,
-  no_background:true,
-  ...(seed!==null?{seed}:{})
-}));
-const views=(rot.images||[]).map(img64);
-if(views.length<8){ console.error("\nждали 8 поворотов, пришло "+views.length); process.exit(1); }
-console.log(" готово");
+
+// --dirs=1 — лист в ОДИН ряд. Так устроена половина врагов: у спороносца и
+// летучей споры в конфиге стоит `row:0, mirror:true`, то есть игра берёт
+// единственный ряд и зеркалит его по направлению движения. Гнать для них
+// повороты — это заплатить за восемь видов, чтобы выбросить семь.
+const dirs=+flag("dirs",4);
+let views=null;
+if(dirs>1){
+  process.stdout.write("повороты ");
+  const rot=await wait(await post("/generate-8-rotations-v3",{
+    first_frame:{type:"base64",base64:b64(first)},
+    description:flag("who","")||undefined,
+    no_background:true,
+    ...(seed!==null?{seed}:{})
+  }));
+  views=(rot.images||[]).map(img64);
+  if(views.length<8){ console.error("\nждали 8 поворотов, пришло "+views.length); process.exit(1); }
+  console.log(" готово");
+}
 
 const rows=[];
-for(const r of ROWS){
+for(const r of (dirs>1?ROWS:[{name:"единственный ряд",rot:null}])){
   process.stdout.write("шаг «"+r.name+"» ");
   const anim=await wait(await post("/animate-with-text-v3",{
-    first_frame:{type:"base64",base64:b64(views[r.rot])},
+    first_frame:{type:"base64",base64:b64(r.rot===null?first:views[r.rot])},
     action, frame_count:frames, no_background:true,
     ...(seed!==null?{seed}:{})
   }));
@@ -150,9 +159,29 @@ for(const r of ROWS){
   console.log(" готово");
 }
 
-const sheet=compose(rows,size,size);
 const dst=join(RAW,out);
 mkdirSync(dirname(dst),{recursive:true});
+
+// --patch-row=N — вписать полученный ряд в УЖЕ СУЩЕСТВУЮЩИЙ лист, не трогая
+// остальные. Нужно чаще, чем кажется: из четырёх поворотов один регулярно
+// выходит негодным (у волка это был вид строго в лоб — самый трудный ракурс
+// для четвероногого сверху), и платить за весь лист заново из-за одного ряда
+// незачем.
+const patch=flag("patch-row");
+if(patch!==null&&existsSync(dst)){
+  const old=decodePng(readFileSync(dst));
+  const s=old.width/frames;
+  const grid=[];
+  for(let r=0;r<old.height/s;r++){
+    grid.push(+patch===r?rows[0]:Array.from({length:frames},(_,c)=>crop(old,c*s,r*s,s,s)));
+  }
+  writeFileSync(dst,encodePng(compose(grid,s,s)));
+  console.log("ряд "+patch+" заменён в assets-raw/"+out);
+  execFileSync(process.execPath,[join(ROOT,"tools/normalize.mjs"),out],{stdio:"inherit"});
+  process.exit(0);
+}
+
+const sheet=compose(rows,size,size);
 writeFileSync(dst,encodePng(sheet));
 console.log("assets-raw/"+out+"  "+sheet.width+"x"+sheet.height);
 execFileSync(process.execPath,[join(ROOT,"tools/normalize.mjs"),out],{stdio:"inherit"});

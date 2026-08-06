@@ -379,7 +379,12 @@ export const CONFIG = {
         name: "Спороносец", hp: 28, speed: 0.85, radius: 14, damage: 8, xpReward: 6,
         color: { body: ["#8a8a8a","#6b2d5c","#3d1a33"] }, rim: "#c58cff",
         // Ряд 0 — вид в три четверти с вытянутыми руками, лицом вправо.
-        sprite: { key:"enemy_spore_bearer", frame:128, cols:4, rows:3,
+        // frame 128 -> 64 и rows 3 -> 1: лист перерисован конвейером
+        // (tools/pixellab-sheet.mjs) и теперь содержит ровно то, что игра
+        // читает, — ОДИН ряд из четырёх кадров, который зеркалится по
+        // направлению. Прежние 128 пикселей на кадр всё равно ужимались до
+        // 62 при выводе, то есть половина картинки существовала зря.
+        sprite: { key:"enemy_spore_bearer", frame:64, cols:4, rows:1,
                   row:0, mirror:true, animSpeed:10, display:62 },
         abilities: ["spore_cloud_on_death"], sporeCloudRadius: 60, sporeCloudAmount: 5
       },
@@ -388,8 +393,12 @@ export const CONFIG = {
         color: { body: ["#5c3a21","#6b2d5c","#2a1a0f"] }, rim: "#ffab5e",
         // У волка полноценный набор из 4 направлений: ряды сверху вниз —
         // от камеры, вправо, на камеру, влево.
-        sprite: { key:"enemy_mushroom_wolf", frame:128, cols:4, rows:4,
-                  dirRows:{up:0,right:1,down:2,left:3}, animSpeed:6, display:68 },
+        // Лист перерисован конвейером, и ряды в нём лежат в том же порядке,
+        // что у игрока: 0 вниз, 1 вправо, 2 влево, 3 вверх. Порядок один на
+        // все листы нарочно — раньше у врагов он был свой (up:0), и держать в
+        // голове две несовпадающие раскладки было незачем.
+        sprite: { key:"enemy_mushroom_wolf", frame:64, cols:4, rows:4,
+                  dirRows:{down:0,right:1,left:2,up:3}, animSpeed:6, display:68 },
         abilities: ["spore_trail","spore_cloud_on_death"],
         trailInterval: 8, sporeCloudRadius: 50, sporeCloudAmount: 8
       },
@@ -410,8 +419,12 @@ export const CONFIG = {
         // Ряды листа: 0 — от камеры, 1 — вправо, 2 — на камеру, 3 — влево.
         // Кадры в ряду — не шаги, а фазы раздувания трубы, поэтому анимация
         // крутится не сама по себе, а по прогрессу заряда (см. enemy.js).
-        sprite: { key:"enemy_spore_piper", frame:128, cols:4, rows:4,
-                  dirRows:{up:0,right:1,down:2,left:3}, animSpeed:8, display:76 },
+        // Ряды в перерисованном листе идут как у всех: 0 вниз, 1 вправо,
+        // 2 влево, 3 вверх. Колонки здесь — НЕ шаг, а стадии замаха: труба
+        // раскрывается по прогрессу заряда (Enemy.update зовёт anim.hold),
+        // поэтому кадр 0 обязан быть закрытой трубой, а кадр 3 — раскрытой.
+        sprite: { key:"enemy_spore_piper", frame:64, cols:4, rows:4,
+                  dirRows:{down:0,right:1,left:2,up:3}, animSpeed:8, display:76 },
         abilities: ["ranged_attack"],
         ranged: {
           // keepDist меньше половины высоты кадра (при зуме 1.6 это 219
@@ -465,7 +478,8 @@ export const CONFIG = {
         name: "Летучая Спора", hp: 22, speed: 1.9, radius: 11, damage: 10, xpReward: 9,
         color: { body: ["#2a2a2a","#6b2d5c","#8a8a8a"] }, rim: "#7fe9d6",
         // Ряд 0 — вид спереди, 4 фазы взмаха крыльев.
-        sprite: { key:"enemy_spore_bat", frame:128, cols:4, rows:4,
+        // Тот же перерисованный формат, что у спороносца: один ряд, кадр 64
+        sprite: { key:"enemy_spore_bat", frame:64, cols:4, rows:1,
                   row:0, mirror:true, animSpeed:5, display:60 },
         abilities: ["zigzag_flight","toxic_trail"], zigzagAmp: 2.5, trailInterval: 5
       }
