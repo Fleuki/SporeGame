@@ -65,6 +65,21 @@ def cut(img, key, lo, hi, mode="saturated"):
     a = np.asarray(img.convert("RGB")).astype(np.float32)
     k = np.array(key, dtype=np.float32)
     w = k - k.mean()                       # направление «в сторону ключа»
+    if mode == "grey":
+        # СЕРЫЙ ФОН (нарисованная шахматка). Работает ТОЛЬКО если в рисунке
+        # нет своих нейтральных мест: ключом служит сама насыщенность, и всё
+        # бесцветное уйдёт в прозрачность вместе с подложкой. Для кислотной
+        # лужи это верно — у неё насыщенность 109..166 против 0..2 у клеток.
+        # Для кроны элиты было неверно: её шипы почти серые, и их срезало.
+        chroma = a.max(axis=2) - a.min(axis=2)
+        alpha = np.clip((chroma - 6.0) / 42.0, 0.0, 1.0)
+        # фон вычитаем как ровный серый — берём его из самой картинки
+        flat = a[(chroma < 4)]
+        B = float(flat.mean()) if len(flat) else 64.0
+        den = np.maximum(alpha, 0.06)[..., None]
+        F = np.clip((a - (1 - alpha[..., None]) * B) / den, 0, 255)
+        F = np.where(alpha[..., None] > 0.98, a, F)
+        return np.dstack([F.astype(np.uint8), (alpha * 255).astype(np.uint8)])
     if mode == "pale":
         norm = float((k * w).sum() - k.mean() * w.sum())
         if abs(norm) < 1e-3:
@@ -219,8 +234,10 @@ def main():
     p.add_argument("--key", default="FF00FF", help="цвет фона в hex, по умолчанию магента")
     p.add_argument("--lo", type=float, default=0.05, help="ниже этой альфы — считаем чистым фоном")
     p.add_argument("--hi", type=float, default=0.14, help="выше 1-hi — считаем полностью непрозрачным")
-    p.add_argument("--mode", choices=("saturated","pale"), default="saturated",
-                   help="pale — если в картинке есть кремовое, белое, бледное:\n                        режим по умолчанию такое съедает")
+    p.add_argument("--mode", choices=("saturated","pale","grey"), default="saturated",
+                   help="pale — если в картинке есть кремовое, белое, бледное; "
+                        "grey — фон СЕРЫЙ (нарисованная шахматка), годится только "
+                        "когда в самом рисунке нет бесцветных мест")
     p.add_argument("--grid", help="пересобрать в ровную сетку, напр. 4x1 (колонки x ряды)")
     p.add_argument("--cell", type=int, default=256, help="сторона клетки на выходе")
     p.add_argument("--pad", type=float, default=0.06, help="поля вокруг содержимого клетки")
