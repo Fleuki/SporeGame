@@ -67,6 +67,14 @@ input.onPausePress=()=>{ if(!gameOver&&!waitingForUpgrade) paused=!paused; };
 
 (async()=>{ await loader.loadAll(CONFIG.assets); })();
 
+// ШРИФТ ДЛЯ ХОЛСТА ГРУЗИМ ЯВНО. Браузер подтягивает woff2 лениво — когда
+// текст этим шрифтом впервые понадобился РАЗМЕТКЕ. Холст в этот учёт не
+// входит: если файл ещё не пришёл, canvas молча нарисует системным, и первые
+// цифры урона в забеге будут другим шрифтом. Подмножества раздельные, поэтому
+// просим обе буквы — латинскую и кириллическую.
+document.fonts?.load('16px "Pixelify Sans"', "0A");
+document.fonts?.load('bold 16px "Pixelify Sans"', "Я");
+
 // Поворот телефона, смена размера окна, появление адресной строки — всё это
 // приходит сюда. Камеру пересобираем и сразу центрируем на игроке: иначе
 // после поворота окно остаётся сдвинутым на полкадра.
@@ -340,9 +348,9 @@ function draw(){
     // меньше 900 пикселей, и кегль в 46px занял бы половину экрана
     const k=Math.min(1.4,Math.max(0.55,canvas.width/CONFIG.screen.width));
     renderer.drawText("ПАУЗА",canvas.width/2,canvas.height/2,
-      {font:"bold "+Math.round(46*k)+"px monospace",color:"#00d4aa",align:"center"});
+      {font:"bold "+Math.round(46*k)+"px "+CONFIG.fontFamily,color:"#00d4aa",align:"center"});
     renderer.drawText("Esc — продолжить",canvas.width/2,canvas.height/2+40*k,
-      {font:Math.round(16*k)+"px monospace",color:"#8a8a8a",align:"center"});
+      {font:Math.round(16*k)+"px "+CONFIG.fontFamily,color:"#8a8a8a",align:"center"});
   }
 
   // Экран поражения рисует #gameOverScreen из index.html. Раньше здесь же

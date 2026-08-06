@@ -1,3 +1,35 @@
+/* ШРИФТ.
+   Везде стоял системный Courier New — моноширинный, гладкий, из офисных
+   документов. Поверх пиксель-арта он выдавал интерфейс браузера с первого
+   взгляда, и чем аккуратнее становились рамка и герб, тем сильнее это резало.
+
+   Pixelify Sans — пиксельный и, что важнее, С КИРИЛЛИЦЕЙ: почти все шрифты
+   этого класса (Press Start 2P, Silkscreen, VT323) её не тянут, а игра
+   русскоязычная целиком. Лицензия OFL, файлы лежат рядом — никаких запросов
+   на чужие домены: игра обязана работать с открытой из папки страницы.
+
+   Два файла вместо одного намеренно: подмножества кириллицы и латиницы
+   раздельно, вместе 17 КБ. Браузер возьмёт латиницу только когда встретит
+   латинскую букву — а её в интерфейсе всего-то «WASD» и «R». */
+@font-face {
+  font-family: "Pixelify Sans";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: block;
+  src: url("../assets/fonts/pixelify-cyrillic.woff2") format("woff2");
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: "Pixelify Sans";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: block;
+  src: url("../assets/fonts/pixelify-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
+                 U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F,
+                 U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body {
   background: #0d1f15;
@@ -7,7 +39,7 @@ html, body {
   height: 100vh;
   width: 100vw;
   overflow: hidden;
-  font-family: "Courier New", monospace;
+  font-family: "Pixelify Sans", "Courier New", monospace;
   touch-action: none; /* отключаем зум на телефоне */
   -webkit-user-select: none;
   user-select: none;
@@ -50,7 +82,7 @@ canvas {
   position: absolute;
   top: 0; left: 0; right: 0; bottom: 0;
   color: #00d4aa;
-  font: 14px "Courier New", monospace;
+  font: 14px "Pixelify Sans", "Courier New", monospace;
   pointer-events: none;
   z-index: 10;
   line-height: 1;
@@ -123,7 +155,7 @@ canvas {
   padding: 0 8px 5px 8px;
 }
 #levelDisplay {
-  font-size: 13px; color: #cbb3ff; min-width: 18px; text-align: right;
+  font-size: 14px; color: #cbb3ff; min-width: 18px; text-align: right;
   text-shadow: 0 0 8px rgba(150,110,255,0.7), 0 1px 3px rgba(0,0,0,0.9);
 }
 #xpTrack {
@@ -178,6 +210,10 @@ canvas {
 #upgradeMenu h2 { color: #00d4aa; margin-bottom: 16px; text-shadow: 0 0 10px rgba(0,212,170,0.6); }
 #upgradeCards { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
 /* КАРТОЧКА УЛУЧШЕНИЯ.
+   Кегли подняты после перехода на пиксельный шрифт: у него буква сложена из
+   крупных квадратов, и на 9-11px она мылится и разваливается — Courier на
+   этих же размерах читался, потому что рисовался сглаженным. Ниже 12px тут
+   ставить нельзя.
    --cat — цвет ветки. Он один раз задаётся в .cat-* ниже и дальше сам
    расходится по рамке, подписи и точкам уровней: раньше каждый из этих
    элементов красился отдельным правилом, и добавление ветки означало три
@@ -185,7 +221,7 @@ canvas {
 .upgrade-card {
   --cat: #00d4aa;
   position: relative;
-  width: 178px; padding: 11px 12px 12px;
+  width: 190px; padding: 11px 12px 12px;
   background: linear-gradient(180deg, #1c4133 0%, #12291f 100%);
   border: 1px solid var(--cat);
   /* Скруглений в пиксель-арте не бывает: они выдают браузер сразу */
@@ -230,11 +266,11 @@ canvas {
   background: linear-gradient(180deg, #562947 0%, #2e1727 100%);
 }
 .upgrade-card .tag {
-  color: var(--cat); font-size: 9px; letter-spacing: 1.5px;
+  color: var(--cat); font-size: 10px; letter-spacing: 1.5px;
   opacity: 0.85; margin-bottom: 5px;
 }
-.upgrade-card .title { color: #eaf7f1; font-weight: bold; margin-bottom: 5px; font-size: 13px; }
-.upgrade-card .desc { color: #93a89e; font-size: 11px; line-height: 1.35; }
+.upgrade-card .title { color: #eaf7f1; font-weight: bold; margin-bottom: 5px; font-size: 14px; }
+.upgrade-card .desc { color: #a8bcb2; font-size: 12px; line-height: 1.4; }
 /* Точки уровней: сколько раз улучшение уже взято и сколько ещё влезет */
 .upgrade-card .pips { display: flex; gap: 4px; margin-top: 9px; }
 .upgrade-card .pips i {
@@ -263,7 +299,7 @@ canvas {
 }
 #gameOverScreen h1 { font-size: 48px; text-shadow: 0 0 20px rgba(255,51,51,0.5), 0 2px 6px #000; margin-bottom: 16px; }
 #gameOverScreen p { color: #cbd8d0; font-size: 18px; margin-bottom: 8px; text-shadow: 0 2px 6px #000; }
-#gameOverScreen .hint { color: #00d4aa; font-size: 14px; margin-top: 20px; }
+#gameOverScreen .hint { color: #00d4aa; font-size: 15px; margin-top: 20px; }
 /* Телефон стоймя. Здесь cover не годится в принципе: широкую иллюстрацию он
    обрезает до узкой вертикальной полосы, и от противогаза остаётся кусок
    фильтра — картинку не узнать. Поэтому она кладётся ЦЕЛИКОМ по ширине и
@@ -301,8 +337,8 @@ canvas {
   letter-spacing: 4px; color: #eaf7f1;
   text-shadow: 0 0 16px rgba(0,212,170,0.55), 0 3px 8px #000;
 }
-#startScreen .sub { color: #7e948a; font-size: 14px; margin-top: 8px; }
-#startScreen .hint { color: #5d7168; font-size: 12px; margin-top: 16px; }
+#startScreen .sub { color: #8fa79b; font-size: 15px; margin-top: 8px; }
+#startScreen .hint { color: #6f857a; font-size: 13px; margin-top: 16px; }
 
 /* КНОПКА. Никаких скруглений и градиентов: рядом пиксель-арт, и то и другое
    выдаёт браузер мгновенно. Высота с запасом — по ней попадают пальцем. */
@@ -346,7 +382,7 @@ canvas {
   /* Шкалы ужимаются целиком, вместе с рамкой: пропорции картинки те же,
      поэтому --win-a/--win-b трогать не надо */
   .orn-bar { width: 150px; height: 28px; }
-  .upgrade-card { width: 136px; padding: 9px 9px 10px; }
+  .upgrade-card { width: 146px; padding: 9px 9px 10px; }
   .upgrade-card .pips i { width: 9px; }
   #upgradeMenu { padding: 16px; max-width: 96vw; }
 }
@@ -361,8 +397,8 @@ canvas {
 /* Телефон лёжа: экран низкий, столбик из карточек в него уже не влезет */
 @media (max-height: 500px) {
   #upgradeCards { flex-direction: row; }
-  .upgrade-card { width: 150px; padding: 7px 8px 8px; }
-  .upgrade-card .desc { font-size: 10px; }
+  .upgrade-card { width: 158px; padding: 7px 8px 8px; }
+  .upgrade-card .desc { font-size: 11px; }
   #upgradeMenu { padding: 10px 14px; }
   #upgradeMenu h2 { font-size: 16px; margin-bottom: 8px; }
   #timer { font-size: 18px; }
