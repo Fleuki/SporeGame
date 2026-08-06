@@ -125,6 +125,58 @@ export class BattleSystem {
     }
   }
 
+  // ВЫБРОС СПОР. Трата шкалы заражения: игрок выдыхает всё накопленное
+  // кольцом вокруг себя. Урон средний, а главное — отдача: толпа, в которой
+  // уже не пройти, разлетается, и появляется куда шагнуть.
+  //
+  // Живёт здесь, а не в Player, по той же причине, что и весь остальной урон:
+  // игрок не знает ни про сетку врагов, ни про камеру. Player только хранит
+  // перезарядку и решает, хватает ли шкалы (spendBurst).
+  //
+  // Возвращает true, если выброс состоялся: по этому main решает, играть ли
+  // звук отказа.
+  sporeBurst(player,camera){
+    const B=CONFIG.sporeSystem.burst;
+    if(!player.spendBurst()) return false;
+    const r=B.radius*(player.burstArea||1);
+    const dmg=player.damage*B.damage*(player.burstPower||1);
+
+    this.effects.push(new Effect(player.x,player.y,{...B.fx,display:B.fx.display*(r/B.radius)}));
+    this.particles.emit(player.x,player.y,"#c58cff",30,1.5,7);
+    // КОЛЬЦО ПО ГРАНИЦЕ УДАРА, а не облако во весь радиус. Облаком (тем самым,
+    // которым чихает Плодовая Мать) выброс сначала и рисовался — но оно висит
+    // две секунды полупрозрачной пеленой ровно там, куда игрок собрался
+    // шагнуть, и закрывает расчищенное место в тот момент, когда его надо
+    // разглядеть. Кольцо говорит то же самое — «достало досюда» — и гаснет
+    // меньше чем за секунду.
+    for(let i=0;i<18;i++){
+      const a=(Math.PI*2/18)*i;
+      // Цвет светлее шкалы спор нарочно: арена тёмная, и «правильный»
+      // фиолетовый #8a3dff на ней не виден вовсе — кольцо пропадает вместе с
+      // единственной подсказкой, докуда достал удар.
+      this.particles.emit(player.x+Math.cos(a)*r,player.y+Math.sin(a)*r,"#d9b3ff",2,0.4,1.4,3,5);
+    }
+    this.audio?.sfx("burst");
+    camera?.shake(CONFIG.feel.shakeExplosion*1.4,14);
+
+    for(const e of this.grid.query(player.x,player.y,r,[])){
+      if(e.dead) continue;
+      const d=Math.hypot(e.x-player.x,e.y-player.y);
+      if(d>r+e.radius*0.5) continue;
+      const a=Math.atan2(e.y-player.y,e.x-player.x);
+      e.takeDamage(dmg,a,CONFIG.feel.knockback*this.kbMult(e)*B.knockback);
+      this.showDamage(e,dmg,false);
+      if(B.dot&&e.applyDot) e.applyDot(B.dot.dps,B.dot.time);
+    }
+    // Облака трубачей сдувает тем же выдохом. Иначе выброс «расчищает круг»
+    // только наполовину: враги отлетели, а летящий в лицо залп остался.
+    for(let i=this.enemyShots.length-1;i>=0;i--){
+      const s=this.enemyShots[i];
+      if(Math.hypot(s.x-player.x,s.y-player.y)<=r) this.enemyShots.splice(i,1);
+    }
+    return true;
+  }
+
   // ОСКОЛКИ ВУЛКАНА (эволюция зажигательной склянки). Разлетаются веером от
   // точки взрыва и рвутся сами — по фитилю или от первого встречного.
   // Собственного cluster у осколка нет, поэтому цепочка обрывается на нём.

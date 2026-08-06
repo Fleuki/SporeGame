@@ -144,6 +144,42 @@ canvas {
   50%      { filter: brightness(1.45) drop-shadow(0 0 8px rgba(255,60,60,0.9)); }
 }
 
+/* КНОПКА ВЫБРОСА СПОР — справа внизу, зеркально шкалам.
+   #ui не ловит указатель целиком (pointer-events:none), поэтому право на
+   касание выдаётся ровно этой кнопке: остальной интерфейс не должен
+   перехватывать пальцы у джойстика, который появляется в любой точке экрана.
+   Скруглений и градиентов нет намеренно — как и во всём остальном HUD. */
+#burstBtn {
+  position: absolute; right: 14px; bottom: 22px;
+  pointer-events: auto;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 8px 10px 6px;
+  background: rgba(6,9,11,0.72);
+  border: 2px solid #8a3dff;
+  color: #cbb3ff;
+  font: 11px "Pixelify Sans", "Courier New", monospace;
+  letter-spacing: 1px;
+  cursor: url("../assets/images/ui/cursor.png") 27 32, pointer;
+  /* Двойной тап по кнопке не должен зумить страницу на телефоне */
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+#burstBtn img { width: 34px; height: 34px; image-rendering: pixelated; }
+/* Готов — светится и мерцает: заряженный ресурс обязан проситься в дело */
+#burstBtn:not(.dim) { box-shadow: 0 0 12px rgba(138,61,255,0.55); }
+#burstBtn:not(.dim) img { animation: burst-ready 1.4s ease-in-out infinite; }
+@keyframes burst-ready {
+  0%, 100% { filter: none; }
+  50%      { filter: brightness(1.5) drop-shadow(0 0 7px rgba(180,120,255,0.9)); }
+}
+/* Спор не хватает — кнопка гаснет, но не исчезает: пропадающий элемент
+   интерфейса читается как поломка, а не как «пока нечем» */
+#burstBtn.dim { opacity: 0.4; border-color: #4a3a66; }
+#burstBtn .key { opacity: 0.75; }
+/* Клавиатурная подсказка на сенсорном экране — обман: клавиши там нет.
+   Тот же класс носит слово «Пробел» в подсказке стартового экрана. */
+body.touch .key { display: none; }
+
 /* ОПЫТ — тонкая полоса во всю ширину кадра у нижнего края.
    Текстурную шкалу здесь намеренно не используем: её ширина зависит от
    размера окна, а рисунок пришлось бы пересчитывать на каждый resize. Ровная
@@ -254,6 +290,9 @@ canvas {
 .upgrade-card.cat-extract    { --cat: #39ff14; }
 .upgrade-card.cat-mutation   { --cat: #c58cff; }
 .upgrade-card.cat-gear       { --cat: #7fc7ff; }
+/* Выброс — трата заражения, и цвет у него тот же фиолетовый, что у шкалы спор
+   и у самого облака: ветка и ресурс, который она качает, обязаны совпадать */
+.upgrade-card.cat-burst      { --cat: #8a3dff; }
 /* Эволюция выпадает раз за забег и меняет ствол целиком — она обязана
    отличаться от соседних карточек не только оттенком рамки. Своя подложка и
    собственное свечение, не дожидающееся наведения: карточку видно раньше,
@@ -382,6 +421,10 @@ canvas {
   /* Шкалы ужимаются целиком, вместе с рамкой: пропорции картинки те же,
      поэтому --win-a/--win-b трогать не надо */
   .orn-bar { width: 150px; height: 28px; }
+  /* На телефоне это единственная кнопка в бою, и жать её надо большим пальцем
+     на бегу: цель меньше ~56 пикселей мажется, а промах стоит выброса */
+  #burstBtn { right: 10px; bottom: 18px; padding: 10px; }
+  #burstBtn img { width: 44px; height: 44px; }
   .upgrade-card { width: 146px; padding: 9px 9px 10px; }
   .upgrade-card .pips i { width: 9px; }
   #upgradeMenu { padding: 16px; max-width: 96vw; }
@@ -403,4 +446,5 @@ canvas {
   #upgradeMenu h2 { font-size: 16px; margin-bottom: 8px; }
   #timer { font-size: 18px; }
   .orn-bar { width: 120px; height: 23px; }
+  #burstBtn img { width: 30px; height: 30px; }
 }

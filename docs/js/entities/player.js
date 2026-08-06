@@ -65,6 +65,13 @@ export class Player extends Entity {
     // глобальный конфиг живёт дольше забега, и правки в нём переносились
     // в следующие партии.
     this.sporeRate=1;
+    // ВЫБРОС СПОР. Заражение теперь не только копится, но и тратится: см.
+    // CONFIG.sporeSystem.burst и BattleSystem.sporeBurst. Здесь живёт только
+    // перезарядка и множители от карточек — сам удар считает бой, потому что
+    // игрок не знает ни про сетку врагов, ни про камеру.
+    this.burstCd=0;
+    this.burstPower=1;   // множитель урона выброса
+    this.burstArea=1;    // множитель радиуса выброса
     this.iframes=0; this.hurtFlash=0; this.onHurt=null;
     this.isDying=false; this.deathFrame=0; this.deathTimer=0;
     // Сколько раз взято каждое улучшение — по этому UpgradeSystem убирает из
@@ -89,6 +96,7 @@ export class Player extends Entity {
     if(this.iframes>0) this.iframes--;
     if(this.hurtFlash>0) this.hurtFlash--;
     if(this.slowTimer>0&&--this.slowTimer<=0) this.slowMult=1;
+    if(this.burstCd>0) this.burstCd--;
     let dx=0,dy=0;
     if(input.keys.w) dy=-1; if(input.keys.s) dy=1; if(input.keys.a) dx=-1; if(input.keys.d) dx=1;
     if(dx!==0&&dy!==0){ dx*=0.707; dy*=0.707; }
@@ -229,6 +237,25 @@ export class Player extends Entity {
   }
 
   reduceSpore(a){ this.sporeLevel=Math.max(0,this.sporeLevel-a); }
+
+  // --- выброс спор ------------------------------------------------------
+  // Готовность и списание разведены нарочно: HUD спрашивает про готовность
+  // каждый кадр, а тратить шкалу имеет право только тот, кто действительно
+  // выпустил облако (BattleSystem). Иначе «кнопка нажалась, споры ушли, а
+  // удара не случилось» — ровно то ложное обещание, из-за которого механику
+  // и переписывали.
+  burstCost(){ return CONFIG.sporeSystem.burst.cost; }
+  canBurst(){
+    return !this.isDying && this.burstCd<=0 && this.sporeLevel>=this.burstCost();
+  }
+  // Возвращает false, если тратить нечего: вызывающий по этому решает,
+  // играть ли отказ
+  spendBurst(){
+    if(!this.canBurst()) return false;
+    this.reduceSpore(this.burstCost());
+    this.burstCd=CONFIG.sporeSystem.burst.cooldown;
+    return true;
+  }
 
   // --- смерть ---------------------------------------------------------
   // Мир на это время замирает: главный цикл перестаёт обновлять врагов и

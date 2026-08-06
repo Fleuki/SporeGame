@@ -64,6 +64,21 @@ input.onRestartPress=()=>{ if(started&&gameOver) init(); };
 // выбора. Теперь это честная пауза, а меню прокачки закрыть нельзя: выбрать
 // карточку всё равно придётся.
 input.onPausePress=()=>{ if(!gameOver&&!waitingForUpgrade) paused=!paused; };
+input.onBurstPress=()=>tryBurst();
+
+// ВЫБРОС СПОР — единственное активное действие игрока. Проверки состояния
+// стоят здесь, а не в BattleSystem: на паузе, в меню прокачки и в кадрах
+// смерти мир не обновляется, и удар без движения врагов был бы бесплатным.
+function tryBurst(){
+  if(!started||gameOver||paused||waitingForUpgrade||dying>0) return;
+  if(!battle.sporeBurst(player,camera)){
+    // Отказ обязан звучать. Молчащая кнопка читается как «игра не заметила
+    // нажатия», и игрок жмёт её ещё трижды вместо того, чтобы уходить.
+    audio.sfx("hit",0.4);
+    return;
+  }
+  syncHud();
+}
 
 (async()=>{ await loader.loadAll(CONFIG.assets); })();
 
@@ -256,7 +271,7 @@ function formatTime(sec){
 // внизу и компактная пара HP/споры над ней. Цифры «74/100» в бою всё равно
 // никто не читает, а цвет и длина шкалы читаются мгновенно.
 const HUD={};
-for(const id of ["xpBar","levelDisplay","timeDisplay","hpBar","sporeBar"]){
+for(const id of ["xpBar","levelDisplay","timeDisplay","hpBar","sporeBar","burstBtn"]){
   HUD[id]=document.getElementById(id);
 }
 const hpRow=HUD.hpBar.closest(".vital"), sporeRow=HUD.sporeBar.closest(".vital");
@@ -299,6 +314,9 @@ function syncHud(){
   hpRow.classList.toggle("critical",hpPct<=0.25);
   fillBar(HUD.sporeBar,player.sporeLevel/CONFIG.sporeSystem.maxSpore);
   sporeRow.classList.toggle("critical",player.sporeLevel>=CONFIG.sporeSystem.thresholds.danger);
+  // Кнопка выброса гаснет, пока шкалы не хватает на его цену. Это не украшение:
+  // цена ресурса должна читаться до нажатия, иначе трата остаётся сюрпризом.
+  HUD.burstBtn.classList.toggle("dim",!player.canBurst());
 }
 
 // Красная рамка по краям экрана в момент удара. Самый дешёвый способ сказать
@@ -386,9 +404,15 @@ if(new URLSearchParams(location.search).has("debug")){
     // сила темноты, размеры. Поставить игру на паузу (Esc), покрутить число,
     // сравнить два кадра одной и той же сцены — иначе сравниваешь разные.
     config:CONFIG,
+    // Выброс спор с кода: клавиатурный пробел из Playwright уходит документу,
+    // а не игре, если фокус остался на кнопке «Играть»
+    burst:()=>tryBurst(),
     stats:()=>({
       time:runTime, level:player.level, hp:player.hp, maxHp:player.maxHp,
       spore:player.sporeLevel, kills:battle.kills, gameOver,
+      // Выброс: без этих двух полей проверить трату шкалы можно только
+      // глазами по кнопке, а бот кнопку не видит
+      canBurst:player.canBurst(), burstCd:player.burstCd,
       alive:enemies.filter(e=>!e.dead).length,
       aliveLimit:spawnSystem.aliveLimit(),
       interval:spawnSystem.interval(),
@@ -413,6 +437,10 @@ function startRun(){
   started=true; init();
 }
 document.getElementById("playBtn").onclick=startRun;
+// Та же трата с пальца. Подсказку «ПРОБЕЛ» на сенсорном экране прячем: клавиши
+// там нет, а подпись к несуществующей кнопке — то же ложное обещание.
+if(input.isMobile) document.body.classList.add("touch");
+HUD.burstBtn.addEventListener("click",(e)=>{ e.preventDefault(); tryBurst(); });
 // Кнопка вместо надписи «R — рестарт»: на телефоне клавиши нет, и экран
 // смерти был тупиком — забег не перезапустить иначе как перезагрузкой.
 document.getElementById("restartBtn").onclick=()=>{ if(gameOver) init(); };
