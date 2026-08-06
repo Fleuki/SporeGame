@@ -31,7 +31,8 @@ import { writeFileSync, mkdirSync, readFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
-import { RAMPS } from "./palette.mjs";
+import { PALETTE } from "./palette.mjs";
+import { encodePng } from "./png.mjs";
 
 const ROOT=join(dirname(fileURLToPath(import.meta.url)),"..");
 const RAW=join(ROOT,"assets-raw");
@@ -41,10 +42,34 @@ const API="https://api.pixellab.ai/v2";
 // не зависел от того, что человек вспомнил написать в этот раз. Ровно та же
 // формулировка лежит в ASSET_PROMPTS.md — при правке менять оба места.
 const STYLE=
-  "16-bit pixel art, dark bioluminescent fungal forest, muted desaturated "+
-  "palette of deep greens teals and fungal purples, single soft light source "+
-  "from above, clear readable silhouette, flat colours with hard edges, "+
-  "no outline glow, no drop shadow under the subject, no ground, no scenery";
+  "dark bioluminescent fungal forest, muted desaturated palette of deep "+
+  "greens teals and fungal purples, single soft light source from above, "+
+  "clear readable silhouette, no drop shadow under the subject, "+
+  "no ground, no scenery";
+
+// СТИЛЕВЫЕ ЗАМКИ — не словами, а параметрами. Словам модель следует «примерно»
+// и каждый раз по-разному; эти четыре поля она понимает однозначно, и именно
+// они держат набор одним набором.
+//   view: high top-down — камера игры смотрит сверху, и вид сбоку в неё
+//     просто не встаёт: ровно поэтому старые декорации выглядели наклейками;
+//   outline: selective — чёрный контур по всему силуэту на тёмной арене
+//     превращает фигуру в дырку, а без контура вовсе она в ней тонет;
+//   shading: basic — плоские заливки с одной ступенью тени. «Detailed» даёт
+//     градиенты, которые квантование всё равно срежет, но силуэт успеет
+//     размыться;
+//   detail: low — на 64 пикселях подробности не читаются, а место занимают.
+const LOCKS={ view:"high top-down", outline:"selective outline",
+              shading:"basic shading", detail:"low detail" };
+
+// ПАЛИТРА ОТДАЁТСЯ КАРТИНКОЙ. У API нет поля со списком цветов: он принимает
+// color_image — картинку, из которой берёт палитру. Собираем её прямо здесь
+// из tools/palette.mjs, чтобы источник правды остался один.
+function paletteImage(){
+  const n=PALETTE.length;
+  const data=Buffer.alloc(n*4);
+  PALETTE.forEach((c,i)=>{ data[i*4]=c.r; data[i*4+1]=c.g; data[i*4+2]=c.b; data[i*4+3]=255; });
+  return encodePng({width:n,height:1,data}).toString("base64");
+}
 
 function token(){
   const env=process.env.PIXELLAB_TOKEN;
@@ -76,19 +101,25 @@ const [w,h]=sizeArg.includes("x")?sizeArg.split("x").map(Number):[+sizeArg,+size
 const body={
   description: prompt+". "+STYLE,
   image_size: { width:w, height:h },
+  ...LOCKS,
   // Прозрачный фон просим у API, а не вырезаем потом по цветности: у
   // генераторов «прозрачный фон» в ПРОМПТЕ обычно оборачивается нарисованной
   // серой шахматкой (об этом отдельный раздел в ASSET_PROMPTS.md), а вот
   // отдельным параметром это уже настоящий альфа-канал.
   no_background: !flag("bg",false)
 };
+// Вид можно переопределить: тайлы земли и лежащие на земле пятна снимаются
+// строго сверху, а не «высоко сверху»
+if(flag("view")) body.view=flag("view");
+if(flag("seed")) body.seed=+flag("seed");
 // Палитра игры отдаётся модели сразу: нормализация всё равно сведёт цвета к
 // ней, но если модель рисует уже в этих тонах, то и светотень она кладёт по
 // ним — а не «как получится, потом ужмут».
-if(!flag("no-palette",false)) body.forced_palette=Object.values(RAMPS).flat();
+if(!flag("no-palette",false)) body.color_image={ type:"base64", base64:paletteImage() };
 if(flag("ref")){
   const p=join(RAW,flag("ref"));
   body.init_image={ type:"base64", base64:readFileSync(p).toString("base64") };
+  if(flag("ref-strength")) body.init_image_strength=+flag("ref-strength");
 }
 
 if(flag("dry")){
