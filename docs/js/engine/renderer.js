@@ -192,7 +192,7 @@ export class Renderer {
     this.ctx.beginPath(); this.ctx.arc(x,y,r,0,Math.PI*2); this.ctx.fillStyle=color; this.ctx.fill(); this.ctx.restore();
   }
   drawText(text,x,y,opts={}){
-    this.ctx.font=opts.font||"14px monospace"; this.ctx.fillStyle=opts.color||"#aaa";
+    this.ctx.font=opts.font||("14px "+CONFIG.fontFamily); this.ctx.fillStyle=opts.color||"#aaa";
     this.ctx.textAlign=opts.align||"left"; this.ctx.fillText(text,x,y);
   }
   drawSprite(img,x,y,w,h,angle=0){

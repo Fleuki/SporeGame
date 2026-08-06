@@ -28,6 +28,13 @@ export const CONFIG = {
   // 3.6 миллиона пикселей на кадр — это гарантированные тормоза. Ограничение
   // снижает плотность отрисовки, а не размер картинки на экране.
   maxCanvasPixels: 1400000,
+  // ШРИФТ ДЛЯ ХОЛСТА. Интерфейс на HTML берёт его из CSS сам, а вот текст,
+  // который рисуется на канвасе — цифры урона, имя босса, «ПАУЗА», — CSS не
+  // видит вовсе, и раньше в четырёх местах стояло просто «monospace».
+  // Держим одной строкой здесь, иначе при следующей смене шрифта два-три
+  // места обязательно забудутся и в кадре окажутся два разных шрифта.
+  // Запасные — на случай, если woff2 не догрузился: текст обязан остаться.
+  fontFamily: '"Pixelify Sans", "Courier New", monospace',
   colors: {
     grass: "#1a3d2e", grassDark: "#0d1f15", mushroom: "#6b2d5c",
     toxic: "#c4a000", biolum: "#00d4aa", acid: "#39ff14",
@@ -295,6 +302,24 @@ export const CONFIG = {
     // же сцены. Полосок HP над ними тоже нет, пока по ним не попали.
     rimWidth: 1.2, rimAlpha: 0.42,
     rimNear: 95, rimFar: 195,
+
+    // ЭЛИТА (isMutated). У неё +50% HP и +30% урона, но до сих пор она
+    // отличалась только золотым свечением — а свечения на этой арене хватает
+    // и без неё: грибы, лужи, снаряды. В толпе элита терялась, и игрок
+    // получал в полтора раза больше урона, не понимая, от кого.
+    //
+    // Теперь поверх ЛЮБОГО врага рисуется отдельный лист: венец шипов с
+    // пустой серединой, сквозь которую виден сам враг. Отдельный спрайт на
+    // каждый тип рисовать не пришлось бы и незачем — элита обязана читаться
+    // как «тот же враг, но с наростом», а не как новое существо.
+    //
+    // sizeMult — во сколько раз венец крупнее спрайта врага: дырка в
+    // середине должна быть шире тела, иначе венец ляжет на него шапкой.
+    elite: {
+      sprite: { key:"enemy_elite_crown", frame:256, cols:4, animSpeed:9 },
+      sizeMult: 1.4
+    },
+
     types: {
       spore_bearer: {
         name: "Спороносец", hp: 28, speed: 0.85, radius: 14, damage: 8, xpReward: 6,
@@ -632,8 +657,11 @@ export const CONFIG = {
         image: "propAcidPool", width: 120, weight: 2,
         flat: true, frames: 4, animSpeed: 11,
         // Лужа жжёт всех, кто в неё зашёл, — и игрока, и врагов.
-        // hazardRadius — доля от width: у спрайта есть каменный бортик,
-        // поэтому урон идёт только по зелёной середине.
+        // radius — доля от width. Раньше спрайт был КВАДРАТОМ с каменным
+        // бортиком, и 0.36 отмеряли зелёную середину внутри него. Теперь это
+        // рваное пятно без бортика, и оно шире круга урона: лужа выглядит
+        // опаснее, чем жжёт. Так и оставлено намеренно — ошибаться надо в
+        // сторону «показалось опасным, а обошлось», а не наоборот.
         hazard: { radius: 0.36, dps: 9, spore: 4, enemyDps: 14 }
       }
     },
@@ -698,6 +726,7 @@ export const CONFIG = {
       fx_burst_purple: "assets/images/effects/burst_purple.png",
       fx_burst_toxic: "assets/images/effects/burst_toxic.png",
       fx_burst_big: "assets/images/effects/burst_big.png",
+      enemy_elite_crown: "assets/images/enemies/elite_crown.png",
       enemy_spore_bearer: "assets/images/enemies/spore_bearer.png",
       enemy_mushroom_wolf: "assets/images/enemies/mushroom_wolf.png",
       enemy_spore_bat: "assets/images/enemies/spore_bat.png",

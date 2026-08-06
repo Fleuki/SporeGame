@@ -106,7 +106,7 @@ export class Boss extends Enemy {
                                 2.6,"#ffd24a",8);
       }
     }
-    renderer.drawText(this.name,this.x,this.y-this.radius-20,{font:"12px monospace",color:"#00d4aa",align:"center"});
+    renderer.drawText(this.name,this.x,this.y-this.radius-20,{font:"12px "+CONFIG.fontFamily,color:"#00d4aa",align:"center"});
     const bw=100,bh=6;
     renderer.ctx.fillStyle="#1a1a1a"; renderer.ctx.fillRect(this.x-bw/2,this.y-this.radius-14,bw,bh);
     renderer.ctx.fillStyle=this.hp/this.maxHp>0.5?"#ff3333":"#c4a000";

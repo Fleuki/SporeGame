@@ -59,13 +59,21 @@ const battle=new BattleSystem(particles,sporeSystem,loot,audio);
 const map=new MapSystem();
 
 input.onMutePress=()=>audio.toggleMute();
-input.onRestartPress=()=>{ if(gameOver) init(); };
+input.onRestartPress=()=>{ if(started&&gameOver) init(); };
 // Escape раньше просто закрывал меню прокачки — это была бесплатная отмена
 // выбора. Теперь это честная пауза, а меню прокачки закрыть нельзя: выбрать
 // карточку всё равно придётся.
 input.onPausePress=()=>{ if(!gameOver&&!waitingForUpgrade) paused=!paused; };
 
 (async()=>{ await loader.loadAll(CONFIG.assets); })();
+
+// ШРИФТ ДЛЯ ХОЛСТА ГРУЗИМ ЯВНО. Браузер подтягивает woff2 лениво — когда
+// текст этим шрифтом впервые понадобился РАЗМЕТКЕ. Холст в этот учёт не
+// входит: если файл ещё не пришёл, canvas молча нарисует системным, и первые
+// цифры урона в забеге будут другим шрифтом. Подмножества раздельные, поэтому
+// просим обе буквы — латинскую и кириллическую.
+document.fonts?.load('16px "Pixelify Sans"', "0A");
+document.fonts?.load('bold 16px "Pixelify Sans"', "Я");
 
 // Поворот телефона, смена размера окна, появление адресной строки — всё это
 // приходит сюда. Камеру пересобираем и сразу центрируем на игроке: иначе
@@ -83,6 +91,10 @@ window.addEventListener("orientationchange",()=>setTimeout(onResize,120));
 window.visualViewport?.addEventListener("resize",onResize);
 
 let player,enemies,projectiles,spawnSystem,gameOver,paused,waitingForUpgrade;
+// Забег ещё не начат: страница открывается на стартовом экране, а мир под
+// ним стоит неподвижно и работает фоном. До нажатия «Играть» симуляция не
+// идёт вообще — иначе игрок к моменту старта уже был бы обстрелян.
+let started=false;
 let runTime=0;   // секунды с начала забега, идут только пока игра не на паузе
 // Меню прокачки открывается не мгновенно: сначала должно дойти, что уровень
 // вообще взят. При паузе кадры не идут, поэтому иначе искры и надпись никто
@@ -132,7 +144,7 @@ function announceEvolution(card){
 }
 
 function update(dt){
-  if(gameOver||paused||waitingForUpgrade) return;
+  if(!started||gameOver||paused||waitingForUpgrade) return;
 
   // Смерть: враги, волны и стрельба остановлены, крутятся только анимация
   // алхимика, частицы и карта — чтобы кадр не выглядел замороженным насмерть.
@@ -336,9 +348,9 @@ function draw(){
     // меньше 900 пикселей, и кегль в 46px занял бы половину экрана
     const k=Math.min(1.4,Math.max(0.55,canvas.width/CONFIG.screen.width));
     renderer.drawText("ПАУЗА",canvas.width/2,canvas.height/2,
-      {font:"bold "+Math.round(46*k)+"px monospace",color:"#00d4aa",align:"center"});
+      {font:"bold "+Math.round(46*k)+"px "+CONFIG.fontFamily,color:"#00d4aa",align:"center"});
     renderer.drawText("Esc — продолжить",canvas.width/2,canvas.height/2+40*k,
-      {font:Math.round(16*k)+"px monospace",color:"#8a8a8a",align:"center"});
+      {font:Math.round(16*k)+"px "+CONFIG.fontFamily,color:"#8a8a8a",align:"center"});
   }
 
   // Экран поражения рисует #gameOverScreen из index.html. Раньше здесь же
@@ -363,6 +375,10 @@ if(new URLSearchParams(location.search).has("debug")){
     // десятого уровня — это десять минут на одну проверку одного числа.
     upgrades:upgradeSystem,
     battle,
+    // Карта: декорации ставятся по хешу клетки из мешка map.bag, то есть
+    // случайно и редко. Чтобы посмотреть на одну конкретную (например, на
+    // кислотную лужу), мешок проще подменить: GAME.map.bag=["acid_pool"].
+    map,
     // Ввод: без него нельзя проверить джойстик иначе как пальцем по телефону
     input,
     // Живой конфиг: правки видны со следующего кадра, без перезагрузки.
@@ -389,6 +405,20 @@ if(new URLSearchParams(location.search).has("debug")){
   };
 }
 
+// НАЧАЛО ЗАБЕГА. init() зовётся и здесь, до старта: мир нужен нарисованным,
+// чтобы за стартовым экраном стояла игра, а не чёрный прямоугольник. Но HUD
+// до нажатия «Играть» прячем — показывать шкалы поверх названия незачем.
+function startRun(){
+  document.getElementById("startScreen").classList.add("hidden");
+  started=true; init();
+}
+document.getElementById("playBtn").onclick=startRun;
+// Кнопка вместо надписи «R — рестарт»: на телефоне клавиши нет, и экран
+// смерти был тупиком — забег не перезапустить иначе как перезагрузкой.
+document.getElementById("restartBtn").onclick=()=>{ if(gameOver) init(); };
+
 const loop=new Loop(update,draw);
-init(); loop.start();
+init();
+document.getElementById("ui").classList.add("hidden");
+loop.start();
 console.log("Грибной Сумрак запущен! WASD/джойстик — движение, мышь/авто-прицел — стрельба, M — звук, R — рестарт");
