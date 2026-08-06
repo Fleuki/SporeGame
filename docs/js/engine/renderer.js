@@ -3,11 +3,25 @@ import { CONFIG } from "../config.js";
 export class Renderer {
   constructor(canvas){
     this.canvas=canvas; this.ctx=canvas.getContext("2d");
+    // ПИКСЕЛИ НЕ СГЛАЖИВАЕМ. `image-rendering: pixelated` в CSS отвечает
+    // только за растягивание ГОТОВОГО холста до размера окна — на drawImage
+    // внутри холста он не влияет никак, и всё это время каждый спрайт
+    // масштабировался билинейно. Отсюда половина ощущения «модельки мутные и
+    // недоделанные»: лист рисовался кадром 256 пикселей, а выводился в 64,
+    // то есть картинка размывалась в четыре раза ещё до попадания на экран.
+    this.ctx.imageSmoothingEnabled=false;
     this.loader=null; this.camera=null;
     this.playerX=0; this.playerY=0;
   }
 
-  clear(){ this.ctx.fillStyle=CONFIG.colors.grass; this.ctx.fillRect(0,0,this.canvas.width,this.canvas.height); }
+  // Сглаживание гасится и здесь: смена canvas.width (поворот телефона, resize
+  // окна) сбрасывает состояние контекста целиком, и без этой строки после
+  // первого же поворота экрана игра снова становилась мыльной.
+  clear(){
+    this.ctx.imageSmoothingEnabled=false;
+    this.ctx.fillStyle=CONFIG.colors.grass;
+    this.ctx.fillRect(0,0,this.canvas.width,this.canvas.height);
+  }
 
   // Всё между begin/end рисуется в мировых координатах
   begin(){ this.camera?.begin(this.ctx); }
