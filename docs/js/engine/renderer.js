@@ -86,9 +86,25 @@ export class Renderer {
     const ctx=this.ctx;
     ctx.save();
     if(!opts.flat){
-      ctx.beginPath();
-      ctx.ellipse(x,y-h*0.03,w*0.36,h*0.09,0,0,Math.PI*2);
-      ctx.fillStyle="rgba(0,0,0,0.35)"; ctx.fill();
+      // ТЕНЬ ПОД ДЕКОРАЦИЕЙ. Была сплошным чёрным эллипсом с РЕЗКИМ краем в
+      // 35% непрозрачности и шириной в треть всей картинки. У высокого дерева
+      // это давало под стволом чёткое тёмное пятно шире самого ствола —
+      // читалось не как тень, а как отдельная тёмная текстура, положенная на
+      // землю, а сам объект будто висел над ней. Ровно на это и жаловались.
+      //
+      // Теперь пятно растушёвано градиентом и уже: контакт с землёй виден, а
+      // границы у тени нет — как у тени и положено. Радиус считается от
+      // ОСНОВАНИЯ (0.22 ширины), а не от габарита кроны.
+      const rx=w*0.22, ry=Math.max(3,h*0.055);
+      const g=ctx.createRadialGradient(x,y-ry*0.2,0,x,y-ry*0.2,rx);
+      g.addColorStop(0,"rgba(0,0,0,0.42)");
+      g.addColorStop(0.55,"rgba(0,0,0,0.22)");
+      g.addColorStop(1,"rgba(0,0,0,0)");
+      ctx.save();
+      ctx.translate(x,y-ry*0.2); ctx.scale(1,ry/rx); ctx.translate(-x,-(y-ry*0.2));
+      ctx.fillStyle=g;
+      ctx.beginPath(); ctx.arc(x,y-ry*0.2,rx,0,Math.PI*2); ctx.fill();
+      ctx.restore();
     }
     ctx.translate(x,opts.flat?y-h/2:y-h);
     if(opts.flip) ctx.scale(-1,1);

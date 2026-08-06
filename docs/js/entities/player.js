@@ -77,6 +77,16 @@ export class Player extends Entity {
     // Сколько раз взято каждое улучшение — по этому UpgradeSystem убирает из
     // колоды выбранное до предела
     this.taken={};
+    // ЛАВКА. Кошелёк и покупки живут на игроке, а не в ShopSystem: система
+    // одна на все забеги, а деньги — у конкретного персонажа, и рестарт
+    // обязан их обнулять вместе с ним.
+    this.coins=0; this.bought={}; this.coinsEarned=0;
+    // Доля урона, которую съедает броня из лавки. Складывается вычитанием
+    // процентов, а не умножением: потолок в takeDamage всё равно стоит, а
+    // «−8%» на карточке должно означать ровно −8%, иначе четыре пластины
+    // дают не 32%, как обещано, а 28% — и ни один игрок этого не проверит,
+    // но обещание всё равно будет ложным.
+    this.armor=0;
     this.animTimer=0; this.animFrame=0;
     this.animSpeed=CONFIG.player.walkAnimSpeed||8;
     this.isMoving=false;
@@ -209,6 +219,9 @@ export class Player extends Entity {
       this.onHurt?.(0,"shield"); return false;
     }
     if(this.iframes>0&&!ignoreIFrames) return false;
+    // Броня из лавки. Урон уменьшается ДО всего остального, но никогда не
+    // обнуляется: неуязвимость покупкой четырёх пластин была бы концом игры.
+    if(this.armor>0) a*=Math.max(0.5,1-this.armor);
     this.hp-=a;
     this.sporeLevel=Math.min(CONFIG.sporeSystem.maxSpore,this.sporeLevel+CONFIG.player.sporeGrowthOnHit);
     if(!ignoreIFrames){ this.iframes=CONFIG.player.contactIFrames; this.hurtFlash=12; }
