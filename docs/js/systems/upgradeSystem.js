@@ -249,7 +249,11 @@ export class UpgradeSystem {
     cards.forEach((card,i)=>{
       const div=document.createElement("div");
       div.className="upgrade-card cat-"+card.category;
+      // ИКОНКА ВЕТКИ. Не украшение: за полсекунды, которые даются на выбор,
+      // картинка читается быстрее слова, а на карточках стволов это буквально
+      // тот самый снаряд, который полетит из руки (см. tools/icons.mjs).
       div.innerHTML=
+        '<img class="ico" src="assets/images/ui/icon_up_'+card.category+'.png" alt="">'+
         '<div class="tag">'+LABEL[card.category]+'</div>'+
         '<div class="title">'+card.title+'</div>'+
         '<div class="desc">'+card.desc+'</div>'+

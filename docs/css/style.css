@@ -317,6 +317,19 @@ body.touch .key { display: none; }
 .upgrade-card.cat-evolution:hover {
   background: linear-gradient(180deg, #562947 0%, #2e1727 100%);
 }
+/* Иконка ветки — в правом верхнем углу карточки, чтобы не двигать текст.
+   Абсолютная, а не в потоке: карточки разной высоты, и иконка в потоке
+   растащила бы заголовки по разным уровням у соседних карточек. */
+.upgrade-card .ico {
+  position: absolute; right: 7px; top: 7px;
+  width: 28px; height: 28px;
+  image-rendering: pixelated;
+  opacity: 0.9;
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--cat) 55%, transparent));
+  pointer-events: none;
+}
+/* Текст не должен заезжать под иконку */
+.upgrade-card .tag, .upgrade-card .title { padding-right: 32px; }
 .upgrade-card .tag {
   color: var(--cat); font-size: 10px; letter-spacing: 1.5px;
   opacity: 0.85; margin-bottom: 5px;
