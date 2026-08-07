@@ -83,11 +83,22 @@ export class SpawnSystem {
            *this.modMult("intervalMult");
   }
 
-  // Потолок живых врагов прямо сейчас
+  // Потолок живых врагов прямо сейчас.
+  //
+  // Две ступени, и вторая появилась из живого забега: до aliveRampTime потолок
+  // растёт от aliveBase к aliveMax, а ПОСЛЕ — продолжает ползти по
+  // aliveLatePerMin до aliveLateMax. Без второй ступени потолок замирал на
+  // пятой минуте и держался до конца забега: двадцатая минута отличалась от
+  // пятой только толщиной врагов, а игрок к этому времени растёт множителями
+  // и просто перестаёт умирать.
   aliveLimit(){
     const S=CONFIG.spawn;
-    return Math.round((S.aliveBase+(S.aliveMax-S.aliveBase)*this.ramp(S.aliveRampTime))
-                      *this.modMult("countMult"));
+    let n=S.aliveBase+(S.aliveMax-S.aliveBase)*this.ramp(S.aliveRampTime);
+    const late=this.time-S.aliveRampTime;
+    if(late>0&&S.aliveLatePerMin){
+      n=Math.min(S.aliveLateMax??n,n+late/60*S.aliveLatePerMin);
+    }
+    return Math.round(n*this.modMult("countMult"));
   }
 
   // Секунд до следующего босса — это же показывает интерфейс, если надо
@@ -171,7 +182,17 @@ export class SpawnSystem {
       if(this.time<u.at) continue;
       // Тип, упёршийся в свой потолок живых, из розыгрыша выпадает. Правило
       // может этот потолок поднять — на том и стоит «Хор».
-      const cap=u.maxAlive!=null?u.maxAlive*this.modMult("maxAliveMult"):null;
+      //
+      // maxAlivePer — раз во сколько секунд потолок прибавляет единицу, а
+      // maxAliveCap — предел, за который эта прибавка не пускает. Нужно
+      // ровно трубачу: тройка стрелков, страшная на второй минуте, к десятой
+      // не значит ничего, а других причин двигаться у игрока к тому времени
+      // почти не остаётся.
+      let cap=u.maxAlive!=null?u.maxAlive:null;
+      if(cap!=null&&u.maxAlivePer){
+        cap=Math.min(u.maxAliveCap??Infinity,cap+Math.floor(this.time/u.maxAlivePer));
+      }
+      if(cap!=null) cap*=this.modMult("maxAliveMult");
       if(cap!=null&&this.countAlive(enemies,key)>=cap) continue;
       const w=u.weight[0]+(u.weight[1]-u.weight[0])*k;
       if(w<=0) continue;

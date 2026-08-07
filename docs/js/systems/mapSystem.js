@@ -351,20 +351,39 @@ export class MapSystem {
     return out;
   }
 
-  drawDecor(renderer){
-    for(const d of this.visible){
-      const def=d.def;
-      const img=renderer.loader?.getImage(def.image);
-      if(!img||!img.width) continue;
-      // у анимированного листа пропорции берутся с одного кадра, а не со всей полосы
-      const frameW=def.frames?img.width/def.frames:img.width;
-      const frame=def.frames
-        ? Math.floor((this.tick/def.animSpeed)+d.phase)%def.frames
-        : 0;
-      renderer.drawProp(def.image,d.x,d.y,d.w,d.w*img.height/frameW,
-        { flip:def.flat?false:d.flip, glow:def.glow, glowBlur:def.glowBlur,
-          flat:def.flat, frames:def.frames, frame });
-    }
+  // ДЕКОРАЦИИ РИСУЮТСЯ НЕ ОДНИМ СЛОЕМ, И ЭТО ГЛАВНОЕ ЗДЕСЬ.
+  //
+  // Раньше всё дерево целиком лежало ПОД существами: сначала drawDecor, потом
+  // враги и игрок. Из-за этого алхимик, зашедший за ствол, оказывался
+  // нарисован ПОВЕРХ него — стоял не за деревом, а на дереве. В игре с видом
+  // сверху это ломает единственное, чем задаётся объём: кто ближе к камере.
+  //
+  // Теперь надвое по одному признаку — есть ли у объекта высота:
+  //   flat (кислотная лужа) лежит на земле и всегда под всеми, как и было;
+  //   стоящие (деревья, телега, камень) отдаются наружу и сортируются
+  //   ВМЕСТЕ с врагами и игроком по нижней точке (см. main.draw).
+  //
+  // Точка сортировки у декорации — её y: drawProp рисует картинку от
+  // основания вверх (translate на y-h), то есть y и есть место, где объект
+  // касается земли. У существ то же место — их тень.
+  standingProps(){ return this.visible.filter(d=>!d.def.flat); }
+
+  drawFlatDecor(renderer){
+    for(const d of this.visible) if(d.def.flat) this.drawOneProp(renderer,d);
+  }
+
+  drawOneProp(renderer,d){
+    const def=d.def;
+    const img=renderer.loader?.getImage(def.image);
+    if(!img||!img.width) return;
+    // у анимированного листа пропорции берутся с одного кадра, а не со всей полосы
+    const frameW=def.frames?img.width/def.frames:img.width;
+    const frame=def.frames
+      ? Math.floor((this.tick/def.animSpeed)+d.phase)%def.frames
+      : 0;
+    renderer.drawProp(def.image,d.x,d.y,d.w,d.w*img.height/frameW,
+      { flip:def.flat?false:d.flip, glow:def.glow, glowBlur:def.glowBlur,
+        flat:def.flat, frames:def.frames, frame });
   }
 
   // --- экранный слой ---------------------------------------------------
