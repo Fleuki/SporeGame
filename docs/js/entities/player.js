@@ -54,7 +54,11 @@ export class Player extends Entity {
     // Стволы стреляют одновременно, каждый по своему таймеру.
     // Первый задаёт персонаж, остальные выдаются карточками прокачки.
     this.weapons=[new Weapon(CONFIG.weapons[C.weapon]||CONFIG.weapons.antidote)];
-    this.angle=0; this.color=CONFIG.player.color; this.sporeLevel=0;
+    // Заражённый начинает забег уже с полной сороковкой спор: выброс стоит
+    // 30%, то есть у него он готов с первой секунды. Это не подарок, а его
+    // устройство — здоровье он за это жжёт постоянно (см. sporeBurn ниже).
+    this.angle=0; this.color=CONFIG.player.color;
+    this.sporeLevel=C.startSpore||0;
     // ЗАМЕДЛЕНИЕ ВМЕСТО ЗАХВАТА. Раньше здесь был флаг isGrabbed: щупальце
     // выставляло его, и Player.update выходил в первой же строке — управления
     // не было вообще целую секунду. В игре, где всё выживание держится на
@@ -161,7 +165,15 @@ export class Player extends Entity {
     // копятся всегда, а сбить их можно только антидотом.
     this.sporeLevel=Math.min(CONFIG.sporeSystem.maxSpore,
       this.sporeLevel+CONFIG.player.sporeGrowth*this.sporeRate*dt);
-    if(this.sporeLevel>=75) this.hp-=CONFIG.sporeSystem.effects.critical.hpDrain*dt;
+    // ЦЕНА ЗАРАЖЕНИЯ. У всех она порогом: выше 75% начинает капать здоровье.
+    // У Заражённого порога нет — он горит всегда и тем сильнее, чем полнее
+    // шкала. Правило ЗАМЕНЯЕТ пороговое, а не складывается с ним: иначе он
+    // платил бы дважды за одно и то же.
+    if(this.character.sporeBurn){
+      this.hp-=this.character.sporeBurn*(this.sporeLevel/CONFIG.sporeSystem.maxSpore)*dt;
+    } else if(this.sporeLevel>=75){
+      this.hp-=CONFIG.sporeSystem.effects.critical.hpDrain*dt;
+    }
 
     // Анимация ходьбы — крутится только когда игрок реально идёт.
     // Стоит на месте — первый кадр ряда и никаких других движений: ни
