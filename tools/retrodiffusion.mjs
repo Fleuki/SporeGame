@@ -14,7 +14,11 @@
 //   node tools/retrodiffusion.mjs --out=props/prop_rock.png --size=96 "a mossy boulder"
 //
 //   --out=<путь>    куда в assets-raw положить (обязательно)
-//   --size=64       сторона (или 96x64)
+//   --size=64       сторона (или 96x64). МИНИМУМ 64: на 32 сервис отвечает
+//                   «inference_failed» без объяснений — проверено запросом
+//   --fit=32        уменьшить полученную картинку до этой стороны перед
+//                   записью. Нужно ровно из-за минимума выше: иконка на 32
+//                   заказывается как 64 и ужимается здесь
 //   --style=<id>    стиль модели, по умолчанию rd_plus__default
 //   --ref=<путь>    образец из assets-raw (img2img)
 //   --strength=0.7  насколько сильно уходить от образца (0..1)
@@ -122,10 +126,16 @@ const data=JSON.parse(text);
 const b64=data.base64_images?.[0];
 if(!b64){ console.error("В ответе нет картинки:\n"+text.slice(0,600)); process.exit(1); }
 
+let img=decodePng(Buffer.from(b64,"base64"));
+if(flag("fit")){
+  const f=String(flag("fit"));
+  const [fw,fh]=f.includes("x")?f.split("x").map(Number):[+f,+f];
+  img=downscale(img,fw,fh);
+}
 const dst=join(RAW,out);
 mkdirSync(dirname(dst),{recursive:true});
-writeFileSync(dst,Buffer.from(b64,"base64"));
-console.log("assets-raw/"+out+"  ("+w+"x"+h+")"+
+writeFileSync(dst,encodePng(img));
+console.log("assets-raw/"+out+"  ("+img.width+"x"+img.height+")"+
   (data.balance_cost!=null?"  списано "+data.balance_cost:"")+
   (data.remaining_balance!=null?", осталось "+data.remaining_balance:""));
 
