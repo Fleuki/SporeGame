@@ -25,11 +25,20 @@ export class BattleSystem {
     this.enemyShots=[];   // облака спор, выпущенные трубачами
     this.fields=[];       // живые грибницы: пятна урона, оставшиеся на земле
     this.kills=0;         // счётчик убитых, его показывает интерфейс
+    // Кадров, на которые мир должен замереть. Считает их главный цикл: бой
+    // не имеет права останавливать игру сам — он не знает ни про паузу, ни
+    // про смерть игрока, ни про меню.
+    this.hitStop=0;
   }
+
+  // Просьба остановить кадр. Не складывается, а берёт максимум: два крита в
+  // одном кадре — это по-прежнему одна остановка, иначе залп из трёх стволов
+  // в толпу подвесил бы игру на полсекунды.
+  requestHitStop(frames){ this.hitStop=Math.max(this.hitStop,frames|0); }
 
   reset(){
     this.effects.length=0; this.enemyShots.length=0;
-    this.fields.length=0; this.kills=0;
+    this.fields.length=0; this.kills=0; this.hitStop=0;
   }
 
   updateEffects(){
@@ -289,7 +298,19 @@ export class BattleSystem {
         e.takeDamage(dmg,p.angle,CONFIG.feel.knockback*this.kbMult(e)*(crit?1.6:1));
         this.showDamage(e,dmg,crit);
         this.audio?.sfx(crit?"crit":"hit");
-        this.particles.emit(p.x,p.y,"#88ff88",5);
+        // ПОПАДАНИЕ. Раньше это были пять точек в случайные стороны — та же
+        // крошка, что сыплется из смерти, из взрыва и из левел-апа. Теперь у
+        // события своя форма: брызги летят назад по направлению удара, а
+        // поверх расходится кольцо. Цвет берётся у самого ствола, поэтому
+        // видно ещё и ЧЕМ попало, когда стволов три.
+        const glow=p.def.glow||"#c9ffe8";
+        this.particles.emitImpact(p.x,p.y,p.angle,glow,crit?13:7);
+        this.particles.emitRing(p.x,p.y,crit?"#ffd24a":glow,3,crit?28:17,crit?11:7,crit?2.6:1.8);
+        // ОСТАНОВКА КАДРА на крите. Две шестидесятых секунды, за которые мир
+        // стоит, — самый дешёвый способ сделать удар тяжёлым: глаз читает не
+        // яркость вспышки, а сбой ритма. Только на крите: на каждом попадании
+        // при трёх стволах игра превратилась бы в слайд-шоу.
+        if(crit) this.requestHitStop(CONFIG.feel.hitStopCrit);
         this.impact(p,enemies,camera,projectiles);
 
         // ПРОБИТИЕ идёт раньше ОТСКОКА: прошивающий снаряд летит дальше по
@@ -363,8 +384,17 @@ export class BattleSystem {
     if(e.anim?.def) this.effects.push(new Dissolve(e.anim,e.x,e.y,t.rim||"#c58cff",
                                                    e instanceof Boss?34:20));
     this.particles.emit(e.x,e.y,"#39ff14",t.sporeCloudAmount||8);
+    // Кольцо по габариту врага: смерть обязана читаться не только тем, что
+    // фигура пропала. Крупный враг — заметнее кольцо, и разницу видно.
+    this.particles.emitRing(e.x,e.y,t.rim||"#a8ff6a",e.radius*0.6,e.radius*2.4,12,2);
     this.audio?.sfx("kill");
-    if(e instanceof Boss){ this.audio?.sfx("boom"); camera?.shake(CONFIG.feel.shakeBoss,26); }
+    if(e instanceof Boss){
+      this.audio?.sfx("boom"); camera?.shake(CONFIG.feel.shakeBoss,26);
+      // Смерть босса — единственное событие забега, ради которого стоит
+      // остановить мир целиком: она случается раз в несколько минут
+      this.requestHitStop(CONFIG.feel.hitStopBoss);
+      this.particles.emitRing(e.x,e.y,"#ffd24a",e.radius,e.radius*5,26,4);
+    }
 
     if(e.abilities.includes("spore_cloud_on_death")){
       this.particles.emitSporeCloud(e.x,e.y,t.sporeCloudRadius||50,"#6b2d5c");
