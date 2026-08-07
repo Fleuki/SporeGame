@@ -261,11 +261,33 @@ export class BattleSystem {
       this.particles.emitSporeCloud(b.x,b.y,CONFIG.bosses.mother_cap.sporeCloudRadius,"#6b2d5c");
       player.sporeLevel+=5;
     } else if(ev.type==="spawn_minions"){
-      const n=CONFIG.bosses.mother_cap.minionCount;
+      const n=ev.count??CONFIG.bosses.mother_cap.minionCount;
+      // Кольцо вокруг ИГРОКА, а не вокруг босса: на поздней фазе от выводка
+      // больше нельзя просто отойти, через него надо прорываться
+      const cx=ev.encircle?player.x:b.x, cy=ev.encircle?player.y:b.y;
+      const r=ev.encircle?130:60;
       for(let k=0;k<n;k++){
-        const ang=(Math.PI*2/n)*k;
-        enemies.push(new Enemy(b.x+Math.cos(ang)*60,b.y+Math.sin(ang)*60,CONFIG.bosses.mother_cap.minionType));
+        const ang=(Math.PI*2/n)*k+(ev.encircle?Math.random():0);
+        enemies.push(new Enemy(cx+Math.cos(ang)*r,cy+Math.sin(ang)*r,CONFIG.bosses.mother_cap.minionType));
       }
+    } else if(ev.type==="shock"){
+      // УДАРНАЯ ВОЛНА Сердцевины. Бьёт по площади, но только по игроку:
+      // задевать собственных щупалец боссу незачем, а разбирать, кто чей,
+      // в кадре с двадцатью телами игрок всё равно не станет.
+      const d=Math.hypot(player.x-b.x,player.y-b.y);
+      if(d<=ev.radius) player.takeDamage(ev.damage);
+      this.particles.emitRing(b.x,b.y,"#ff5566",ev.radius*0.2,ev.radius,16,3.5);
+      this.particles.emit(b.x,b.y,"#ff8899",26,2,7);
+      this.audio?.sfx("boom");
+      camera?.shake(CONFIG.feel.shakeBoss*0.8,18);
+    } else if(ev.type==="boss_phase"){
+      // Переход фазы обязан звучать и выглядеть: игрок должен связать «стало
+      // тяжелее» со своим же уроном, а не списать это на невезение
+      this.audio?.sfx("boss");
+      camera?.shake(CONFIG.feel.shakeBoss*0.7,20);
+      this.particles.emitRing(b.x,b.y,"#ffd24a",b.radius,b.radius*3.2,20,3);
+      this.particles.emitText(b.x,b.y-b.radius-32,"ЯРОСТЬ "+ev.phase,"#ffd24a",16);
+      this.requestHitStop(CONFIG.feel.hitStopCrit*2);
     } else if(ev.type==="summon_tentacle"){
       // Щупальце вырастает в случайной точке видимой области, а не в
       // координатах бывшей фиксированной арены

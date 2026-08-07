@@ -508,7 +508,20 @@ export const CONFIG = {
                 row:0, animSpeed:9, display:150 },
       abilities: ["spawn_minions","sneeze_burst"],
       sneezeInterval: 180, sneezeCooldown: 90,
-      minionType: "spore_bearer", minionCount: 3, sporeCloudRadius: 120
+      minionType: "spore_bearer", minionCount: 3, sporeCloudRadius: 120,
+      // ФАЗЫ ТЕПЕРЬ МЕНЯЮТ ПОВЕДЕНИЕ, а не только картинку. До этого босс был
+      // мешком с HP: три минуты он делал ровно одно и то же с постоянным
+      // интервалом, и бой с ним ничем не отличался от обычного забега, кроме
+      // размера цели. Фаза считается по остатку HP (Boss.updatePhase).
+      //
+      // phaseRate — во сколько раз чаще срабатывают способности на каждой
+      // фазе. К последней Мать чихает вдвое чаще и вдвое больше плодит.
+      phaseRate: [1, 0.82, 0.66, 0.5],
+      // Сколько спороносцев добавляется к minionCount за каждую пройденную фазу
+      minionPerPhase: 1,
+      // С этой фазы выводок появляется КОЛЬЦОМ вокруг игрока, а не вокруг
+      // босса: до сих пор от выводка можно было просто отойти
+      encirclePhase: 2
     },
     mycelium_heart: {
       name: "Мицелиевая Сердцевина", hp: 1200, speed: 0, radius: 40, damage: 15, xpReward: 300,
@@ -521,7 +534,21 @@ export const CONFIG = {
       sprite: { key:"boss_mycelium_heart", frame:140, cols:4, rows:4,
                 phaseRows:true, animSpeed:7, display:140 },
       abilities: ["summon_tentacles","pulse_damage"],
-      tentacleInterval: 120, pulseInterval: 90
+      tentacleInterval: 120, pulseInterval: 90,
+      phaseRate: [1, 0.85, 0.7, 0.55],
+      // УДАРНАЯ ВОЛНА. С этой фазы «пульс» перестаёт быть просто ускорением
+      // мелочи и становится ударом по площади вокруг Сердцевины. У него есть
+      // ЗАМАХ (windup): кольцо растёт на глазах, и уйти можно — но только если
+      // смотреть. Атака без замаха в игре про движение читается как
+      // несправедливость, а не как угроза.
+      shockPhase: 1, shockWindup: 45,
+      shockRadius: 185, shockDamage: 16,
+      // С последней фазы Сердцевина ПОЛЗЁТ к игроку. Стоячий босс позволяет
+      // отойти и расстреливать издалека; ползущий отбирает эту возможность
+      // ровно тогда, когда бой должен стать страшным.
+      crawlPhase: 3, crawlSpeed: 0.42,
+      // На последней фазе щупальца лезут парами
+      pairPhase: 3
     }
   },
   // СПАВН. Волн больше нет. Раньше забег был нарезан на дискретные волны:
