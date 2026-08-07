@@ -32,7 +32,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 import { PALETTE } from "./palette.mjs";
-import { encodePng } from "./png.mjs";
+import { decodePng, encodePng } from "./png.mjs";
+import { downscale } from "./image.mjs";
 
 const ROOT=join(dirname(fileURLToPath(import.meta.url)),"..");
 const RAW=join(ROOT,"assets-raw");
@@ -123,8 +124,13 @@ if(flag("seed")) body.seed=+flag("seed");
 // ним — а не «как получится, потом ужмут».
 if(!flag("no-palette",false)) body.color_image={ type:"base64", base64:paletteImage() };
 if(flag("ref")){
-  const p=join(RAW,flag("ref"));
-  body.init_image={ type:"base64", base64:readFileSync(p).toString("base64") };
+  // Образец обязан быть РОВНО того же размера, что заказанная картинка:
+  // иначе API отвечает 422. Ужимаем сами — иначе пришлось бы держать рядом с
+  // каждым промптом заранее уменьшенную копию, и они разъехались бы с
+  // оригиналами на первой же перерисовке.
+  const src=decodePng(readFileSync(join(RAW,flag("ref"))));
+  const fit=(src.width===w&&src.height===h)?src:downscale(src,w,h);
+  body.init_image={ type:"base64", base64:encodePng(fit).toString("base64") };
   if(flag("ref-strength")) body.init_image_strength=+flag("ref-strength");
 }
 
