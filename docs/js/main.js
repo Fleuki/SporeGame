@@ -17,6 +17,7 @@ import { MapSystem } from "./systems/mapSystem.js";
 import { LootSystem } from "./systems/lootSystem.js";
 import { ShopSystem } from "./systems/shopSystem.js";
 import { RecordSystem } from "./systems/recordSystem.js";
+import { MetaSystem } from "./systems/metaSystem.js";
 
 const canvas=document.getElementById("gameCanvas");
 
@@ -63,6 +64,7 @@ const battle=new BattleSystem(particles,sporeSystem,loot,audio);
 const map=new MapSystem();
 const shop=new ShopSystem(audio);
 const records=new RecordSystem();
+const meta=new MetaSystem();
 
 input.onMutePress=()=>audio.toggleMute();
 input.onRestartPress=()=>{ if(started&&gameOver) init(); };
@@ -139,7 +141,10 @@ const LEVELUP_FRAMES=32;
 let dying=0;
 
 function init(){
-  player=new Player(0,0);
+  // Персонаж берётся из меты в момент создания игрока, а не запоминается
+  // отдельно: рестарт по «R» обязан выдать того же, кого выбрали на стартовом
+  // экране, а смена выбора — нового с ближайшего забега.
+  player=new Player(0,0,meta.current());
   // Игрок сам не знает про камеру и звук — обратную связь на урон вешаем здесь
   player.onHurt=(amount,kind)=>{
     if(kind==="shield"){ audio.sfx("shield"); return; }
@@ -154,7 +159,10 @@ function init(){
   shop.reset(); shopDue=false; nextShopAt=CONFIG.shop.every;
   gameOver=false; paused=false; waitingForUpgrade=false;
   document.getElementById("gameOverScreen").classList.add("hidden");
-  document.getElementById("ui").classList.remove("hidden");
+  // HUD показываем только в начатом забеге. init() зовётся и до старта — мир
+  // нужен нарисованным за стартовым экраном, — но шкалы поверх названия там не
+  // нужны, а при смене персонажа init() зовётся оттуда же ещё раз.
+  document.getElementById("ui").classList.toggle("hidden",!started);
   upgradeSystem.hideMenu();
 }
 
@@ -226,6 +234,13 @@ function update(dt){
   } else if(spawnEvent&&spawnEvent.type==="push"){
     announcePush(spawnEvent.mod);
   }
+
+  // МУЗЫКА ПО СОСТОЯНИЮ, а не по событию. Босса можно не только выпустить, но
+  // и добить, и пережить его появление на паузе, и увидеть второго до смерти
+  // первого — переключать трек «на выход босса» значило бы ловить все эти
+  // случаи по отдельности и один обязательно забыть. Спрашивать состояние
+  // каждый кадр дешевле: повторный вызов с тем же именем ничего не делает.
+  audio.music(enemies.some(e=>!e.dead&&e instanceof Boss)?"boss":"run");
 
   battle.update(dt,{player,enemies,projectiles,sporeEffects,camera});
   // Опыт даёт не смерть врага, а подобранный предмет
@@ -301,6 +316,9 @@ function openUpgradeMenu(){
 function endGame(){
   player.hp=0; gameOver=true; dying=0;
   shop.reset();
+  // Тишина на экране итогов. Трек, продолжающий бодро играть над «СПОРЫ
+  // ПОБЕДИЛИ», отменяет собой всё, что этот экран говорит.
+  audio.music(null);
   // Счётчик убитых переехал сюда с игрового экрана: в бою на него не
   // смотрят, а на экране итогов он как раз и есть итог. Монет показываем
   // СОБРАННЫЕ за забег, а не оставшиеся в кошельке: итог — это сколько ты
@@ -308,6 +326,16 @@ function endGame(){
   document.getElementById("finalLevel").textContent=player.level;
   document.getElementById("finalKills").textContent=battle.kills;
   document.getElementById("finalCoins").textContent=player.coinsEarned;
+  // В БАНК УХОДИТ ТОЛЬКО НЕПОТРАЧЕННОЕ. Монета, вложенная в лавку, работала в
+  // этом забеге — если бы в банк шло заработанное, выгодной стратегией стало
+  // бы не покупать ничего и умирать пораньше.
+  const banked=meta.deposit(player.coins);
+  const bankedLine=document.getElementById("bankedLine");
+  bankedLine.classList.toggle("hidden",!banked);
+  if(banked){
+    document.getElementById("bankedCoins").textContent=banked;
+    document.getElementById("bankTotal").textContent=meta.bank;
+  }
   // Рекорд подаётся ПОСЛЕ цифр забега: сначала «сколько получилось», потом
   // «лучше ли, чем раньше». Обратный порядок читается как упрёк.
   const beaten=records.submit({time:runTime,level:player.level,kills:battle.kills});
@@ -476,6 +504,14 @@ if(new URLSearchParams(location.search).has("debug")){
     map,
     // Ввод: без него нельзя проверить джойстик иначе как пальцем по телефону
     input,
+    // Звук: музыку нельзя ни увидеть на скриншоте, ни услышать в Playwright.
+    // Единственный способ проверить, что трек вообще переключился на боссе, —
+    // спросить audio.track.
+    audio,
+    // Мета: банк и персонажи копятся между забегами, то есть проверить их
+    // «как игрок» — это несколько забегов подряд. GAME.meta.bank=999 плюс
+    // GAME.meta.unlock("ranger") показывает второго персонажа сразу.
+    meta,
     // Живой конфиг: правки видны со следующего кадра, без перезагрузки.
     // Нужен для подбора того, что оценивается только глазами — контур врагов,
     // сила темноты, размеры. Поставить игру на паузу (Esc), покрутить число,
@@ -496,6 +532,10 @@ if(new URLSearchParams(location.search).has("debug")){
       onScreen:enemies.filter(e=>!e.dead&&camera.sees(e.x,e.y,0)).length,
       pipers:enemies.filter(e=>!e.dead&&e.typeKey==="spore_piper").length,
       enemyShots:battle.enemyShots.length,
+      // Элита теперь не только толще, но и ведёт себя иначе — а поймать её
+      // поведение глазами нельзя: она редкая. Считаем её и отложенные взрывы.
+      elites:enemies.filter(e=>!e.dead&&e.isMutated).length,
+      pending:battle.pending.length,
       drops:loot.items.length,
       fields:battle.fields.length,
       damage:player.damage,
@@ -512,6 +552,21 @@ if(new URLSearchParams(location.search).has("debug")){
 function startRun(){
   document.getElementById("startScreen").classList.add("hidden");
   started=true; init();
+  // Музыку просим отсюда нарочно: это то самое нажатие, которым браузер
+  // разрешает создать звук. Раньше просьбы не было бы слышно вообще.
+  audio.music("run");
+}
+
+// ВОЗВРАТ В МЕНЮ с экрана итогов. Без него банк был бы обещанием, которое
+// нельзя получить: стартовый экран показывался ровно один раз за загрузку
+// страницы, и чтобы потратить отложенные монеты на персонажа, пришлось бы
+// перезагружать вкладку.
+function backToMenu(){
+  started=false; gameOver=false; audio.music(null);
+  document.getElementById("gameOverScreen").classList.add("hidden");
+  document.getElementById("startScreen").classList.remove("hidden");
+  init();
+  showBest(); showMeta();
 }
 // Рекорд на стартовом экране. Прячется, пока его нет: пустое место честнее
 // нулей, которые выглядят как «ты уже играл и продержался ноль».
@@ -522,7 +577,47 @@ function showBest(){
   document.getElementById("bestTime").textContent=formatTime(b.time);
   document.getElementById("bestLevel").textContent=b.level;
 }
-showBest();
+
+// ВЫБОР ПЕРСОНАЖА И БАНК на стартовом экране.
+//
+// Ряд собирается заново на каждое нажатие — ровно как прилавок лавки, и по
+// той же причине: четыре строки разметки против рассинхрона «на экране одно,
+// в памяти другое».
+//
+// Пока открыт один персонаж и банк пуст, ряда нет вовсе: карточка без выбора
+// и цифра «0» ничего не сообщают. Первая же отложенная монета его показывает —
+// иначе она пропала бы молча, а это то самое ложное обещание.
+function showMeta(){
+  const box=document.getElementById("metaBox");
+  box.classList.toggle("hidden",!meta.isVisible());
+  if(!meta.isVisible()) return;
+  document.getElementById("bankCoins").textContent=meta.bank;
+  const list=document.getElementById("charList");
+  list.innerHTML="";
+  for(const row of meta.roster()){
+    const poor=!row.unlocked&&meta.bank<row.def.cost;
+    const div=document.createElement("div");
+    div.className="char-card"+(row.selected?" on":"")+
+                  (row.unlocked?"":" locked")+(poor?" poor":"");
+    div.innerHTML=
+      '<img class="ico" src="assets/images/ui/icon_up_'+row.def.icon+'.png" alt="">'+
+      '<div class="title">'+row.def.name+'</div>'+
+      '<div class="desc">'+row.def.desc+'</div>'+
+      (row.unlocked?"":'<div class="cost">'+row.def.cost+'</div>');
+    div.onclick=()=>{
+      // Открыт — просто выбираем; закрыт — пробуем купить. Отказ по деньгам
+      // обязан звучать: молчащая карточка читается как «игра не заметила».
+      const ok=row.unlocked?meta.select(row.id):meta.unlock(row.id);
+      audio.sfx(ok?(row.unlocked?"pickup":"levelup"):"hit",ok?1:0.4);
+      showMeta();
+      // Игрок, стоящий за стартовым экраном, создаётся заново: иначе выбор
+      // применился бы только со следующего забега, а фон показывал бы старого
+      if(ok&&!started) init();
+    };
+    list.appendChild(div);
+  }
+}
+showBest(); showMeta();
 
 document.getElementById("playBtn").onclick=startRun;
 // Та же трата с пальца. Подсказку «ПРОБЕЛ» на сенсорном экране прячем: клавиши
@@ -534,9 +629,9 @@ document.getElementById("shopLeave").onclick=()=>shop.close();
 // Кнопка вместо надписи «R — рестарт»: на телефоне клавиши нет, и экран
 // смерти был тупиком — забег не перезапустить иначе как перезагрузкой.
 document.getElementById("restartBtn").onclick=()=>{ if(gameOver) init(); };
+document.getElementById("menuBtn").onclick=()=>{ if(gameOver) backToMenu(); };
 
 const loop=new Loop(update,draw);
 init();
-document.getElementById("ui").classList.add("hidden");
 loop.start();
 console.log("Грибной Сумрак запущен! WASD/джойстик — движение, мышь/авто-прицел — стрельба, M — звук, R — рестарт");

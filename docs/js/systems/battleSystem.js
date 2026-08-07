@@ -24,6 +24,11 @@ export class BattleSystem {
     this.effects=[];      // одноразовые анимации взрывов
     this.enemyShots=[];   // облака спор, выпущенные трубачами
     this.fields=[];       // живые грибницы: пятна урона, оставшиеся на земле
+    // ОТЛОЖЕННЫЕ ВЗРЫВЫ. Пока в игре он один — второй взрыв элитного Плодового
+    // Тела, — но список общий нарочно: «удар по площади с видимым отсчётом»
+    // это ровно то, чем уже пользуются Сердцевина и трубач, и заводить под
+    // каждый следующий такой удар свой механизм незачем.
+    this.pending=[];
     this.kills=0;         // счётчик убитых, его показывает интерфейс
     // Кадров, на которые мир должен замереть. Считает их главный цикл: бой
     // не имеет права останавливать игру сам — он не знает ни про паузу, ни
@@ -38,7 +43,44 @@ export class BattleSystem {
 
   reset(){
     this.effects.length=0; this.enemyShots.length=0;
-    this.fields.length=0; this.kills=0; this.hitStop=0;
+    this.fields.length=0; this.pending.length=0;
+    this.kills=0; this.hitStop=0;
+  }
+
+  // ОТЛОЖЕННЫЙ ВЗРЫВ. Пока идёт отсчёт, над точкой стягивается кольцо
+  // (drawPending) — то же предупреждение, что у замаха трубача и удара
+  // Сердцевины. Взрыв, случившийся молча, читается не как угроза, а как
+  // несправедливость: игрок не может связать урон со своим решением.
+  updatePending(player,camera){
+    for(let i=this.pending.length-1;i>=0;i--){
+      const b=this.pending[i];
+      if(--b.delay>0) continue;
+      this.pending.splice(i,1);
+      this.particles.emit(b.x,b.y,"#c4a000",22,2,6);
+      this.particles.emitRing(b.x,b.y,b.color,b.radius*0.3,b.radius,16,3);
+      this.audio?.sfx("boom");
+      camera?.shake(CONFIG.feel.shakeExplosion,10);
+      // Задевает и врагов, и игрока — ровно как первый взрыв Плодового Тела:
+      // взрыв, разбирающий, кто чей, в кадре с двадцатью телами не читается
+      for(const o of this.grid.query(b.x,b.y,b.radius,[])){
+        if(o.dead||o instanceof Boss) continue;
+        if(Math.hypot(o.x-b.x,o.y-b.y)>b.radius) continue;
+        o.hp-=b.damage*0.5;
+      }
+      if(Math.hypot(player.x-b.x,player.y-b.y)<b.radius) player.takeDamage(b.damage);
+    }
+  }
+
+  drawPending(renderer){
+    const ctx=renderer.ctx;
+    for(const b of this.pending){
+      const k=1-b.delay/b.max;
+      ctx.save();
+      ctx.globalAlpha=0.2+k*0.5;
+      ctx.strokeStyle=b.color; ctx.lineWidth=2;
+      ctx.beginPath(); ctx.arc(b.x,b.y,b.radius*(1-k*0.75),0,Math.PI*2); ctx.stroke();
+      ctx.restore();
+    }
   }
 
   updateEffects(){
@@ -48,7 +90,10 @@ export class BattleSystem {
     }
   }
 
-  drawEffects(renderer){ for(const e of this.effects) e.draw(renderer); }
+  drawEffects(renderer){
+    this.drawPending(renderer);
+    for(const e of this.effects) e.draw(renderer);
+  }
 
   // Разовая анимация в точке — вспышка уровня, взрыв склянки
   addEffect(x,y,def){ this.effects.push(new Effect(x,y,def)); }
@@ -232,6 +277,7 @@ export class BattleSystem {
     this.updateProjectiles(projectiles,enemies,player,camera);
     this.updateEnemyShots(player,camera);
     this.updateFields(dt);
+    this.updatePending(player,camera);
     this.updateEffects();
 
     for(let i=enemies.length-1;i>=0;i--){
@@ -422,6 +468,50 @@ export class BattleSystem {
     if(e.abilities.includes("spore_cloud_on_death")){
       this.particles.emitSporeCloud(e.x,e.y,t.sporeCloudRadius||50,"#6b2d5c");
     }
+
+    // === ЧЕМ ЭЛИТА ОТЛИЧАЕТСЯ В МОМЕНТ СМЕРТИ ==========================
+    // Отличия лежат в конфиге типа (types.<тип>.elite), а не разбросаны по
+    // условиям на typeKey: заводя новому врагу элитную повадку, править надо
+    // одно место — его же запись, — а не искать, где ещё поминается его имя.
+    if(e.elite){
+      // Спороносец: облако не просто рисуется, а налипает. Единственное
+      // отличие элиты, которое бьёт по главному ресурсу игры, а не по HP.
+      if(e.elite.sporeOnDeath){
+        const r=t.sporeCloudRadius||60;
+        if(Math.hypot(player.x-e.x,player.y-e.y)<r+player.radius){
+          player.sporeLevel=Math.min(CONFIG.sporeSystem.maxSpore,
+                                     player.sporeLevel+e.elite.sporeOnDeath);
+          this.particles.emitText(player.x,player.y-player.radius-22,
+                                  "+"+e.elite.sporeOnDeath+"% спор","#c58cff",13);
+        }
+        this.particles.emitSporeCloud(e.x,e.y,r,"#c58cff");
+      }
+      // Летучая спора: лопается на две обычные. Осколки НЕ элитные — иначе
+      // одна спора порождала бы цепочку без конца.
+      if(e.elite.split&&enemies){
+        for(let i=0;i<e.elite.split;i++){
+          const a=Math.random()*Math.PI*2;
+          const n=new Enemy(e.x+Math.cos(a)*e.radius*1.6,
+                            e.y+Math.sin(a)*e.radius*1.6,
+                            e.typeKey,false,e.scale);
+          // Половина HP: две целых споры вместо одной элитной — это уже не
+          // «убийство не расчистило место», а «стало хуже, чем было»
+          n.maxHp*=0.5; n.hp=n.maxHp;
+          enemies.push(n);
+        }
+        this.particles.emitRing(e.x,e.y,"#7fe9d6",e.radius,e.radius*3,14,2.4);
+      }
+      // Плодовое Тело: второй взрыв с задержкой, на том же месте
+      if(e.elite.echo){
+        this.pending.push({
+          x:e.x, y:e.y, delay:e.elite.echo, max:e.elite.echo,
+          radius:t.explodeRadius||100,
+          damage:(t.explodeDamage||25)*(e.elite.echoDamage??1),
+          color:t.rim||"#a8ff6a"
+        });
+      }
+    }
+
     if(e.abilities.includes("explode_on_death")){
       this.particles.emit(e.x,e.y,"#c4a000",20,2,6);
       for(const o of this.grid.query(e.x,e.y,t.explodeRadius,[])){

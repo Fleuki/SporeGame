@@ -34,18 +34,26 @@ function angleDelta(a,b){
 }
 
 export class Player extends Entity {
-  constructor(x,y){
+  // character — запись из CONFIG.characters.list. Ничего, кроме перекоса
+  // характеристик и стартового ствола, персонаж не задаёт: остальное игрок
+  // набирает сам за забег, и так и должно быть. Аргумент необязательный —
+  // без него получается Алхимик, то есть ровно тот игрок, что был до
+  // появления выбора.
+  constructor(x,y,character=null){
     super(x,y,CONFIG.player.radius);
-    this.speed=CONFIG.player.speed;
-    this.maxHp=CONFIG.player.maxHp; this.hp=this.maxHp; this.xp=0; this.level=1; this.xpToNext=14;
-    this.damage=CONFIG.player.damage;
+    const C=character||CONFIG.characters.list[CONFIG.characters.starter];
+    this.character=C;
+    this.speed=CONFIG.player.speed*(C.speedMult??1);
+    this.maxHp=Math.round(CONFIG.player.maxHp*(C.hpMult??1));
+    this.hp=this.maxHp; this.xp=0; this.level=1; this.xpToNext=14;
+    this.damage=CONFIG.player.damage*(C.dmgMult??1);
     // Общий множитель перезарядки ВСЕХ стволов: 1 — как в конфиге, меньше —
     // быстрее. Карточка «Ускоренный экстракт» умножает именно его, а каждый
     // ствол сверху крутит ещё и свой (Weapon.rateMult).
     this.rateMult=1;
     // Стволы стреляют одновременно, каждый по своему таймеру.
-    // Остальные выдаются карточками прокачки.
-    this.weapons=[new Weapon(CONFIG.weapons.antidote)];
+    // Первый задаёт персонаж, остальные выдаются карточками прокачки.
+    this.weapons=[new Weapon(CONFIG.weapons[C.weapon]||CONFIG.weapons.antidote)];
     this.angle=0; this.color=CONFIG.player.color; this.sporeLevel=0;
     // ЗАМЕДЛЕНИЕ ВМЕСТО ЗАХВАТА. Раньше здесь был флаг isGrabbed: щупальце
     // выставляло его, и Player.update выходил в первой же строке — управления
@@ -64,7 +72,7 @@ export class Player extends Entity {
     // Мутации ускоряют заражение через свой множитель, а не правкой CONFIG:
     // глобальный конфиг живёт дольше забега, и правки в нём переносились
     // в следующие партии.
-    this.sporeRate=1;
+    this.sporeRate=C.sporeMult??1;
     // ВЫБРОС СПОР. Заражение теперь не только копится, но и тратится: см.
     // CONFIG.sporeSystem.burst и BattleSystem.sporeBurst. Здесь живёт только
     // перезарядка и множители от карточек — сам удар считает бой, потому что
