@@ -148,7 +148,11 @@ export class SpawnSystem {
     if(this.time<(this.bossesSpawned+1)*S.bossEvery) return null;
     if(enemies.some(e=>e instanceof Boss&&!e.dead)) return null;
     this.bossesSpawned++;
-    const type=this.bossesSpawned%S.bossAltEvery===0?"mycelium_heart":"mother_cap";
+    // ОЧЕРЕДЬ БОССОВ — просто список по кругу. Раньше здесь стояло
+    // «каждый второй — Сердцевина», и добавить третьего значило бы переписать
+    // условие; со списком третий добавляется одной строкой в конфиге.
+    // Порядок и есть очередь: 165-я секунда, 330-я, 495-я, дальше по кругу.
+    const type=S.bossOrder[(this.bossesSpawned-1)%S.bossOrder.length];
     // Босс появлялся ровно в центре арены — там же, где стоит игрок, — и
     // мгновенно наносил контактный урон. Ставим его за краем видимости.
     const p=this.camera.pointOutside(S.bossSpawnMargin);

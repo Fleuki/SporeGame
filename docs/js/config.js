@@ -710,6 +710,35 @@ export const CONFIG = {
       crawlPhase: 3, crawlSpeed: 0.42,
       // На последней фазе щупальца лезут парами
       pairPhase: 3
+    },
+    // ТРЕТИЙ БОСС — двенадцатая минута забега. До него на этом месте по
+    // третьему разу выходили те же двое.
+    //
+    // Лист пока ОДНОКАДРОВЫЙ (cols:1, rows:1): по правилу из ASSET_PROMPTS.md
+    // сначала генерируется и отбирается один кадр, и только потом он идёт
+    // обратно референсом на лист. Улей от этого ничего не теряет — он
+    // неподвижен и не имеет направлений; когда появится лист из четырёх
+    // стадий повреждения, здесь встанут rows:4 и phaseRows:true, и босс
+    // начнёт разваливаться на глазах, как Сердцевина.
+    //
+    // display 176, а не 150, как у Матери: это самый крупный босс в игре, и
+    // силуэт «широкий купол на узкой ножке» обязан читаться как «сюда лучше
+    // не подходить» раньше, чем игрок прочтёт полосу здоровья.
+    spore_hive: {
+      name: "Споровый Улей", hp: 2000, speed: 0, radius: 55, damage: 18, xpReward: 500,
+      color: { body: ["#8a8a8a","#00d4aa","#39ff14"] },
+      sprite: { key:"boss_spore_hive", frame:352, cols:1, rows:1,
+                row:0, animSpeed:8, display:176 },
+      // Способности взяты у Матери, но выводок другой: улей плюётся ЛЕТУЧИМИ
+      // спорами. Они быстрые и идут по дуге — от неподвижного босса можно
+      // отойти, от его выводка нельзя, и в этом вся разница между ним и
+      // Материнской Каплей, у которой выводок медленный и пеший.
+      abilities: ["spawn_minions","sneeze_burst"],
+      sneezeInterval: 150, sneezeCooldown: 80,
+      minionType: "spore_bat", minionCount: 4, sporeCloudRadius: 140,
+      phaseRate: [1, 0.8, 0.64, 0.5],
+      minionPerPhase: 1,
+      encirclePhase: 2
     }
   },
   // СПАВН. Волн больше нет. Раньше забег был нарезан на дискретные волны:
@@ -859,8 +888,12 @@ export const CONFIG = {
     // десятую волну, то есть примерно раз в 8 минут; это дольше, чем живёт
     // средний забег, поэтому босса видели редко. Теперь раз в 4 минуты.
     bossEvery: 165, bossHpPerMin: 0.16,
-    // Каждый второй босс — Мицелиевая Сердцевина
-    bossAltEvery: 2,
+    // ОЧЕРЕДЬ БОССОВ по кругу: 2:45, 5:30, 8:15, дальше сначала. Раньше здесь
+    // стояло «каждый второй — Сердцевина» отдельным числом, и третьего босса
+    // было некуда вписать, не переписав условие в SpawnSystem.
+    // Улей стоит третьим не случайно: к 8:15 у игрока обычно есть эволюция
+    // ствола, а он самый жирный из троих (2000 HP против 800 и 1200).
+    bossOrder: ["mother_cap","mycelium_heart","spore_hive"],
 
     // СОСТАВ ПОТОКА. at — с какой секунды тип вообще появляется, weight —
     // [вес в начале, вес после weightRamp секунд]. Раньше здесь была лесенка
@@ -1101,6 +1134,7 @@ export const CONFIG = {
       enemy_mycelium_tentacle: "assets/images/enemies/mycelium_tentacle.png",
       boss_mother_cap: "assets/images/bosses/mother_cap.png",
       boss_mycelium_heart: "assets/images/bosses/mycelium_heart.png",
+      boss_spore_hive: "assets/images/bosses/spore_hive.png",
       // fruit_body и mycelium_tentacle пока без спрайтов — рисуются примитивами
       groundMoss: "assets/images/map/ground_moss.png",
       groundDirt: "assets/images/map/ground_dirt.png",

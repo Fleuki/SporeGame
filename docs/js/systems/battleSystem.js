@@ -303,18 +303,21 @@ export class BattleSystem {
 
   handleBossEvent(ev,enemies,player,camera){
     const b=ev.boss;
+    // Числа берутся у САМОГО босса (b.def), а не из записи Матери. Раньше
+    // здесь стояло CONFIG.bosses.mother_cap в трёх местах, и любой другой
+    // босс с теми же способностями чихал бы её облаком и плодил её выводок.
     if(ev.type==="sneeze"){
-      this.particles.emitSporeCloud(b.x,b.y,CONFIG.bosses.mother_cap.sporeCloudRadius,"#6b2d5c");
+      this.particles.emitSporeCloud(b.x,b.y,b.def.sporeCloudRadius||120,"#6b2d5c");
       player.sporeLevel+=5;
     } else if(ev.type==="spawn_minions"){
-      const n=ev.count??CONFIG.bosses.mother_cap.minionCount;
+      const n=ev.count??b.def.minionCount??3;
       // Кольцо вокруг ИГРОКА, а не вокруг босса: на поздней фазе от выводка
       // больше нельзя просто отойти, через него надо прорываться
       const cx=ev.encircle?player.x:b.x, cy=ev.encircle?player.y:b.y;
       const r=ev.encircle?130:60;
       for(let k=0;k<n;k++){
         const ang=(Math.PI*2/n)*k+(ev.encircle?Math.random():0);
-        enemies.push(new Enemy(cx+Math.cos(ang)*r,cy+Math.sin(ang)*r,CONFIG.bosses.mother_cap.minionType));
+        enemies.push(new Enemy(cx+Math.cos(ang)*r,cy+Math.sin(ang)*r,b.def.minionType||"spore_bearer"));
       }
     } else if(ev.type==="shock"){
       // УДАРНАЯ ВОЛНА Сердцевины. Бьёт по площади, но только по игроку:
