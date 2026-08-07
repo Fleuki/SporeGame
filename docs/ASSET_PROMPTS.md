@@ -564,6 +564,75 @@ side to side.
 
 ---
 
+## СМЕРТЬ ВРАГА — ЛИСТЫ ИЗ ЧЕТЫРЁХ КАДРОВ
+
+Первый пункт очереди работ и единственный, который нельзя сделать кодом.
+Сейчас смерть — подделка: движок берёт кадр, на котором врага застали,
+поднимает, раздувает и гасит (`Dissolve`). Работает сносно, но это самое
+частое событие в игре: игрок видит смерть по нескольку раз в секунду.
+
+**Движок уже готов.** У каждого типа в конфиге стоит необязательный `death`,
+и решение принимается по факту загрузки файла: есть картинка — играет
+`DeathAnim`, нет — прежнее растворение. Листы кладутся по одному, в любом
+порядке, без единой правки в коде.
+
+### Как просить
+
+Просить квадрат с сеткой **2x2**, а не полосу 4x1: модели держат композицию
+в квадрате заметно лучше, а нарезать четыре клетки в строку — три строки
+скрипта. И обязательно прикладывать РЕФЕРЕНСОМ кадр самого врага, иначе
+получится похожее существо, а не то же самое (на этом уже горел лист бега
+алхимика).
+
+Три требования, которые важнее красоты кадров:
+
+1. **Одинаковый масштаб и одна линия земли во всех четырёх клетках.**
+   Меняется только само существо. Иначе труп прыгает и «дышит» в размере.
+2. **Узнаваемость на первом кадре.** Первый кадр — это ещё тот же враг,
+   только оседающий. Если он уже облако спор, смерть читается как взрыв.
+3. **Последний кадр — почти ничего**: осевшая шапка спор, из которой уже не
+   собрать фигуру. Он держится 8 кадров и гаснет.
+
+### Чего НЕ делать при сборке
+
+**Не пересобирать сетку через `cut_key.py --grid`.** Он центрирует и
+масштабирует каждый кадр по его содержимому — а у оседающего трупа
+содержимое от кадра к кадру уменьшается, и он начнёт РАСТИ в кадре вместо
+того, чтобы оседать. Резать надо ровно на четыре равные клетки, сохраняя
+совмещение, которое нарисовала модель.
+
+Готовый лист — строка 4x1, файл `cols*frame` на `frame`: 256x64 для всех,
+кроме Плодового Тела (328x82) и Щупальца (224x56).
+
+### Промпт (подставить нужного врага)
+
+```
+[БАЗА СТИЛЯ]
+
+Use the attached image as the exact reference for the creature: same species,
+same proportions, same colours, same pixel density. This is that creature
+dying, not a new one.
+
+A 2x2 grid, 4 panels, thin magenta gutters between them. All four panels
+share one ground line and one scale: the creature occupies the same spot in
+every panel and never changes size. Only the creature itself changes.
+
+The four panels read as one death, in order left-to-right, top row first:
+panel 1 — still recognisably the creature, but buckling: legs folding, body
+tipping, a first puff of spores escaping;
+panel 2 — collapsed onto the ground, shape flattening, spores bursting out
+of the body in a low cloud;
+panel 3 — the body breaking apart, most of it already a cloud of spore grey
+#8a8a8a dust with a few dark fragments left;
+panel 4 — almost nothing left: a low settled mound of spores and thin dark
+remains on the ground.
+
+No blood, no gore, no red. This creature is fungal: it does not bleed, it
+bursts into spores.
+```
+
+---
+
 ## БОССЫ
 
 Оба босса уже есть. Промпты — на случай перегенерации или третьего босса.

@@ -494,6 +494,10 @@ export const CONFIG = {
         // 62 при выводе, то есть половина картинки существовала зря.
         sprite: { key:"enemy_spore_bearer", frame:64, cols:4, rows:1,
                   row:0, mirror:true, animSpeed:10, display:62 },
+        // ЛИСТ СМЕРТИ (необязательный). Файла нет — смерть собирает
+        // Dissolve, как и раньше; появился — играет он.
+        death: { key:"enemy_spore_bearer_death", frame:64, cols:4, animSpeed:6,
+                 hold:8, display:62 },
         abilities: ["spore_cloud_on_death"], sporeCloudRadius: 60, sporeCloudAmount: 5,
         // ЭЛИТА: облако на смерти перестаёт быть картинкой. У рядового
         // спороносца spore_cloud_on_death рисует споры и ровно ничего не
@@ -514,6 +518,10 @@ export const CONFIG = {
         // голове две несовпадающие раскладки было незачем.
         sprite: { key:"enemy_mushroom_wolf", frame:64, cols:4, rows:4,
                   dirRows:{down:0,right:1,left:2,up:3}, animSpeed:6, display:68 },
+        // ЛИСТ СМЕРТИ (необязательный). Файла нет — смерть собирает
+        // Dissolve, как и раньше; появился — играет он.
+        death: { key:"enemy_mushroom_wolf_death", frame:64, cols:4, animSpeed:6,
+                 hold:8, display:68 },
         abilities: ["spore_trail","spore_cloud_on_death"],
         trailInterval: 8, sporeCloudRadius: 50, sporeCloudAmount: 8,
         // ЭЛИТА: ПРЫЖОК. Волк и так быстрее всех, но уйти от него можно —
@@ -556,6 +564,10 @@ export const CONFIG = {
         // поэтому кадр 0 обязан быть закрытой трубой, а кадр 3 — раскрытой.
         sprite: { key:"enemy_spore_piper", frame:64, cols:4, rows:4,
                   dirRows:{down:0,right:1,left:2,up:3}, animSpeed:8, display:76 },
+        // ЛИСТ СМЕРТИ (необязательный). Файла нет — смерть собирает
+        // Dissolve, как и раньше; появился — играет он.
+        death: { key:"enemy_spore_piper_death", frame:64, cols:4, animSpeed:6,
+                 hold:8, display:76 },
         abilities: ["ranged_attack"],
         ranged: {
           // keepDist меньше половины высоты кадра (при зуме 1.6 это 219
@@ -593,6 +605,10 @@ export const CONFIG = {
         // босса, и потому её нельзя было перерисовать, не задев обоих.
         sprite: { key:"enemy_fruiting_body", frame:82, cols:4, rows:1,
                   row:0, animSpeed:12, display:82 },
+        // ЛИСТ СМЕРТИ (необязательный). Файла нет — смерть собирает
+        // Dissolve, как и раньше; появился — играет он.
+        death: { key:"enemy_fruiting_body_death", frame:64, cols:4, animSpeed:6,
+                 hold:8, display:82 },
         abilities: ["explode_on_death"], explodeRadius: 100, explodeDamage: 25, sporeCloudAmount: 15,
         // ЭЛИТА: ВТОРОЙ ВЗРЫВ. Обычное Плодовое Тело взрывается один раз, и
         // весь навык против него — не стоять рядом в момент смерти. Элитное
@@ -624,6 +640,10 @@ export const CONFIG = {
         // полторы секунды, обновляется, пока стоишь в нём. Угроза та же —
         // из плотной толпы на половинной скорости так просто не выйдешь, —
         // но решение остаётся за игроком, а не отбирается у него.
+        // ЛИСТ СМЕРТИ (необязательный). Файла нет — смерть собирает
+        // Dissolve, как и раньше; появился — играет он.
+        death: { key:"enemy_mycelium_tentacle_death", frame:64, cols:4, animSpeed:6,
+                 hold:8, display:56 },
         abilities: ["emerge_from_ground","snare_player"],
         slowMult: 0.5, slowDuration: 90, emergeDelay: 45,
         // ЭЛИТА: ДЕРЖИТ КРЕПЧЕ. Единственный тип, у которого отличие — это
@@ -644,6 +664,10 @@ export const CONFIG = {
         // Тот же перерисованный формат, что у спороносца: один ряд, кадр 64
         sprite: { key:"enemy_spore_bat", frame:64, cols:4, rows:1,
                   row:0, mirror:true, animSpeed:5, display:60 },
+        // ЛИСТ СМЕРТИ (необязательный). Файла нет — смерть собирает
+        // Dissolve, как и раньше; появился — играет он.
+        death: { key:"enemy_spore_bat_death", frame:64, cols:4, animSpeed:6,
+                 hold:8, display:60 },
         abilities: ["zigzag_flight","toxic_trail"], zigzagAmp: 2.5, trailInterval: 5,
         // ЭЛИТА: РАСПАДАЕТСЯ. Убитая элитная спора лопается на две обычные —
         // тех же, что летают в потоке, без венца и без права распасться ещё
@@ -1132,6 +1156,16 @@ export const CONFIG = {
       enemy_spore_piper: "assets/images/enemies/spore_piper.png",
       enemy_fruiting_body: "assets/images/enemies/fruiting_body.png",
       enemy_mycelium_tentacle: "assets/images/enemies/mycelium_tentacle.png",
+      // ЛИСТЫ СМЕРТИ. Их ещё нет — все шесть перечислены в optional ниже,
+      // поэтому загрузчик не ругается, а бой идёт на запасном растворении.
+      // Файл появился — смерть этого врага становится нарисованной сама,
+      // без единой правки в коде.
+      enemy_spore_bearer_death: "assets/images/enemies/spore_bearer_death.png",
+      enemy_mushroom_wolf_death: "assets/images/enemies/mushroom_wolf_death.png",
+      enemy_spore_piper_death: "assets/images/enemies/spore_piper_death.png",
+      enemy_spore_bat_death: "assets/images/enemies/spore_bat_death.png",
+      enemy_fruiting_body_death: "assets/images/enemies/fruiting_body_death.png",
+      enemy_mycelium_tentacle_death: "assets/images/enemies/mycelium_tentacle_death.png",
       boss_mother_cap: "assets/images/bosses/mother_cap.png",
       boss_mycelium_heart: "assets/images/bosses/mycelium_heart.png",
       boss_spore_hive: "assets/images/bosses/spore_hive.png",
@@ -1159,7 +1193,11 @@ export const CONFIG = {
     },
     // Ассеты, которых МОЖЕТ не быть. Загрузчик не ругается на них в консоль:
     // это не поломка, а «ещё не нарисовано», и игра обязана работать без них.
-    optional: [],
+    optional: [
+      "enemy_spore_bearer_death","enemy_mushroom_wolf_death",
+      "enemy_spore_piper_death","enemy_spore_bat_death",
+      "enemy_fruiting_body_death","enemy_mycelium_tentacle_death"
+    ],
     // Пусто и, скорее всего, останется пустым: и эффекты, и музыка
     // синтезируются в engine/audio.js. Трек на четыре минуты файлом перевесил
     // бы всю графику игры (1.2 МБ), а зациклить его без слышимого шва всё

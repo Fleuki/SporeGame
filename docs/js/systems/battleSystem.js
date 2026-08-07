@@ -3,7 +3,7 @@ import { Enemy } from "../entities/enemy.js";
 import { Boss } from "../entities/boss.js";
 import { SpatialGrid } from "../core/spatialGrid.js";
 import { Projectile, EnemyShot } from "../entities/projectile.js";
-import { Effect, Dissolve } from "../entities/effect.js";
+import { Effect, Dissolve, DeathAnim } from "../entities/effect.js";
 
 // Сколько живых грибниц (эволюция токсичной склянки) держим одновременно.
 // Старейшая уступает место новой: пятно живёт впятеро дольше перезарядки,
@@ -14,11 +14,16 @@ const MAX_FIELDS = 10;
 // Раньше это был один блок на 50 строк внутри main.update() вперемешку с
 // обновлением интерфейса.
 export class BattleSystem {
-  constructor(particles,sporeSystem,loot,audio){
+  // loader нужен ровно для одного решения: есть ли у убитого нарисованный
+  // лист смерти. Спросить об этом в момент смерти больше негде — рисование
+  // случится позже и в другом месте, а выбирать между настоящей анимацией и
+  // запасным растворением надо здесь и сразу.
+  constructor(particles,sporeSystem,loot,audio,loader){
     this.particles=particles;
     this.sporeSystem=sporeSystem;
     this.loot=loot;
     this.audio=audio;
+    this.loader=loader;
     this.grid=new SpatialGrid(96);
     this._near=[];        // переиспользуемый буфер, чтобы не мусорить в GC
     this.effects=[];      // одноразовые анимации взрывов
@@ -452,9 +457,19 @@ export class BattleSystem {
   killEnemy(e,enemies,player,sporeEffects,camera){
     e.dead=true; this.kills++;
     const t=e.def||{};
-    // Тело растворяется: без этого враг просто исчезал в кадре смерти
-    if(e.anim?.def) this.effects.push(new Dissolve(e.anim,e.x,e.y,t.rim||"#c58cff",
-                                                   e instanceof Boss?34:20));
+    // СМЕРТЬ: нарисованный лист, если он есть, иначе растворение прежним
+    // способом. Листы добавляются по одному врагу за раз, поэтому проверка
+    // идёт по факту загрузки картинки, а не по наличию записи в конфиге:
+    // запись может стоять раньше, чем появится файл.
+    if(t.death&&this.loader?.getImage(t.death.key)){
+      // Куда смотрел враг в момент смерти. У четвероногих направление живёт
+      // в ряду листа, у остальных в зеркале, поэтому берём не anim.flip, а
+      // сам угол движения — он есть у всех.
+      this.effects.push(new DeathAnim(t.death,e.x,e.y,Math.cos(e.moveAngle||0)<0));
+    } else if(e.anim?.def){
+      this.effects.push(new Dissolve(e.anim,e.x,e.y,t.rim||"#c58cff",
+                                     e instanceof Boss?34:20));
+    }
     this.particles.emit(e.x,e.y,"#39ff14",t.sporeCloudAmount||8);
     // Кольцо по габариту врага: смерть обязана читаться не только тем, что
     // фигура пропала. Крупный враг — заметнее кольцо, и разницу видно.
