@@ -50,7 +50,33 @@ export class ShopSystem {
       // Расходник, а не пассив: он единственный доступен без предела и нужен
       // как «слив» лишних монет в конце забега, когда пассивы уже скуплены
       {id:"s_heal",   title:"Отвар мицелия", desc:"Вылечить 40 HP прямо сейчас",
-       price:6,  max:Infinity, effect:(p)=>{ p.hp=Math.min(p.maxHp,p.hp+40); }}
+       price:6,  max:Infinity, effect:(p)=>{ p.hp=Math.min(p.maxHp,p.hp+40); }},
+
+      // === ВТОРОЙ ЯРУС ==================================================
+      // Девяти товаров на четыре места не хватало: к третьему визиту игрок
+      // видел весь ассортимент, и лавка превращалась в «купи, что осталось».
+      // Товары ниже добавлены не ради длины списка — каждый из них делает
+      // что-то, чего в игре ещё нет.
+      {id:"s_thorns", title:"Ядовитая кровь", desc:"Ударивший вас враг получает 12 урона",
+       price:12, max:3, effect:(p)=>{ p.thorns+=12; }},
+      {id:"s_crit",   title:"Костяная пыль", desc:"Шанс крита +6%",
+       price:15, max:3, effect:(p)=>{ p.critBonus+=0.06; }},
+      {id:"s_scav",   title:"Спорофаг", desc:"Антидот вдобавок лечит 25 HP",
+       price:9,  max:2, effect:(p)=>{ p.antidoteHeal+=25; }},
+      {id:"s_bmech",  title:"Раздутые мехи", desc:"Выброс спор: радиус +18%",
+       price:11, max:2, effect:(p)=>{ p.burstArea*=1.18; }},
+      {id:"s_filter2",title:"Кристальный фильтр", desc:"Заражение растёт на 30% медленнее",
+       price:18, max:2, effect:(p)=>{ p.sporeRate*=0.7; }},
+      // Товар про саму лавку. Дешёвая перерисовка меняет то, КАК в неё
+      // ходишь: копить на дорогое становится безопаснее, потому что нужный
+      // товар можно доискать.
+      {id:"s_pocket", title:"Потайной карман", desc:"Перерисовка дешевле на 2",
+       price:10, max:2, effect:(p)=>{ p.rerollDiscount+=2; }},
+      // ВТОРОЕ ДЫХАНИЕ — самый дорогой товар в игре и единственный, который
+      // отменяет смерть. Один раз за забег: постоянная страховка убрала бы
+      // из игры её единственную ставку.
+      {id:"s_wind",   title:"Второе дыхание", desc:"Один раз за забег переживёте смертельный удар",
+       price:28, max:1, effect:(p)=>{ p.secondWind=true; }}
     ];
   }
 
@@ -69,7 +95,13 @@ export class ShopSystem {
     return n>=(g.max??3);
   }
 
-  rerollPrice(){ return CONFIG.shop.rerollBase+CONFIG.shop.rerollStep*this.rerolls; }
+  // Скидка от «Потайного кармана» вычитается ПОСЛЕ роста цены за перерисовки
+  // и не опускает её ниже единицы: бесплатная перерисовка — это уже не выбор,
+  // а кнопка «крутить, пока не выпадет нужное».
+  rerollPrice(player){
+    const base=CONFIG.shop.rerollBase+CONFIG.shop.rerollStep*this.rerolls;
+    return Math.max(1,base-(player?.rerollDiscount||0));
+  }
 
   // Ассортимент: CONFIG.shop.size разных товаров из непроданного.
   // Разных — то есть один и тот же товар не занимает два места из четырёх:
@@ -114,7 +146,7 @@ export class ShopSystem {
   }
 
   reroll(player){
-    const price=this.rerollPrice();
+    const price=this.rerollPrice(player);
     if(player.coins<price){ this.audio?.sfx("hit",0.4); return false; }
     player.coins-=price; this.rerolls++;
     this.audio?.sfx("pickup");
@@ -149,7 +181,8 @@ export class ShopSystem {
       wrap.appendChild(div);
     }
     const rr=document.getElementById("shopReroll");
-    rr.textContent="ПЕРЕРИСОВАТЬ · "+this.rerollPrice();
-    rr.classList.toggle("poor",player.coins<this.rerollPrice());
+    const rp=this.rerollPrice(player);
+    rr.textContent="ПЕРЕРИСОВАТЬ · "+rp;
+    rr.classList.toggle("poor",player.coins<rp);
   }
 }

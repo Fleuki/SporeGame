@@ -16,6 +16,7 @@ import { BattleSystem } from "./systems/battleSystem.js";
 import { MapSystem } from "./systems/mapSystem.js";
 import { LootSystem } from "./systems/lootSystem.js";
 import { ShopSystem } from "./systems/shopSystem.js";
+import { RecordSystem } from "./systems/recordSystem.js";
 
 const canvas=document.getElementById("gameCanvas");
 
@@ -61,6 +62,7 @@ const loot=new LootSystem(particles,audio);
 const battle=new BattleSystem(particles,sporeSystem,loot,audio);
 const map=new MapSystem();
 const shop=new ShopSystem(audio);
+const records=new RecordSystem();
 
 input.onMutePress=()=>audio.toggleMute();
 input.onRestartPress=()=>{ if(started&&gameOver) init(); };
@@ -306,6 +308,15 @@ function endGame(){
   document.getElementById("finalLevel").textContent=player.level;
   document.getElementById("finalKills").textContent=battle.kills;
   document.getElementById("finalCoins").textContent=player.coinsEarned;
+  // Рекорд подаётся ПОСЛЕ цифр забега: сначала «сколько получилось», потом
+  // «лучше ли, чем раньше». Обратный порядок читается как упрёк.
+  const beaten=records.submit({time:runTime,level:player.level,kills:battle.kills});
+  document.getElementById("newRecord").classList.toggle("hidden",!beaten);
+  const prev=records.prev;
+  const prevLine=document.getElementById("prevBest");
+  prevLine.classList.toggle("hidden",beaten||!prev);
+  if(prev) document.getElementById("prevBestTime").textContent=formatTime(prev.time);
+  showBest();
   document.getElementById("finalTime").textContent=formatTime(runTime);
   document.getElementById("gameOverScreen").classList.remove("hidden");
   // Боевой HUD на экране итогов не нужен: таймер и шкалы просвечивали
@@ -502,6 +513,17 @@ function startRun(){
   document.getElementById("startScreen").classList.add("hidden");
   started=true; init();
 }
+// Рекорд на стартовом экране. Прячется, пока его нет: пустое место честнее
+// нулей, которые выглядят как «ты уже играл и продержался ноль».
+function showBest(){
+  const b=records.best, line=document.getElementById("bestLine");
+  line.classList.toggle("hidden",!b);
+  if(!b) return;
+  document.getElementById("bestTime").textContent=formatTime(b.time);
+  document.getElementById("bestLevel").textContent=b.level;
+}
+showBest();
+
 document.getElementById("playBtn").onclick=startRun;
 // Та же трата с пальца. Подсказку «ПРОБЕЛ» на сенсорном экране прячем: клавиши
 // там нет, а подпись к несуществующей кнопке — то же ложное обещание.

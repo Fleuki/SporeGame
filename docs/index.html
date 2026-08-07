@@ -86,6 +86,10 @@
     <img id="emblem" src="assets/images/ui/emblem.png" alt="">
     <h1>ГРИБНОЙ СУМРАК</h1>
     <p class="sub">Споры в воздухе. Держись, сколько сможешь.</p>
+    <!-- РЕКОРД. Забег заканчивался — и всё: ни следа, ни повода начать
+         заново. Одна строка превращает «поиграл» в «в прошлый раз было
+         6:40». Прячется, пока рекорда нет: пустое место честнее нулей. -->
+    <p class="record hidden" id="bestLine">Лучший забег: <span id="bestTime">0:00</span>, уровень <span id="bestLevel">1</span></p>
     <button id="playBtn" class="big-btn">ИГРАТЬ</button>
     <!-- Про выброс сказано прямо здесь: это единственное, что игрок делает
          руками сверх ходьбы, и догадаться о нём по гаснущей кнопке нельзя. -->
@@ -95,6 +99,8 @@
   <div id="gameOverScreen" class="hidden">
     <h1>СПОРЫ ПОБЕДИЛИ</h1>
     <p>Продержался <span id="finalTime">0:00</span>, уровень <span id="finalLevel">1</span></p>
+    <p class="record hidden" id="newRecord">НОВЫЙ РЕКОРД</p>
+    <p class="record hidden" id="prevBest">Лучшее: <span id="prevBestTime">0:00</span></p>
     <p><img class="icon" src="assets/images/ui/icon_kills.png" alt="Убито"> <span id="finalKills">0</span>
        <img class="icon" src="assets/images/drops/drop_coin.png" alt="Монет собрано"> <span id="finalCoins">0</span></p>
     <!-- КНОПКА, А НЕ ПОДПИСЬ. Здесь было написано «R — рестарт», и на

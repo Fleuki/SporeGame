@@ -508,6 +508,23 @@ body.touch .key { display: none; }
 #shopButtons { display: flex; gap: 12px; justify-content: center; }
 #shopButtons .big-btn { margin-top: 16px; min-height: 44px; padding: 0 24px; font-size: 15px; }
 
+/* РЕКОРД. Золотом и в разрядку — это единственная строка на обоих экранах,
+   которая говорит не про текущий забег, а про игрока. */
+.record {
+  color: #ffd24a; letter-spacing: 2px;
+  text-shadow: 0 0 10px rgba(255,210,74,0.45);
+}
+#newRecord {
+  font-size: 20px; letter-spacing: 5px;
+  animation: record-pulse 1.1s ease-in-out infinite;
+}
+@keyframes record-pulse {
+  0%, 100% { opacity: 0.75; }
+  50%      { opacity: 1; text-shadow: 0 0 18px rgba(255,210,74,0.9); }
+}
+#prevBest { opacity: 0.6; font-size: 12px; }
+#bestLine { font-size: 13px; opacity: 0.85; }
+
 .hidden { display: none !important; }
 
 /* МОБИЛЬНАЯ АДАПТАЦИЯ.

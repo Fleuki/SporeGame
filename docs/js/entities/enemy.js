@@ -55,6 +55,16 @@ export class Enemy extends Entity {
     this.strafeDir=Math.random()<0.5?-1:1;
   }
 
+  // ЯДОВИТАЯ КРОВЬ из лавки. Урон в ответ идёт ТОЛЬКО когда удар реально
+  // прошёл: takeDamage возвращает false, если его съели щит или кадры
+  // неуязвимости, и в этом случае платить врагу не за что — иначе стоя в
+  // толпе игрок бесплатно косил бы её одними шипами.
+  takeThorns(player,ctx){
+    if(!player.thorns) return;
+    this.hp-=player.thorns;
+    ctx?.particles?.emitRing(this.x,this.y,"#a8ff6a",this.radius*0.4,this.radius*1.6,7,1.6);
+  }
+
   // Урон по времени не складывается стопками, а обновляет длительность
   // и берёт большую силу — иначе облака перекрывались бы в мгновенную смерть
   applyDot(dps,time){
@@ -106,7 +116,7 @@ export class Enemy extends Entity {
       // секунду — волк снимал всё здоровье за секунду касания, и игрок не
       // успевал понять, обо что умер.
       if(this.touchCd<=0){
-        player.takeDamage(this.damage);
+        if(player.takeDamage(this.damage)) this.takeThorns(player,ctx);
         this.touchCd=CONFIG.enemies.touchInterval;
       }
       const push=Math.atan2(this.y-player.y,this.x-player.x);
@@ -166,7 +176,7 @@ export class Enemy extends Entity {
     // Подошли вплотную — бьёт как все остальные: подойти к стрелку в упор
     // должно быть выгодно, но не бесплатно
     if(this.overlaps(player)&&this.touchCd<=0){
-      player.takeDamage(this.damage);
+      if(player.takeDamage(this.damage)) this.takeThorns(player,ctx);
       this.touchCd=CONFIG.enemies.touchInterval;
     }
   }

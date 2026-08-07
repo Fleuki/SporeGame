@@ -293,7 +293,8 @@ export class BattleSystem {
 
         // Крит — единственная причина, по которой цифры урона вообще стоит
         // показывать: одинаковые числа не несут информации, разброс — несёт.
-        const crit=Math.random()<CONFIG.feel.critChance;
+        // Шанс крита — базовый плюс купленный в лавке («Костяная пыль»)
+        const crit=Math.random()<CONFIG.feel.critChance+(player.critBonus||0);
         const dmg=p.damage*(crit?CONFIG.feel.critMult:1);
         e.takeDamage(dmg,p.angle,CONFIG.feel.knockback*this.kbMult(e)*(crit?1.6:1));
         this.showDamage(e,dmg,crit);
