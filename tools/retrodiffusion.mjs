@@ -23,6 +23,9 @@
 //   --ref=<путь>    образец из assets-raw (img2img)
 //   --strength=0.7  насколько сильно уходить от образца (0..1)
 //   --tile          бесшовно по обеим осям — для тайлов земли
+//   --key           вырезать сплошной фон заливкой от краёв. Прозрачного фона
+//                   сервис не отдаёт вовсе, а предметные стили рисуют объект
+//                   на ровной подложке — её и снимаем
 //   --seed=42       повторяемость
 //   --no-palette    не навязывать палитру игры
 //   --credits       показать остаток и выйти
@@ -34,7 +37,7 @@ import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 import { PALETTE } from "./palette.mjs";
 import { decodePng, encodePng } from "./png.mjs";
-import { downscale } from "./image.mjs";
+import { downscale, cutBorder } from "./image.mjs";
 
 const ROOT=join(dirname(fileURLToPath(import.meta.url)),"..");
 const RAW=join(ROOT,"assets-raw");
@@ -127,6 +130,9 @@ const b64=data.base64_images?.[0];
 if(!b64){ console.error("В ответе нет картинки:\n"+text.slice(0,600)); process.exit(1); }
 
 let img=decodePng(Buffer.from(b64,"base64"));
+// Фон снимаем ДО уменьшения: после ужатия край подложки смешивается с
+// краем предмета, и заливка либо не доходит, либо выедает контур
+if(flag("key")) cutBorder(img,+(flag("key")===true?10:flag("key")));
 if(flag("fit")){
   const f=String(flag("fit"));
   const [fw,fh]=f.includes("x")?f.split("x").map(Number):[+f,+f];
