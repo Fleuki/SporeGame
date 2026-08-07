@@ -26,7 +26,7 @@ export class Enemy extends Entity {
   constructor(x,y,typeKey,isMutated=false,scale=null){
     const t=CONFIG.enemies.types[typeKey]||CONFIG.enemies.types.spore_bearer;
     super(x,y,t.radius);
-    const s=scale||{hp:1,damage:1,speed:1};
+    const s=scale||{hp:1,damage:1,speed:1,xp:1};
     this.def=t; this.typeKey=typeKey;
     this.maxHp=t.hp*(isMutated?1.5:1)*s.hp; this.hp=this.maxHp;
     this.baseSpeed=t.speed*s.speed; this.speed=this.baseSpeed;
@@ -37,7 +37,10 @@ export class Enemy extends Entity {
     this.damage=t.damage*this.dmgScale;
     // Опыт растёт медленнее HP, иначе поздние волны разгоняют уровень быстрее,
     // чем растёт сложность, и прокачка снова обгоняет врагов.
-    this.xpReward=t.xpReward*(isMutated?1.5:1)*(1+(s.hp-1)*0.45);
+    // s.xp — множитель от правила стычки. Он и есть плата за риск: «Отборные»
+    // дают вдвое больше опыта именно потому, что их вдвое опаснее убивать, а
+    // «Рой» меньше — иначе выгодной стратегией стало бы фармить дешёвые тела.
+    this.xpReward=t.xpReward*(isMutated?1.5:1)*(1+(s.hp-1)*0.45)*(s.xp??1);
     this.color=t.color; this.isMutated=isMutated;
     this.anim=new SpriteAnim(t.sprite); this.moveAngle=0;
     this.abilities=t.abilities||[];

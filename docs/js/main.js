@@ -221,6 +221,8 @@ function update(dt){
   if(spawnEvent&&spawnEvent.type==="boss"){
     enemies.push(spawnEvent.boss);
     audio.sfx("boss"); camera.shake(CONFIG.feel.shakeBoss,40);
+  } else if(spawnEvent&&spawnEvent.type==="push"){
+    announcePush(spawnEvent.mod);
   }
 
   battle.update(dt,{player,enemies,projectiles,sporeEffects,camera});
@@ -256,6 +258,19 @@ function beginDeath(){
   audio.sfx("hurt"); audio.sfx("boom");
   camera.shake(CONFIG.feel.shakeBoss,30);
   particles.emit(player.x,player.y,"#6b2d5c",30,1,5);
+}
+
+// ПРАВИЛО СТЫЧКИ ОБЪЯВЛЕНО. Надпись перезапускается принудительно: без снятия
+// класса анимация не проигрывается второй раз, и второе правило подряд
+// прошло бы молча — то есть ровно тот случай, ради которого объявление и есть.
+function announcePush(mod){
+  const el=document.getElementById("pushBanner");
+  el.firstElementChild.textContent=mod.name;
+  el.classList.add("hidden");
+  void el.offsetWidth;              // перезапуск анимации
+  el.classList.remove("hidden");
+  audio.sfx("wave");
+  camera.shake(CONFIG.feel.shakeLevel,8);
 }
 
 // ПОЛУЧЕН УРОВЕНЬ.
@@ -400,7 +415,8 @@ function draw(){
   // --- экранный слой: интерфейс и джойстик не ездят вместе с миром ---
   // Темнота идёт первой: она гасит мир, но не должна гасить виньетку,
   // красную рамку урона и джойстик
-  map.drawDarkness(renderer,player);
+  // Туман — правило стычки: круг света сжимается на время натиска
+  map.drawDarkness(renderer,player,spawnSystem?.modMult("fog"));
   map.drawVignette(renderer);
   drawHurtVignette();
   input.drawJoystick(renderer);

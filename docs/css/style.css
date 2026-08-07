@@ -144,6 +144,25 @@ canvas {
   50%      { filter: brightness(1.45) drop-shadow(0 0 8px rgba(255,60,60,0.9)); }
 }
 
+/* ОБЪЯВЛЕНИЕ ПРАВИЛА СТЫЧКИ — под таймером, по центру.
+   Появляется рывком и уезжает вверх: движение боковое зрение ловит даже
+   тогда, когда игрок смотрит на толпу в углу. Держать его дольше пары
+   секунд нельзя — оно перекрывает верх арены, откуда как раз и приходят. */
+#pushBanner {
+  position: absolute; top: 52px; left: 50%;
+  transform: translateX(-50%);
+  color: #ffd24a; font-size: 22px; letter-spacing: 4px;
+  text-shadow: 0 0 14px rgba(255,210,74,0.6), 0 2px 4px rgba(0,0,0,0.95);
+  animation: push-banner 2.5s ease-out forwards;
+  white-space: nowrap;
+}
+@keyframes push-banner {
+  0%   { opacity: 0; transform: translateX(-50%) translateY(10px) scale(0.9); }
+  12%  { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+  70%  { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateX(-50%) translateY(-14px) scale(1); }
+}
+
 /* КОШЕЛЁК — над шкалами, у того же левого края. Мелкий нарочно: в бою на
    него не смотрят, он нужен ровно в тот момент, когда прикидываешь, хватит
    ли на прилавке. */

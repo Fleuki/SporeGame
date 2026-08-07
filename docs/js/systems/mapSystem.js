@@ -379,7 +379,11 @@ export class MapSystem {
   // получилось бы двойное затемнение. Поэтому слой собирается в отдельном
   // канвасе: сплошная заливка, из которой источники ВЫРЕЗАЮТ свет через
   // destination-out, и только потом всё это кладётся на кадр.
-  drawDarkness(renderer,player){
+  // fogMult — сжатие круга света правилом стычки «Туман» (1 — без изменений).
+  // Множитель приходит снаружи, а не берётся из CONFIG: правило живёт ровно
+  // один натиск, и записывать его в глобальный конфиг значило бы оставить
+  // туман висеть после конца стычки, а то и до следующего забега.
+  drawDarkness(renderer,player,fogMult=1){
     const D=CONFIG.map.darkness;
     if(!D||D.strength<=0) return;
     const cam=renderer.camera; if(!cam||!player) return;
@@ -406,7 +410,7 @@ export class MapSystem {
     // Круг света дышит — иначе он выглядит трафаретом, приклеенным к игроку
     const pulse=Math.sin(this.tick*D.pulseSpeed)*(D.pulse||0);
     const p=cam.toScreen(player.x,player.y);
-    this.cutLight(dc,p.x,p.y,(D.playerRadius+pulse)*k,D.playerCore);
+    this.cutLight(dc,p.x,p.y,(D.playerRadius+pulse)*k*fogMult,D.playerCore);
     for(const d of this.visible){
       if(!d.def.glow) continue;
       const s=cam.toScreen(d.x,d.y-d.w*0.3);
