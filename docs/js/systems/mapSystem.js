@@ -15,6 +15,16 @@ function hash2(x,y){
   return (h^(h>>>16))>>>0;
 }
 
+// Тот же цвет, но полностью прозрачный: "rgba(120,255,180,0.10)" →
+// "rgba(120,255,180,0)". Нужно градиентам — стоп с "rgba(0,0,0,0)" на конце
+// тянет цвет через чёрный, и по краю пятна проступает грязная кайма.
+function fadeOut(color){
+  const m=/^rgba?\(([^)]+)\)$/.exec(String(color).trim());
+  if(!m) return "rgba(0,0,0,0)";
+  const [r,g,b]=m[1].split(",");
+  return `rgba(${r},${g},${b},0)`;
+}
+
 // КАРТА: земля и декорации арены.
 //
 // Арена большая (см. CONFIG.world), поэтому ни тайлы, ни декорации не
@@ -66,7 +76,12 @@ export class MapSystem {
   // Биом сменяется по времени забега: номера волны больше не существует
   biome(runTime){
     const list=CONFIG.map.biomes;
-    return list[Math.floor(Math.max(0,runTime)/CONFIG.map.secondsPerBiome)%list.length];
+    const b=list[Math.floor(Math.max(0,runTime)/CONFIG.map.secondsPerBiome)%list.length];
+    // Землю рисуют по времени забега, а темноту и её цвет — уже в экранном
+    // слое, куда runTime не доходит. Запоминаем биом здесь, а не таскаем
+    // время через полкадра: drawGround всё равно идёт первым в каждом кадре.
+    this.cur=b;
+    return b;
   }
 
   // --- мировой слой ---------------------------------------------------
@@ -416,7 +431,11 @@ export class MapSystem {
     }
     const dc=this._darkCtx;
     dc.globalCompositeOperation="source-over";
-    dc.fillStyle="#03060a";
+    // Цвет темноты берётся у биома: чёрный везде одинаков, а «зеленовато-
+    // чёрный» и «лиловый мрак» различаются даже боковым зрением — именно
+    // этим смена биома и становится заметной, не требуя новой земли.
+    const biome=this.cur||CONFIG.map.biomes[0];
+    dc.fillStyle=biome.veil||"#03060a";
     dc.clearRect(0,0,w,h);
     dc.fillRect(0,0,w,h);
 
@@ -429,7 +448,8 @@ export class MapSystem {
     // Круг света дышит — иначе он выглядит трафаретом, приклеенным к игроку
     const pulse=Math.sin(this.tick*D.pulseSpeed)*(D.pulse||0);
     const p=cam.toScreen(player.x,player.y);
-    this.cutLight(dc,p.x,p.y,(D.playerRadius+pulse)*k*fogMult,D.playerCore);
+    const lightR=(D.playerRadius+pulse)*k*fogMult;
+    this.cutLight(dc,p.x,p.y,lightR,D.playerCore);
     for(const d of this.visible){
       if(!d.def.glow) continue;
       const s=cam.toScreen(d.x,d.y-d.w*0.3);
@@ -440,6 +460,22 @@ export class MapSystem {
     renderer.ctx.globalAlpha=D.strength;
     renderer.ctx.drawImage(cv,0,0);
     renderer.ctx.restore();
+
+    // Налёт цвета на самом круге света. Темноты биома мало: игрок смотрит в
+    // освещённый круг, а он до сих пор был одинаковым во всех четырёх.
+    // Кладётся ПОСЛЕ темноты и только внутрь круга — за его краем цвет
+    // спорил бы с veil и оба выглядели бы грязью.
+    if(biome.light){
+      const g=renderer.ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,lightR);
+      g.addColorStop(0,biome.light);
+      // Прозрачный край — ТОГО ЖЕ цвета: градиент к "rgba(0,0,0,0)"
+      // тянется через чёрный и по краю круга даёт грязное кольцо.
+      g.addColorStop(1,fadeOut(biome.light));
+      renderer.ctx.save();
+      renderer.ctx.fillStyle=g;
+      renderer.ctx.fillRect(0,0,w,h);
+      renderer.ctx.restore();
+    }
   }
 
   // Вырезает из слоя темноты мягкое пятно света. core — доля радиуса, внутри

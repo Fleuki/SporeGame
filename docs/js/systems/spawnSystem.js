@@ -98,7 +98,24 @@ export class SpawnSystem {
     if(late>0&&S.aliveLatePerMin){
       n=Math.min(S.aliveLateMax??n,n+late/60*S.aliveLatePerMin);
     }
-    return Math.round(n*this.modMult("countMult"));
+    return Math.round(n*this.modMult("countMult")*this.areaScale());
+  }
+
+  // Потолок задан для ЭТАЛОННОГО кадра (900x700 при зуме 1.6). Кадр обычно
+  // ровно такой по площади — её держит fitCanvas, — но у слишком вытянутых
+  // окон форма упирается в CONFIG.camera.aspectCap, и дальше кадр растёт.
+  // Тогда растёт и потолок: врагов на единицу площади должно остаться
+  // столько же, иначе портретный телефон получил бы ту же толпу, размазанную
+  // по полуторной арене, — то есть тихо облегчённую игру, ровно в том месте,
+  // которое чинили ради честности.
+  //
+  // Меньше единицы множитель не бывает: узкий кадр не даёт права выпустить
+  // МЕНЬШЕ врагов, чем задумано, — там уже работает сама площадь.
+  areaScale(){
+    const c=this.camera; if(!c||!c.w||!c.h) return 1;
+    const ref=(CONFIG.screen.width/CONFIG.camera.zoom)*
+              (CONFIG.screen.height/CONFIG.camera.zoom);
+    return Math.max(1,c.w*c.h/ref);
   }
 
   // Секунд до следующего босса — это же показывает интерфейс, если надо
