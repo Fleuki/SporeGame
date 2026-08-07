@@ -44,12 +44,73 @@ const RECIPES = {
 // десяток попаданий за кадр сливаются в треск.
 const THROTTLE = 0.035;
 
+// === МУЗЫКА ============================================================
+//
+// Её не было вовсе: CONFIG.assets.sounds пуст, и всё, что звучало, — это
+// разовые эффекты. В этом жанре музыка держит темп сильнее половины
+// визуальных правок: без неё затишье между стычками читается не как передышка,
+// а как «игра подвисла», а выход босса — как ещё один враг покрупнее.
+//
+// Треки СИНТЕЗИРУЮТСЯ, как и эффекты, и по той же причине: ничего не грузится
+// и ничего не весит. Файл на четыре минуты в этом проекте перевесил бы всю
+// графику вместе взятую (1.2 МБ), а зациклить его без слышимого шва всё равно
+// не выйдет — у сгенерированного трека почти никогда не сходятся края.
+//
+// Устройство минимальное и намеренно такое: бас на каждую долю, редкие ноты
+// сверху и педаль, меняющаяся раз в такт. Мелодии здесь нет и не должно быть —
+// мелодию за час игры запоминаешь и начинаешь слышать вместо игры.
+//
+// step — доля в секундах; steps — сколько долей в такте; root — тоника в Гц;
+// bass/lead — ступени минорной гаммы (null — пауза) по долям такта.
+const SCALE=[0,2,3,5,7,8,10];       // натуральный минор: полутона от тоники
+const TRACKS={
+  // ЗАБЕГ. Медленно и низко: музыка обязана быть фоном, поверх которого
+  // слышно выстрел и хруст попадания, а не наоборот.
+  run: {
+    // root — НЕ самая низкая нота, которую можно взять. Первая версия стояла
+    // на 55 Гц (ля контроктавы): на встроенных динамиках ноутбука и телефона
+    // это не бас, а тишина — там просто нет отдачи ниже сотни герц. Ми большой
+    // октавы слышно везде и оно всё ещё ниже любого игрового эффекта.
+    step:0.30, steps:8, root:82.4,
+    gain:0.5,
+    bass:[0,null,0,null,4,null,3,null],
+    lead:[null,null,7,null,null,9,null,7],
+    // Педаль: длинная нота под всем тактом, тон меняется по кругу.
+    pad:[0,3,5,3]
+  },
+  // БОСС. Быстрее, выше и без пауз в басу: разница слышна с первой доли, и
+  // выход босса становится событием ещё до того, как он войдёт в кадр.
+  boss: {
+    // Кварта выше забега (ля): смена тоники слышна как «стало выше и злее»
+    // даже тому, кто не различает трек от трека
+    step:0.22, steps:8, root:110,
+    gain:0.62,
+    bass:[0,0,5,0,0,0,6,5],
+    lead:[7,null,10,null,11,null,10,7],
+    pad:[0,5,0,6]
+  }
+};
+
+// Частота ступени гаммы. Ступени идут дальше семи: 7 — это тоника октавой
+// выше, а не ошибка индекса.
+function noteHz(root,step){
+  const oct=Math.floor(step/SCALE.length);
+  return root*Math.pow(2,(SCALE[((step%SCALE.length)+SCALE.length)%SCALE.length]+oct*12)/12);
+}
+
 export class AudioManager {
   constructor(loader){
     this.loader=loader; this.musicVolume=0.4; this.sfxVolume=0.6;
     this.currentMusic=null; this.muted=false;
     this.ctx=null; this.master=null; this.noise=null;
     this.lastAt=new Map();
+    // МУЗЫКА. wanted — какой трек должен играть; играть он начнёт, только
+    // когда появится звуковой контекст, а до первого нажатия его нет вовсе.
+    // Поэтому просьбу запоминаем, а не теряем: main зовёт music() из startRun,
+    // то есть ровно из того нажатия, которое контекст и разбудит.
+    this.wanted=null; this.track=null;
+    this.musicGain=null; this.musicTimer=null;
+    this.nextAt=0; this.beat=0;
     // Браузер не даёт создать звук до действия пользователя — включаемся на
     // первом же нажатии и больше не слушаем.
     const wake=()=>{ this.unlock(); };
@@ -77,7 +138,103 @@ export class AudioManager {
       for(let i=0;i<len;i++) data[i]=Math.random()*2-1;
     }
     if(this.ctx.state==="suspended") this.ctx.resume().catch(()=>{});
+    // Просьба сыграть трек могла прийти раньше, чем появился контекст —
+    // например, из того же нажатия «Играть», которое его и разбудило
+    if(this.wanted&&!this.musicTimer) this.startMusicLoop();
     return this.ctx;
+  }
+
+  // --- музыка -----------------------------------------------------------
+  // Какой трек должен играть. null — тишина. Вызывать можно каждый кадр:
+  // повтор того же имени ничего не делает.
+  music(name){
+    if(this.wanted===name) return;
+    this.wanted=name;
+    if(!name){ this.stopMusicLoop(); return; }
+    if(!this.ctx||this.ctx.state!=="running") return;   // сыграем после unlock
+    this.startMusicLoop();
+  }
+
+  startMusicLoop(){
+    const ctx=this.ctx; if(!ctx) return;
+    if(!this.musicGain){
+      this.musicGain=ctx.createGain();
+      this.musicGain.gain.value=this.musicVolume;
+      // Под master: выключение звука по «M» гасит и музыку тоже, одним местом
+      this.musicGain.connect(this.master);
+    }
+    // Смена трека начинается с ближайшей доли, а не с текущей миллисекунды:
+    // такт, оборванный посередине, слышен как сбой.
+    this.track=this.wanted; this.beat=0;
+    this.nextAt=Math.max(this.nextAt,ctx.currentTime+0.06);
+    // Возвращаем громкость: её гасит stopMusicLoop, и без этого второй забег
+    // шёл бы в тишине
+    this.musicGain.gain.cancelScheduledValues(ctx.currentTime);
+    this.musicGain.gain.setTargetAtTime(this.musicVolume,ctx.currentTime,0.1);
+    if(this.musicTimer) return;
+    // Планировщик: раз в 60 мс раскладывает ноты на четверть секунды вперёд.
+    // Планировать из requestAnimationFrame нельзя — вкладка в фоне его
+    // останавливает, а звук продолжает идти и обрывается на полутакте.
+    this.musicTimer=setInterval(()=>this.scheduleMusic(),60);
+    this.scheduleMusic();
+  }
+
+  stopMusicLoop(){
+    if(this.musicTimer){ clearInterval(this.musicTimer); this.musicTimer=null; }
+    this.track=null;
+    // Ноты, уже разложенные по времени, отменить нельзя — педаль тянется на
+    // весь такт, то есть до двух с половиной секунд поверх экрана итогов.
+    // Гасим не планировщиком, а громкостью.
+    if(this.musicGain&&this.ctx){
+      this.musicGain.gain.cancelScheduledValues(this.ctx.currentTime);
+      this.musicGain.gain.setTargetAtTime(0,this.ctx.currentTime,0.12);
+    }
+  }
+
+  scheduleMusic(){
+    const ctx=this.ctx, T=TRACKS[this.track];
+    if(!ctx||!T||ctx.state!=="running") return;
+    // ОТСТАВШИЕ ДОЛИ ПРОПУСКАЕМ, а не доигрываем. Во вкладке в фоне
+    // setInterval душат до одного раза в секунду, и без этой строки очередь
+    // накопленных долей вывалилась бы в один кадр аккордом из десятка нот.
+    if(this.nextAt<ctx.currentTime) this.nextAt=ctx.currentTime+0.02;
+    while(this.nextAt<ctx.currentTime+0.25){
+      const i=this.beat%T.steps;
+      const at=Math.max(this.nextAt,ctx.currentTime+0.02);
+      // Бас — короткий низкий импульс, он же метроном забега
+      if(T.bass[i]!=null) this.tone(at,noteHz(T.root,T.bass[i]),T.step*1.5,"triangle",0.5*T.gain);
+      // Верхний голос звучит редко и тише: он расставляет акценты, а не поёт
+      if(T.lead[i]!=null) this.tone(at,noteHz(T.root,T.lead[i]+7),T.step*1.1,"sine",0.16*T.gain);
+      // Педаль меняется раз в такт и тянется весь такт целиком
+      if(i===0){
+        const p=T.pad[Math.floor(this.beat/T.steps)%T.pad.length];
+        this.tone(at,noteHz(T.root,p)*2,T.step*T.steps,"sawtooth",0.06*T.gain,420);
+      }
+      this.nextAt+=T.step;
+      this.beat++;
+    }
+  }
+
+  // Одна музыкальная нота: та же огибающая, что у эффектов, но с мягкой
+  // атакой — щелчок в начале ноты в фоновом треке слышен как помеха.
+  // cutoff — если задан, ноту глушит фильтр: так педаль остаётся гулом на
+  // заднем плане и не спорит с выстрелами.
+  tone(at,hz,dur,type,gain,cutoff=0){
+    const ctx=this.ctx;
+    const env=ctx.createGain();
+    env.gain.setValueAtTime(0.0001,at);
+    env.gain.exponentialRampToValueAtTime(Math.max(0.0002,gain),at+Math.min(0.08,dur*0.25));
+    env.gain.exponentialRampToValueAtTime(0.0001,at+dur);
+    const osc=ctx.createOscillator();
+    osc.type=type; osc.frequency.setValueAtTime(hz,at);
+    if(cutoff){
+      const f=ctx.createBiquadFilter();
+      f.type="lowpass"; f.frequency.value=cutoff;
+      osc.connect(f); f.connect(env);
+    } else osc.connect(env);
+    env.connect(this.musicGain);
+    osc.start(at); osc.stop(at+dur+0.03);
+    osc.onended=()=>{ try{ osc.disconnect(); env.disconnect(); }catch(e){} };
   }
 
   // volume — множитель поверх рецепта: тише для дальних событий

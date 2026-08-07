@@ -449,6 +449,7 @@ body.touch .key { display: none; }
 .big-btn.poor, .shop-card.poor { opacity: 0.42; }
 .big-btn:active { transform: translateY(2px); }
 #gameOverScreen .big-btn { margin-top: 18px; }
+.btn-row { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
 
 /* ЛАВКА. Панель и карточки повторяют меню прокачки нарочно: это одно и то же
    действие — «игра встала, выбирай», — и два разных оформления заставляли бы
@@ -524,6 +525,53 @@ body.touch .key { display: none; }
 }
 #prevBest { opacity: 0.6; font-size: 12px; }
 #bestLine { font-size: 13px; opacity: 0.85; }
+#bankedLine { font-size: 12px; opacity: 0.8; }
+
+/* ВЫБОР ПЕРСОНАЖА. Карточки те же, что в лавке и в прокачке: игрок уже знает,
+   что карточку жмут, и заново разбираться не приходится. Отличие одно и
+   существенное — выбранная не исчезает после нажатия, а остаётся отмеченной:
+   это не покупка, а состояние, с которым пойдёшь в забег. */
+#metaBox { margin-top: 14px; }
+#bankLine { font-size: 13px; opacity: 0.85; }
+#bankLine .icon { width: 14px; height: 14px; vertical-align: -2px; image-rendering: pixelated; }
+#charList { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 10px; }
+.char-card {
+  position: relative;
+  width: 190px; padding: 9px 10px 10px;
+  background: linear-gradient(180deg, #16281f 0%, #0c1710 100%);
+  border: 1px solid #2d6b58;
+  cursor: pointer; pointer-events: auto;
+  color: #b8ccc2; font-size: 12px; text-align: left;
+  transition: transform 0.12s, box-shadow 0.15s, border-color 0.15s;
+}
+.char-card:hover { transform: translateY(-2px); border-color: #7dffca; }
+.char-card .title { color: #eaf7f1; font-size: 14px; margin-bottom: 4px; }
+.char-card .desc { line-height: 1.35; }
+/* Иконка — ветка стартового ствола. Отдельных портретов нет, и это честнее:
+   персонажи отличаются в первую очередь тем, чем стреляют. */
+.char-card .ico {
+  position: absolute; right: 8px; top: 8px;
+  width: 26px; height: 26px; image-rendering: pixelated; opacity: 0.85;
+}
+/* Выбранный — бирюзовая полоса слева, как категория на карточке прокачки */
+.char-card.on { border-color: #00d4aa; background: linear-gradient(180deg, #1c3a2c 0%, #0e2018 100%); }
+.char-card.on::before {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: #00d4aa;
+}
+/* Закрытый персонаж не прячется, а стоит с ценником: скрытый контент нельзя
+   захотеть, а именно желание и есть весь смысл банка. */
+.char-card.locked { border-color: #4a4230; color: #8e8878; }
+.char-card.locked .title { color: #ffd24a; }
+.char-card .cost {
+  margin-top: 7px; color: #ffd24a; font-size: 14px;
+  display: flex; align-items: center; gap: 5px;
+}
+.char-card .cost::before {
+  content: ""; width: 14px; height: 14px;
+  background: url("../assets/images/drops/drop_coin.png") center/contain no-repeat;
+  image-rendering: pixelated;
+}
+.char-card.poor { opacity: 0.5; }
 
 .hidden { display: none !important; }
 
@@ -574,6 +622,10 @@ body.touch .key { display: none; }
      ставим сеткой 2x2, а не в колонку, как карточки прокачки */
   #shopGoods { display: grid; grid-template-columns: 1fr 1fr; }
   .shop-card { width: auto; }
+  /* Две карточки по 190 в 390 пикселей не влезают и переносятся друг под
+     друга вразнобой — ставим их сеткой в две колонки */
+  #charList { display: grid; grid-template-columns: 1fr 1fr; }
+  .char-card { width: auto; font-size: 11px; }
   #shopMenu { padding: 14px 16px; }
   #shopMenu h2 { font-size: 18px; margin-bottom: 10px; }
 }

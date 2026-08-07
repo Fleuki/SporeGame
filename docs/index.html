@@ -90,6 +90,14 @@
          заново. Одна строка превращает «поиграл» в «в прошлый раз было
          6:40». Прячется, пока рекорда нет: пустое место честнее нулей. -->
     <p class="record hidden" id="bestLine">Лучший забег: <span id="bestTime">0:00</span>, уровень <span id="bestLevel">1</span></p>
+    <!-- ВЫБОР ПЕРСОНАЖА И БАНК. Появляются не сразу: пока открыт один
+         персонаж и банк пуст, это ряд из одной карточки и цифра «0» — шум,
+         который ничего не сообщает. Но первая же отложенная монета обязана
+         показаться здесь, иначе она исчезает в никуда. -->
+    <div id="metaBox" class="hidden">
+      <p class="record" id="bankLine">В банке <span id="bankCoins">0</span> <img class="icon" src="assets/images/drops/drop_coin.png" alt="монет"></p>
+      <div id="charList"></div>
+    </div>
     <button id="playBtn" class="big-btn">ИГРАТЬ</button>
     <!-- Про выброс сказано прямо здесь: это единственное, что игрок делает
          руками сверх ходьбы, и догадаться о нём по гаснущей кнопке нельзя. -->
@@ -103,10 +111,21 @@
     <p class="record hidden" id="prevBest">Лучшее: <span id="prevBestTime">0:00</span></p>
     <p><img class="icon" src="assets/images/ui/icon_kills.png" alt="Убито"> <span id="finalKills">0</span>
        <img class="icon" src="assets/images/drops/drop_coin.png" alt="Монет собрано"> <span id="finalCoins">0</span></p>
+    <!-- ЧТО УШЛО В БАНК. Без этой строки неистраченные монеты просто
+         пропадали бы с экрана вместе с забегом — а они и есть единственное,
+         что из забега переносится дальше. -->
+    <p class="record hidden" id="bankedLine">В банк отложено <span id="bankedCoins">0</span> · всего <span id="bankTotal">0</span></p>
     <!-- КНОПКА, А НЕ ПОДПИСЬ. Здесь было написано «R — рестарт», и на
          телефоне это был тупик: клавиши нет, забег не перезапустить иначе
          как перезагрузкой страницы. -->
-    <button id="restartBtn" class="big-btn">ЗАНОВО</button>
+    <!-- «В МЕНЮ» — не украшение. Стартовый экран показывался ровно один раз
+         за загрузку страницы, а на нём живут выбор персонажа и банк: без этой
+         кнопки отложенные монеты можно было бы потратить только через
+         перезагрузку вкладки. -->
+    <div class="btn-row">
+      <button id="restartBtn" class="big-btn">ЗАНОВО</button>
+      <button id="menuBtn" class="big-btn ghost">В МЕНЮ</button>
+    </div>
     <p class="hint">или клавиша R</p>
   </div>
   <script type="module" src="js/main.js"></script>

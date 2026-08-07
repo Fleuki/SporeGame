@@ -42,6 +42,20 @@ export class Enemy extends Entity {
     // «Рой» меньше — иначе выгодной стратегией стало бы фармить дешёвые тела.
     this.xpReward=t.xpReward*(isMutated?1.5:1)*(1+(s.hp-1)*0.45)*(s.xp??1);
     this.color=t.color; this.isMutated=isMutated;
+    // ОТЛИЧИЕ ЭЛИТЫ. У каждого типа своё, и лежит оно в его же записи конфига
+    // (types.<тип>.elite). Рядовому врагу здесь null — по этому полю весь
+    // остальной код и отличает элитное поведение от обычного, не спрашивая
+    // каждый раз «а какой это тип».
+    this.elite=isMutated?(t.elite||null):null;
+    // Множители сложности запоминаем: элитная летучая спора распадается на
+    // двух обычных уже после смерти, когда SpawnSystem.scale() посчитать
+    // неоткуда, а осколки той же минуты обязаны быть той же силы
+    this.scale=s;
+    // Рывок элитного волка: кадры до следующего прыжка, замах и сам полёт.
+    // Стартовая перезарядка случайная — иначе стая элитных волков прыгает
+    // синхронно, одним залпом, от которого нет ни одного правильного шага.
+    this.leapCd=t.elite?.leap?Math.round(t.elite.leap.cd*Math.random()):0;
+    this.leapWind=0; this.leapTimer=0; this.leapAngle=0;
     this.anim=new SpriteAnim(t.sprite); this.moveAngle=0;
     this.abilities=t.abilities||[];
     this.trailTimer=0; this.emergeTimer=t.emergeDelay||0;
@@ -99,7 +113,12 @@ export class Enemy extends Entity {
       this.x+=Math.cos(a)*this.speed+Math.cos(perp)*this.zigzagOffset*amp;
       this.y+=Math.sin(a)*this.speed+Math.sin(perp)*this.zigzagOffset*amp;
     } else {
-      this.x+=Math.cos(a)*this.speed; this.y+=Math.sin(a)*this.speed;
+      // Рывок элитного волка подменяет и скорость, и направление: в полёте
+      // он летит туда, куда прыгнул, а не доворачивает за игроком. Иначе
+      // прыжок — это самонаводящийся снаряд, от которого нельзя уйти вообще.
+      const mult=this.elite?.leap?this.stepLeap(a,player):1;
+      const dir=this.leapTimer>0?this.leapAngle:a;
+      this.x+=Math.cos(dir)*this.speed*mult; this.y+=Math.sin(dir)*this.speed*mult;
     }
 
     // След оставляет сам враг — раньше это делал главный цикл, залезая
@@ -110,7 +129,11 @@ export class Enemy extends Entity {
       // Щупальце не держит, а волочёт: пока стоишь в нём, замедление
       // продлевается, вышел — доигрывает остаток и отпускает.
       if(this.abilities.includes("snare_player")){
-        player.applySlow(this.def.slowMult||0.5,this.def.slowDuration||90);
+        // Элитное щупальце держит крепче и дольше — единственное отличие
+        // элиты, выраженное числом, и это осознанно: щупальце неподвижно и
+        // делает ровно одно, ускорять там нечего (см. types.mycelium_tentacle)
+        player.applySlow(this.elite?.slowMult??this.def.slowMult??0.5,
+                         this.elite?.slowDuration??this.def.slowDuration??90);
       }
       // Удар не каждый кадр, а раз в touchInterval. Раньше урон шёл 60 раз в
       // секунду — волк снимал всё здоровье за секунду касания, и игрок не
@@ -123,6 +146,30 @@ export class Enemy extends Entity {
       const k=CONFIG.enemies.touchPush;
       this.x+=Math.cos(push)*k; this.y+=Math.sin(push)*k;
     }
+  }
+
+  // ПРЫЖОК ЭЛИТНОГО ВОЛКА. Возвращает множитель скорости на этот кадр:
+  // 0 — замах (волк приседает и стоит), speedMult — сам полёт, 1 — обычный шаг.
+  //
+  // Три состояния, а не два: без ЗАМАХА рывок был бы ударом без
+  // предупреждения — тем самым, из-за которого в этой игре уже переделывали и
+  // удар Сердцевины, и выстрел трубача. Кольцо над волком во время замаха
+  // рисует draw(), и это то же кольцо, что у трубача: один знак — «сейчас
+  // прилетит», а не отдельный язык на каждого врага.
+  stepLeap(a,player){
+    const L=this.elite.leap;
+    if(this.leapTimer>0){ this.leapTimer--; return L.speedMult; }
+    if(this.leapWind>0){
+      // Угол фиксируется в ПОСЛЕДНИЙ кадр замаха, а не в первый: иначе волк
+      // целится туда, где игрок был полсекунды назад, и мажет всегда.
+      if(--this.leapWind<=0){ this.leapAngle=a; this.leapTimer=L.frames; }
+      return 0;
+    }
+    if(this.leapCd>0){ this.leapCd--; return 1; }
+    const d=Math.hypot(player.x-this.x,player.y-this.y);
+    if(d<L.minRange||d>L.range) return 1;
+    this.leapWind=L.windup; this.leapCd=L.cd;
+    return 0;
   }
 
   // СТРЕЛОК. Держит дистанцию и стреляет облаками спор.
@@ -147,8 +194,15 @@ export class Enemy extends Entity {
       if(this.charge>=R.chargeTime){
         this.charge=-1;
         this.shootCd=R.cooldown;
-        ctx.shots?.push({x:this.x,y:this.y,angle:a,def:R.shot,
-                         damage:R.shot.damage*this.dmgScale});
+        // Элита плюёт веером, рядовой — одним облаком. Замах у обоих один и
+        // тот же: элита стреляет БОЛЬШЕ, а не внезапнее.
+        const n=this.elite?.volley||1;
+        const spread=this.elite?.spread||0;
+        for(let i=0;i<n;i++){
+          const off=(i-(n-1)/2)*spread;
+          ctx.shots?.push({x:this.x,y:this.y,angle:a+off,def:R.shot,
+                           damage:R.shot.damage*this.dmgScale});
+        }
         ctx.particles?.emitMuzzle(this.x,this.y,a,R.shot.glow);
       }
       return;
@@ -226,16 +280,14 @@ export class Enemy extends Entity {
     // раздувается труба. Это единственное предупреждение перед выстрелом, и
     // оно обязано читаться в толпе, а не только на пустом экране.
     if(this.charge>=0){
-      const R=this.def.ranged, k=this.charge/R.chargeTime;
-      const ctx=renderer.ctx;
-      ctx.save();
-      ctx.globalAlpha=0.25+k*0.55;
-      ctx.strokeStyle=R.shot.glow||"#ffe066";
-      ctx.lineWidth=1.6;
-      ctx.beginPath();
-      ctx.arc(this.x,this.y,this.radius+22-k*18,0,Math.PI*2);
-      ctx.stroke();
-      ctx.restore();
+      const R=this.def.ranged;
+      this.drawWindup(renderer,this.charge/R.chargeTime,R.shot.glow||"#ffe066");
+    }
+    // Замах прыжка элитного волка — то же самое кольцо и тем же способом:
+    // один знак на всю игру означает «сейчас прилетит». Заводить волку свой
+    // язык предупреждения значило бы учить игрока ему отдельно, посреди боя.
+    if(this.leapWind>0){
+      this.drawWindup(renderer,1-this.leapWind/this.elite.leap.windup,"#ffab5e");
     }
 
     // Контур под спрайтом: у мутанта золотой, у остальных — свой цвет типа.
@@ -263,6 +315,21 @@ export class Enemy extends Entity {
       this.anim.flash(renderer,this.x,this.y,this.flash/CONFIG.feel.hitFlash*0.85);
     }
     this.drawHpBar(renderer);
+  }
+
+  // ЗАМАХ: кольцо, стягивающееся к врагу. k — прогресс от 0 до 1.
+  // Один вид на все замахи в игре (выстрел трубача, прыжок волка): игрок
+  // учит знак один раз, а не по разу на каждого врага.
+  drawWindup(renderer,k,color){
+    const ctx=renderer.ctx;
+    ctx.save();
+    ctx.globalAlpha=0.25+k*0.55;
+    ctx.strokeStyle=color;
+    ctx.lineWidth=1.6;
+    ctx.beginPath();
+    ctx.arc(this.x,this.y,this.radius+22-k*18,0,Math.PI*2);
+    ctx.stroke();
+    ctx.restore();
   }
 
   // Венец элиты. Кадр крутится по собственному счётчику жизни, а не по

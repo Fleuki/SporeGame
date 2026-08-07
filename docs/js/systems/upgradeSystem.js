@@ -40,6 +40,14 @@ export class UpgradeSystem {
     this.allUpgrades=[
       // === СТВОЛЫ =======================================================
       // Стреляют одновременно, не заменяют друг друга. Открывают свои ветки.
+      //
+      // Антидот появился в этом списке вместе с выбором персонажа: раньше он
+      // был у всех с первого кадра, и выдавать его было незачем. Теперь
+      // Егерь начинает с токсичной склянки — и без этой карточки целая ветка
+      // прокачки была бы ему недоступна навсегда.
+      {id:"w_antidote",title:CONFIG.weapons.antidote.name,
+       desc:"Новый ствол: прямой выстрел по прицелу",category:"weapon",
+       available:(p)=>!p.hasWeapon("antidote"),effect:(p)=>{p.addWeapon("antidote");}},
       {id:"w_toxic",title:CONFIG.weapons.toxic.name,
        desc:"Новый ствол: лужа спор с уроном по времени",category:"weapon",
        available:(p)=>!p.hasWeapon("toxic"),effect:(p)=>{p.addWeapon("toxic");}},
