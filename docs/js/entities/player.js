@@ -87,6 +87,17 @@ export class Player extends Entity {
     // дают не 32%, как обещано, а 28% — и ни один игрок этого не проверит,
     // но обещание всё равно будет ложным.
     this.armor=0;
+    // Второй ярус лавки. Всё это читается снаружи — боем, лутом, самой
+    // лавкой, — поэтому живёт на игроке, а не в системах: система одна на
+    // все забеги, а покупки принадлежат конкретному персонажу.
+    this.thorns=0;          // урон в ответ тому, кто ударил вас вплотную
+    this.critBonus=0;       // прибавка к шансу крита поверх CONFIG.feel
+    this.antidoteHeal=0;    // антидот вдобавок лечит
+    this.rerollDiscount=0;  // перерисовка в лавке дешевле
+    // Второе дыхание: переживает ОДИН смертельный удар за забег. Флаг
+    // снимается в момент срабатывания — страховка одноразовая, иначе игра
+    // теряет свою единственную ставку.
+    this.secondWind=false;
     this.animTimer=0; this.animFrame=0;
     this.animSpeed=CONFIG.player.walkAnimSpeed||8;
     this.isMoving=false;
@@ -223,6 +234,14 @@ export class Player extends Entity {
     // обнуляется: неуязвимость покупкой четырёх пластин была бы концом игры.
     if(this.armor>0) a*=Math.max(0.5,1-this.armor);
     this.hp-=a;
+    // ВТОРОЕ ДЫХАНИЕ. Проверяется здесь, а не в главном цикле: там смерть
+    // ловится по hp<=0 уже следующим кадром, и между ударом и спасением
+    // успел бы прилететь второй — страховка сработала бы вхолостую.
+    if(this.hp<=0&&this.secondWind){
+      this.secondWind=false;
+      this.hp=1; this.iframes=Math.max(this.iframes,120);
+      this.onHurt?.(0,"secondWind");
+    }
     this.sporeLevel=Math.min(CONFIG.sporeSystem.maxSpore,this.sporeLevel+CONFIG.player.sporeGrowthOnHit);
     if(!ignoreIFrames){ this.iframes=CONFIG.player.contactIFrames; this.hurtFlash=12; }
     this.onHurt?.(a,"hit");

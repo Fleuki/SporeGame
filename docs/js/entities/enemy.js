@@ -26,7 +26,7 @@ export class Enemy extends Entity {
   constructor(x,y,typeKey,isMutated=false,scale=null){
     const t=CONFIG.enemies.types[typeKey]||CONFIG.enemies.types.spore_bearer;
     super(x,y,t.radius);
-    const s=scale||{hp:1,damage:1,speed:1};
+    const s=scale||{hp:1,damage:1,speed:1,xp:1};
     this.def=t; this.typeKey=typeKey;
     this.maxHp=t.hp*(isMutated?1.5:1)*s.hp; this.hp=this.maxHp;
     this.baseSpeed=t.speed*s.speed; this.speed=this.baseSpeed;
@@ -37,7 +37,10 @@ export class Enemy extends Entity {
     this.damage=t.damage*this.dmgScale;
     // Опыт растёт медленнее HP, иначе поздние волны разгоняют уровень быстрее,
     // чем растёт сложность, и прокачка снова обгоняет врагов.
-    this.xpReward=t.xpReward*(isMutated?1.5:1)*(1+(s.hp-1)*0.45);
+    // s.xp — множитель от правила стычки. Он и есть плата за риск: «Отборные»
+    // дают вдвое больше опыта именно потому, что их вдвое опаснее убивать, а
+    // «Рой» меньше — иначе выгодной стратегией стало бы фармить дешёвые тела.
+    this.xpReward=t.xpReward*(isMutated?1.5:1)*(1+(s.hp-1)*0.45)*(s.xp??1);
     this.color=t.color; this.isMutated=isMutated;
     this.anim=new SpriteAnim(t.sprite); this.moveAngle=0;
     this.abilities=t.abilities||[];
@@ -50,6 +53,16 @@ export class Enemy extends Entity {
     this.shootCd=t.ranged?Math.round(t.ranged.cooldown*(0.4+Math.random()*0.6)):0;
     this.charge=-1;
     this.strafeDir=Math.random()<0.5?-1:1;
+  }
+
+  // ЯДОВИТАЯ КРОВЬ из лавки. Урон в ответ идёт ТОЛЬКО когда удар реально
+  // прошёл: takeDamage возвращает false, если его съели щит или кадры
+  // неуязвимости, и в этом случае платить врагу не за что — иначе стоя в
+  // толпе игрок бесплатно косил бы её одними шипами.
+  takeThorns(player,ctx){
+    if(!player.thorns) return;
+    this.hp-=player.thorns;
+    ctx?.particles?.emitRing(this.x,this.y,"#a8ff6a",this.radius*0.4,this.radius*1.6,7,1.6);
   }
 
   // Урон по времени не складывается стопками, а обновляет длительность
@@ -103,7 +116,7 @@ export class Enemy extends Entity {
       // секунду — волк снимал всё здоровье за секунду касания, и игрок не
       // успевал понять, обо что умер.
       if(this.touchCd<=0){
-        player.takeDamage(this.damage);
+        if(player.takeDamage(this.damage)) this.takeThorns(player,ctx);
         this.touchCd=CONFIG.enemies.touchInterval;
       }
       const push=Math.atan2(this.y-player.y,this.x-player.x);
@@ -163,7 +176,7 @@ export class Enemy extends Entity {
     // Подошли вплотную — бьёт как все остальные: подойти к стрелку в упор
     // должно быть выгодно, но не бесплатно
     if(this.overlaps(player)&&this.touchCd<=0){
-      player.takeDamage(this.damage);
+      if(player.takeDamage(this.damage)) this.takeThorns(player,ctx);
       this.touchCd=CONFIG.enemies.touchInterval;
     }
   }

@@ -16,6 +16,7 @@ import { BattleSystem } from "./systems/battleSystem.js";
 import { MapSystem } from "./systems/mapSystem.js";
 import { LootSystem } from "./systems/lootSystem.js";
 import { ShopSystem } from "./systems/shopSystem.js";
+import { RecordSystem } from "./systems/recordSystem.js";
 
 const canvas=document.getElementById("gameCanvas");
 
@@ -61,6 +62,7 @@ const loot=new LootSystem(particles,audio);
 const battle=new BattleSystem(particles,sporeSystem,loot,audio);
 const map=new MapSystem();
 const shop=new ShopSystem(audio);
+const records=new RecordSystem();
 
 input.onMutePress=()=>audio.toggleMute();
 input.onRestartPress=()=>{ if(started&&gameOver) init(); };
@@ -188,6 +190,12 @@ function update(dt){
     return;
   }
 
+  // ОСТАНОВКА КАДРА. Мир стоит, кадр по-прежнему рисуется (draw живёт отдельно
+  // от update), поэтому вспышка и кольцо на месте удара успевают отпечататься.
+  // Счётчик крутится ЗДЕСЬ, а не в бою: бой не знает ни про паузу, ни про
+  // смерть игрока, ни про меню — а останавливать поверх них нечего.
+  if(battle.hitStop>0){ battle.hitStop--; return; }
+
   runTime+=dt;
 
   // ЛАВКА. Время считается от начала забега (волн нет, единица прогресса —
@@ -215,6 +223,8 @@ function update(dt){
   if(spawnEvent&&spawnEvent.type==="boss"){
     enemies.push(spawnEvent.boss);
     audio.sfx("boss"); camera.shake(CONFIG.feel.shakeBoss,40);
+  } else if(spawnEvent&&spawnEvent.type==="push"){
+    announcePush(spawnEvent.mod);
   }
 
   battle.update(dt,{player,enemies,projectiles,sporeEffects,camera});
@@ -252,6 +262,19 @@ function beginDeath(){
   particles.emit(player.x,player.y,"#6b2d5c",30,1,5);
 }
 
+// ПРАВИЛО СТЫЧКИ ОБЪЯВЛЕНО. Надпись перезапускается принудительно: без снятия
+// класса анимация не проигрывается второй раз, и второе правило подряд
+// прошло бы молча — то есть ровно тот случай, ради которого объявление и есть.
+function announcePush(mod){
+  const el=document.getElementById("pushBanner");
+  el.firstElementChild.textContent=mod.name;
+  el.classList.add("hidden");
+  void el.offsetWidth;              // перезапуск анимации
+  el.classList.remove("hidden");
+  audio.sfx("wave");
+  camera.shake(CONFIG.feel.shakeLevel,8);
+}
+
 // ПОЛУЧЕН УРОВЕНЬ.
 //
 // Спрайтовая вспышка отсюда убрана. Лист fx_levelup — это кадр 192 пикселя,
@@ -285,6 +308,15 @@ function endGame(){
   document.getElementById("finalLevel").textContent=player.level;
   document.getElementById("finalKills").textContent=battle.kills;
   document.getElementById("finalCoins").textContent=player.coinsEarned;
+  // Рекорд подаётся ПОСЛЕ цифр забега: сначала «сколько получилось», потом
+  // «лучше ли, чем раньше». Обратный порядок читается как упрёк.
+  const beaten=records.submit({time:runTime,level:player.level,kills:battle.kills});
+  document.getElementById("newRecord").classList.toggle("hidden",!beaten);
+  const prev=records.prev;
+  const prevLine=document.getElementById("prevBest");
+  prevLine.classList.toggle("hidden",beaten||!prev);
+  if(prev) document.getElementById("prevBestTime").textContent=formatTime(prev.time);
+  showBest();
   document.getElementById("finalTime").textContent=formatTime(runTime);
   document.getElementById("gameOverScreen").classList.remove("hidden");
   // Боевой HUD на экране итогов не нужен: таймер и шкалы просвечивали
@@ -394,7 +426,8 @@ function draw(){
   // --- экранный слой: интерфейс и джойстик не ездят вместе с миром ---
   // Темнота идёт первой: она гасит мир, но не должна гасить виньетку,
   // красную рамку урона и джойстик
-  map.drawDarkness(renderer,player);
+  // Туман — правило стычки: круг света сжимается на время натиска
+  map.drawDarkness(renderer,player,spawnSystem?.modMult("fog"));
   map.drawVignette(renderer);
   drawHurtVignette();
   input.drawJoystick(renderer);
@@ -435,6 +468,8 @@ if(new URLSearchParams(location.search).has("debug")){
     // полторы минуты на одну проверку одного ценника
     shop,
     battle,
+    // Частицы: кольца удара и брызги иначе не сосчитать
+    particles,
     // Карта: декорации ставятся по хешу клетки из мешка map.bag, то есть
     // случайно и редко. Чтобы посмотреть на одну конкретную (например, на
     // кислотную лужу), мешок проще подменить: GAME.map.bag=["acid_pool"].
@@ -478,6 +513,17 @@ function startRun(){
   document.getElementById("startScreen").classList.add("hidden");
   started=true; init();
 }
+// Рекорд на стартовом экране. Прячется, пока его нет: пустое место честнее
+// нулей, которые выглядят как «ты уже играл и продержался ноль».
+function showBest(){
+  const b=records.best, line=document.getElementById("bestLine");
+  line.classList.toggle("hidden",!b);
+  if(!b) return;
+  document.getElementById("bestTime").textContent=formatTime(b.time);
+  document.getElementById("bestLevel").textContent=b.level;
+}
+showBest();
+
 document.getElementById("playBtn").onclick=startRun;
 // Та же трата с пальца. Подсказку «ПРОБЕЛ» на сенсорном экране прячем: клавиши
 // там нет, а подпись к несуществующей кнопке — то же ложное обещание.

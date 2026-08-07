@@ -45,6 +45,38 @@ export function upscale(img,w,h){
   return {width:w,height:h,data:out};
 }
 
+// ВЫРЕЗАТЬ ФОН ЗАЛИВКОЙ ОТ КРАЁВ.
+//
+// Генераторы отдают предмет на сплошной подложке, а движку нужен вырезанный
+// силуэт. Глобальный ключ по цвету здесь не годится: подложку модель берёт из
+// НАШЕЙ ЖЕ палитры (передаём её вместе с запросом), и самый тёмный её цвет
+// встречается и в тенях самого предмета — ключ пробил бы в рисунке дырки.
+//
+// Поэтому убирается не «весь такой цвет», а только та область, которая
+// СВЯЗАНА С КРАЕМ картинки. Тень внутри предмета остаётся тенью.
+//
+// tol — допуск по каналу: у сжатых картинок подложка не идеально ровная.
+export function cutBorder(img,tol=10){
+  const {width:w,height:h,data}=img;
+  const at=(x,y)=>(y*w+x)*4;
+  const c=[data[0],data[1],data[2]];
+  const near=(i)=>Math.abs(data[i]-c[0])<=tol&&Math.abs(data[i+1]-c[1])<=tol&&
+                  Math.abs(data[i+2]-c[2])<=tol;
+  const seen=new Uint8Array(w*h);
+  const stack=[];
+  for(let x=0;x<w;x++){ stack.push([x,0],[x,h-1]); }
+  for(let y=0;y<h;y++){ stack.push([0,y],[w-1,y]); }
+  while(stack.length){
+    const [x,y]=stack.pop();
+    if(x<0||y<0||x>=w||y>=h) continue;
+    const k=y*w+x; if(seen[k]) continue;
+    const i=at(x,y); if(!near(i)) continue;
+    seen[k]=1; data[i+3]=0;
+    stack.push([x+1,y],[x-1,y],[x,y+1],[x,y-1]);
+  }
+  return img;
+}
+
 export function crop(img,x0,y0,w,h){
   const out=Buffer.alloc(w*h*4);
   for(let y=0;y<h;y++){

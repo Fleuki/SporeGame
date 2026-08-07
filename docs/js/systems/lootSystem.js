@@ -122,6 +122,12 @@ export class LootSystem {
     if(def.spore){
       player.reduceSpore(def.spore);
       this.particles?.emitText(it.x,it.y-12,"−"+def.spore+"% спор","#00d4aa",12);
+      // «Спорофаг» из лавки: антидот вдобавок лечит. Отдельной строкой над
+      // первой, иначе два числа сливаются в одно нечитаемое
+      if(player.antidoteHeal>0&&player.hp<player.maxHp){
+        player.hp=Math.min(player.maxHp,player.hp+player.antidoteHeal);
+        this.particles?.emitText(it.x,it.y-26,"+"+player.antidoteHeal,"#66ff88",12);
+      }
     }
     this.audio?.sfx("pickup");
     this.particles?.emit(it.x,it.y,def.particle||"#ffffff",8);

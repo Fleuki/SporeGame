@@ -5,7 +5,7 @@ import { CONFIG } from "../config.js";
 const MAX_FLOATERS = 48;
 
 export class ParticleSystem {
-  constructor(){ this.particles=[]; this.sporeClouds=[]; this.floaters=[]; }
+  constructor(){ this.particles=[]; this.sporeClouds=[]; this.floaters=[]; this.rings=[]; }
 
   // Всплывающий текст: урон по врагу, «КРИТ», потеря HP игроком
   emitText(x,y,text,color="#ffffff",size=13){
@@ -34,11 +34,39 @@ export class ParticleSystem {
     }
   }
 
+  // ВСПЛЕСК ОТ ПОПАДАНИЯ. Раньше на попадание летели пять точек в СЛУЧАЙНЫЕ
+  // стороны — ровно то же, что сыплется из умершего врага, из взрыва и из
+  // левел-апа. Одинаковой крошкой обозначались все события подряд, и попадание
+  // среди них не читалось вообще.
+  //
+  // Здесь брызги летят НАЗАД от направления полёта, узким веером и быстро —
+  // как капли от удара. Направление удара становится видно, а событие
+  // перестаёт путаться со всем остальным.
+  emitImpact(x,y,angle,color="#c9ffe8",count=7){
+    const back=angle+Math.PI;
+    for(let i=0;i<count;i++){
+      const a=back+rand(-0.7,0.7), s=rand(1.8,4.6);
+      this.particles.push({
+        x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,
+        radius:rand(1.2,2.8),life:8+rand(0,7),maxLife:15,color,type:"burst"
+      });
+    }
+  }
+
+  // КОЛЬЦО УДАРА. Расходится за несколько кадров и гаснет. Это единственная
+  // часть обратной связи, которая не зависит ни от цифр урона (их можно
+  // выключить), ни от толпы: тонкая вспышка на месте попадания видна и тогда,
+  // когда в кучу сбились десять врагов.
+  emitRing(x,y,color="#e8fff0",r0=3,r1=16,life=8,width=2){
+    this.rings.push({x,y,color,r0,r1,life,maxLife:life,width});
+  }
+
   emitSporeCloud(x,y,r,color="#6b2d5c"){ this.sporeClouds.push({x,y,radius:r,color,life:120,maxLife:120}); }
   emitToxicTrail(x,y){ this.particles.push({x,y,vx:rand(-0.3,0.3),vy:rand(-0.3,0.3),radius:rand(3,7),life:40,maxLife:40,color:"#c4a000",type:"trail"}); }
   update(){
     for(let i=this.particles.length-1;i>=0;i--){ const p=this.particles[i]; p.x+=p.vx; p.y+=p.vy; p.vx*=0.96; p.vy*=0.96; p.life--; if(p.life<=0) this.particles.splice(i,1); }
     for(let i=this.sporeClouds.length-1;i>=0;i--){ const c=this.sporeClouds[i]; c.life--; if(c.life<=0) this.sporeClouds.splice(i,1); }
+    for(let i=this.rings.length-1;i>=0;i--){ if(--this.rings[i].life<=0) this.rings.splice(i,1); }
     for(let i=this.floaters.length-1;i>=0;i--){
       const f=this.floaters[i];
       f.y+=f.vy; f.vy*=0.93; f.life--;
@@ -46,11 +74,23 @@ export class ParticleSystem {
     }
   }
 
-  reset(){ this.particles.length=0; this.sporeClouds.length=0; this.floaters.length=0; }
+  reset(){ this.particles.length=0; this.sporeClouds.length=0; this.floaters.length=0; this.rings.length=0; }
   draw(renderer){
     for(const c of this.sporeClouds){ const a=(c.life/c.maxLife)*0.3; renderer.ctx.globalAlpha=a; renderer.ctx.beginPath(); renderer.ctx.arc(c.x,c.y,c.radius,0,Math.PI*2); renderer.ctx.fillStyle=c.color; renderer.ctx.fill(); }
     renderer.ctx.globalAlpha=1;
     for(const p of this.particles){ const a=p.life/p.maxLife; renderer.ctx.globalAlpha=a; renderer.drawCircle(p.x,p.y,p.radius*a,p.color); }
+    renderer.ctx.globalAlpha=1;
+    // Кольца рисуются ПОСЛЕ крошки и ДО цифр: они должны читаться поверх
+    // брызг, но не спорить с числом урона
+    for(const r of this.rings){
+      const k=1-r.life/r.maxLife;                 // 0 в начале, 1 в конце
+      const ctx=renderer.ctx;
+      ctx.save();
+      ctx.globalAlpha=(1-k)*0.85;
+      ctx.strokeStyle=r.color; ctx.lineWidth=r.width*(1-k*0.6);
+      ctx.beginPath(); ctx.arc(r.x,r.y,r.r0+(r.r1-r.r0)*k,0,Math.PI*2); ctx.stroke();
+      ctx.restore();
+    }
     renderer.ctx.globalAlpha=1;
     // Цифры урона рисуются последними и с обводкой — иначе они теряются
     // на пёстрой земле
