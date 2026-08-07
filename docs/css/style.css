@@ -144,6 +144,55 @@ canvas {
   50%      { filter: brightness(1.45) drop-shadow(0 0 8px rgba(255,60,60,0.9)); }
 }
 
+/* КОШЕЛЁК — над шкалами, у того же левого края. Мелкий нарочно: в бою на
+   него не смотрят, он нужен ровно в тот момент, когда прикидываешь, хватит
+   ли на прилавке. */
+#purse {
+  /* Над обеими шкалами, а не между ними: две полосы по 44 пикселя занимают
+     низ до 110-й точки, и кошелёк на 74 лежал прямо поверх полосы здоровья */
+  position: absolute; left: 14px; bottom: 116px;
+  display: flex; align-items: center; gap: 5px;
+  font-size: 15px; color: #ffd24a;
+  text-shadow: 0 0 8px rgba(255,210,74,0.5), 0 1px 3px rgba(0,0,0,0.9);
+}
+#purse .icon { width: 16px; height: 16px; }
+
+/* КНОПКА ВЫБРОСА СПОР — справа внизу, зеркально шкалам.
+   #ui не ловит указатель целиком (pointer-events:none), поэтому право на
+   касание выдаётся ровно этой кнопке: остальной интерфейс не должен
+   перехватывать пальцы у джойстика, который появляется в любой точке экрана.
+   Скруглений и градиентов нет намеренно — как и во всём остальном HUD. */
+#burstBtn {
+  position: absolute; right: 14px; bottom: 22px;
+  pointer-events: auto;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 8px 10px 6px;
+  background: rgba(6,9,11,0.72);
+  border: 2px solid #8a3dff;
+  color: #cbb3ff;
+  font: 11px "Pixelify Sans", "Courier New", monospace;
+  letter-spacing: 1px;
+  cursor: url("../assets/images/ui/cursor.png") 27 32, pointer;
+  /* Двойной тап по кнопке не должен зумить страницу на телефоне */
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+#burstBtn img { width: 34px; height: 34px; image-rendering: pixelated; }
+/* Готов — светится и мерцает: заряженный ресурс обязан проситься в дело */
+#burstBtn:not(.dim) { box-shadow: 0 0 12px rgba(138,61,255,0.55); }
+#burstBtn:not(.dim) img { animation: burst-ready 1.4s ease-in-out infinite; }
+@keyframes burst-ready {
+  0%, 100% { filter: none; }
+  50%      { filter: brightness(1.5) drop-shadow(0 0 7px rgba(180,120,255,0.9)); }
+}
+/* Спор не хватает — кнопка гаснет, но не исчезает: пропадающий элемент
+   интерфейса читается как поломка, а не как «пока нечем» */
+#burstBtn.dim { opacity: 0.4; border-color: #4a3a66; }
+#burstBtn .key { opacity: 0.75; }
+/* Клавиатурная подсказка на сенсорном экране — обман: клавиши там нет.
+   Тот же класс носит слово «Пробел» в подсказке стартового экрана. */
+body.touch .key { display: none; }
+
 /* ОПЫТ — тонкая полоса во всю ширину кадра у нижнего края.
    Текстурную шкалу здесь намеренно не используем: её ширина зависит от
    размера окна, а рисунок пришлось бы пересчитывать на каждый resize. Ровная
@@ -254,6 +303,9 @@ canvas {
 .upgrade-card.cat-extract    { --cat: #39ff14; }
 .upgrade-card.cat-mutation   { --cat: #c58cff; }
 .upgrade-card.cat-gear       { --cat: #7fc7ff; }
+/* Выброс — трата заражения, и цвет у него тот же фиолетовый, что у шкалы спор
+   и у самого облака: ветка и ресурс, который она качает, обязаны совпадать */
+.upgrade-card.cat-burst      { --cat: #8a3dff; }
 /* Эволюция выпадает раз за забег и меняет ствол целиком — она обязана
    отличаться от соседних карточек не только оттенком рамки. Своя подложка и
    собственное свечение, не дожидающееся наведения: карточку видно раньше,
@@ -353,8 +405,76 @@ canvas {
   transition: background 0.12s, transform 0.08s;
 }
 .big-btn:hover { background: #7dffca; }
+/* Второстепенная кнопка: перерисовка стоит денег и не должна выглядеть
+   так же зазывно, как «В БОЙ» */
+.big-btn.ghost {
+  background: transparent; color: #7dffca;
+  box-shadow: none; border-color: #2d6b58;
+}
+.big-btn.ghost:hover { background: rgba(0,212,170,0.14); }
+/* Не хватает монет — кнопка и карточка гаснут, но остаются на месте:
+   исчезнувший товар читается как поломка, а не как «дорого» */
+.big-btn.poor, .shop-card.poor { opacity: 0.42; }
 .big-btn:active { transform: translateY(2px); }
 #gameOverScreen .big-btn { margin-top: 18px; }
+
+/* ЛАВКА. Панель и карточки повторяют меню прокачки нарочно: это одно и то же
+   действие — «игра встала, выбирай», — и два разных оформления заставляли бы
+   разбираться заново там, где всё уже знакомо. Отличают лавку три вещи:
+   золото вместо бирюзы, ценник на каждой карточке и две кнопки внизу. */
+#shopMenu {
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%,-50%);
+  width: max-content; max-width: 96vw;
+  background: rgba(16,12,6,0.95);
+  border: 34px solid transparent;
+  border-image: url("../assets/images/ui/frame_panel.png") 64 round;
+  padding: 4px 14px 14px;
+  text-align: center;
+  z-index: 100;
+}
+#shopMenu h2 {
+  color: #ffd24a; margin-bottom: 14px;
+  text-shadow: 0 0 10px rgba(255,210,74,0.55);
+  display: flex; align-items: center; justify-content: center; gap: 14px;
+}
+#shopMenu .purse { display: inline-flex; align-items: center; gap: 5px; font-size: 17px; }
+#shopGoods { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+.shop-card {
+  --cat: #ffd24a;
+  position: relative;
+  width: 178px; padding: 11px 12px 12px;
+  background: linear-gradient(180deg, #3a2f14 0%, #201a0c 100%);
+  border: 1px solid var(--cat);
+  cursor: pointer; pointer-events: auto;
+  transition: transform 0.15s, box-shadow 0.15s, background 0.15s;
+  color: #ccc; font-size: 12px; text-align: left;
+}
+.shop-card::before {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  background: var(--cat);
+}
+.shop-card:hover {
+  background: linear-gradient(180deg, #4d3f1b 0%, #2a2210 100%);
+  transform: translateY(-3px);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.55), 0 0 14px rgba(255,210,74,0.35);
+}
+.shop-card .title { color: #fff; font-size: 14px; margin-bottom: 5px; }
+.shop-card .desc { color: #b9b0a0; line-height: 1.35; }
+/* ЦЕНА — не подпись мелким шрифтом внизу, а самое крупное на карточке после
+   названия: решение здесь принимается именно по ней */
+.shop-card .price {
+  margin-top: 9px; color: #ffd24a; font-size: 16px;
+  display: flex; align-items: center; gap: 5px;
+}
+.shop-card .price::before {
+  content: ""; width: 15px; height: 15px;
+  background: url("../assets/images/drops/drop_coin.png") center/contain no-repeat;
+  image-rendering: pixelated;
+}
+.shop-empty { color: #8a8a8a; padding: 26px 40px; font-size: 13px; }
+#shopButtons { display: flex; gap: 12px; justify-content: center; }
+#shopButtons .big-btn { margin-top: 16px; min-height: 44px; padding: 0 24px; font-size: 15px; }
 
 .hidden { display: none !important; }
 
@@ -379,9 +499,17 @@ canvas {
   #timer { font-size: 22px; top: 6px; }
   #timer .icon { width: 16px; height: 16px; }
   #vitals { left: 6px; bottom: 16px; }
+  /* Шкалы здесь по 28 пикселей — кошелёк садится ниже, но по-прежнему над ними */
+  #purse { left: 8px; bottom: 78px; font-size: 13px; }
+  .shop-card { width: 150px; padding: 9px 9px 10px; }
+  #shopMenu { padding: 16px; max-width: 96vw; }
   /* Шкалы ужимаются целиком, вместе с рамкой: пропорции картинки те же,
      поэтому --win-a/--win-b трогать не надо */
   .orn-bar { width: 150px; height: 28px; }
+  /* На телефоне это единственная кнопка в бою, и жать её надо большим пальцем
+     на бегу: цель меньше ~56 пикселей мажется, а промах стоит выброса */
+  #burstBtn { right: 10px; bottom: 18px; padding: 10px; }
+  #burstBtn img { width: 44px; height: 44px; }
   .upgrade-card { width: 146px; padding: 9px 9px 10px; }
   .upgrade-card .pips i { width: 9px; }
   #upgradeMenu { padding: 16px; max-width: 96vw; }
@@ -393,6 +521,12 @@ canvas {
   .upgrade-card { width: auto; min-width: 200px; }
   #upgradeMenu { padding: 14px 16px; }
   #upgradeMenu h2 { font-size: 18px; margin-bottom: 10px; }
+  /* Товаров четыре, и столбиком они на телефон не влезают по высоте —
+     ставим сеткой 2x2, а не в колонку, как карточки прокачки */
+  #shopGoods { display: grid; grid-template-columns: 1fr 1fr; }
+  .shop-card { width: auto; }
+  #shopMenu { padding: 14px 16px; }
+  #shopMenu h2 { font-size: 18px; margin-bottom: 10px; }
 }
 /* Телефон лёжа: экран низкий, столбик из карточек в него уже не влезет */
 @media (max-height: 500px) {
@@ -403,4 +537,11 @@ canvas {
   #upgradeMenu h2 { font-size: 16px; margin-bottom: 8px; }
   #timer { font-size: 18px; }
   .orn-bar { width: 120px; height: 23px; }
+  #burstBtn img { width: 30px; height: 30px; }
+  .shop-card { width: 150px; padding: 7px 8px 8px; }
+  .shop-card .desc { font-size: 11px; }
+  #shopGoods { display: flex; }
+  #shopMenu { padding: 10px 14px; }
+  #shopMenu h2 { font-size: 16px; margin-bottom: 8px; }
+  #shopButtons .big-btn { margin-top: 10px; min-height: 38px; }
 }

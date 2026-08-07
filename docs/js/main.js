@@ -6,6 +6,8 @@ import { AudioManager } from "./engine/audio.js";
 import { InputManager } from "./engine/input.js";
 import { Renderer } from "./engine/renderer.js";
 import { Player } from "./entities/player.js";
+// Только чтобы отличить босса от рядового врага при выборе момента для лавки
+import { Boss } from "./entities/boss.js";
 import { ParticleSystem } from "./entities/particle.js";
 import { SpawnSystem } from "./systems/spawnSystem.js";
 import { SporeSystem } from "./systems/sporeSystem.js";
@@ -13,6 +15,7 @@ import { UpgradeSystem } from "./systems/upgradeSystem.js";
 import { BattleSystem } from "./systems/battleSystem.js";
 import { MapSystem } from "./systems/mapSystem.js";
 import { LootSystem } from "./systems/lootSystem.js";
+import { ShopSystem } from "./systems/shopSystem.js";
 
 const canvas=document.getElementById("gameCanvas");
 
@@ -57,13 +60,35 @@ const upgradeSystem=new UpgradeSystem();
 const loot=new LootSystem(particles,audio);
 const battle=new BattleSystem(particles,sporeSystem,loot,audio);
 const map=new MapSystem();
+const shop=new ShopSystem(audio);
 
 input.onMutePress=()=>audio.toggleMute();
 input.onRestartPress=()=>{ if(started&&gameOver) init(); };
 // Escape раньше просто закрывал меню прокачки — это была бесплатная отмена
 // выбора. Теперь это честная пауза, а меню прокачки закрыть нельзя: выбрать
 // карточку всё равно придётся.
-input.onPausePress=()=>{ if(!gameOver&&!waitingForUpgrade) paused=!paused; };
+// Лавку, как и меню прокачки, нельзя закрыть паузой: это была бы бесплатная
+// отмена. Уйти с прилавка можно только кнопкой «В БОЙ».
+input.onPausePress=()=>{ if(!gameOver&&!waitingForUpgrade&&!shop.isOpen) paused=!paused; };
+input.onBurstPress=()=>tryBurst();
+
+// Ушли с прилавка — мир снова идёт. Отдельным колбэком, потому что закрыть
+// лавку может и кнопка «В БОЙ», и опустевший ассортимент.
+shop.onClose=()=>{ paused=false; syncHud(); };
+
+// ВЫБРОС СПОР — единственное активное действие игрока. Проверки состояния
+// стоят здесь, а не в BattleSystem: на паузе, в меню прокачки и в кадрах
+// смерти мир не обновляется, и удар без движения врагов был бы бесплатным.
+function tryBurst(){
+  if(!started||gameOver||paused||waitingForUpgrade||shop.isOpen||dying>0) return;
+  if(!battle.sporeBurst(player,camera)){
+    // Отказ обязан звучать. Молчащая кнопка читается как «игра не заметила
+    // нажатия», и игрок жмёт её ещё трижды вместо того, чтобы уходить.
+    audio.sfx("hit",0.4);
+    return;
+  }
+  syncHud();
+}
 
 (async()=>{ await loader.loadAll(CONFIG.assets); })();
 
@@ -91,6 +116,9 @@ window.addEventListener("orientationchange",()=>setTimeout(onResize,120));
 window.visualViewport?.addEventListener("resize",onResize);
 
 let player,enemies,projectiles,spawnSystem,gameOver,paused,waitingForUpgrade;
+// Лавка ждёт своей очереди: она не должна открываться ни поверх меню
+// прокачки, ни посреди боя с боссом (см. maybeOpenShop).
+let shopDue=false, nextShopAt=CONFIG.shop.every;
 // Забег ещё не начат: страница открывается на стартовом экране, а мир под
 // ним стоит неподвижно и работает фоном. До нажатия «Играть» симуляция не
 // идёт вообще — иначе игрок к моменту старта уже был бы обстрелян.
@@ -121,6 +149,7 @@ function init(){
   enemies=[]; projectiles=[]; loot.reset(); particles.reset(); battle.reset();
   runTime=0; levelUpDelay=0; dying=0;
   spawnSystem=new SpawnSystem(camera);
+  shop.reset(); shopDue=false; nextShopAt=CONFIG.shop.every;
   gameOver=false; paused=false; waitingForUpgrade=false;
   document.getElementById("gameOverScreen").classList.add("hidden");
   document.getElementById("ui").classList.remove("hidden");
@@ -161,6 +190,12 @@ function update(dt){
 
   runTime+=dt;
 
+  // ЛАВКА. Время считается от начала забега (волн нет, единица прогресса —
+  // секунды), но открывается она не по секундомеру, а при первой удобной
+  // возможности: см. maybeOpenShop.
+  if(runTime>=nextShopAt){ shopDue=true; nextShopAt+=CONFIG.shop.every; }
+  if(shopDue&&maybeOpenShop()) return;
+
   const sporeEffects=sporeSystem.getSporeEffects(player.sporeLevel);
   player.update(dt,{input,enemies,camera});
   camera.follow(player);
@@ -193,6 +228,19 @@ function update(dt){
   syncHud();
 
   if(player.hp<=0) beginDeath();
+}
+
+// Открыть лавку, если сейчас подходящий момент. Возвращает true, если
+// открыли, — тогда кадр на этом заканчивается: мир уже на паузе.
+//
+// Момент неподходящий ровно в одном случае — на поле босс. Пауза с меню
+// посреди боя, который и есть событие забега, ломает его надвое; лавка
+// подождёт до смерти босса, благо она уже «должна» и никуда не денется.
+function maybeOpenShop(){
+  if(enemies.some(e=>!e.dead&&e instanceof Boss)) return false;
+  shopDue=false; paused=true;
+  shop.open(player);
+  return true;
 }
 
 function beginDeath(){
@@ -229,12 +277,14 @@ function openUpgradeMenu(){
 
 function endGame(){
   player.hp=0; gameOver=true; dying=0;
+  shop.reset();
   // Счётчик убитых переехал сюда с игрового экрана: в бою на него не
-  // смотрят, а на экране итогов он как раз и есть итог.
-  // Монет здесь больше нет — валюта убрана до магазина (ЭТАП 2 в ROADMAP):
-  // цифра, которую некуда потратить, обещает накопление, которого не будет.
+  // смотрят, а на экране итогов он как раз и есть итог. Монет показываем
+  // СОБРАННЫЕ за забег, а не оставшиеся в кошельке: итог — это сколько ты
+  // добыл, а не сколько не успел потратить.
   document.getElementById("finalLevel").textContent=player.level;
   document.getElementById("finalKills").textContent=battle.kills;
+  document.getElementById("finalCoins").textContent=player.coinsEarned;
   document.getElementById("finalTime").textContent=formatTime(runTime);
   document.getElementById("gameOverScreen").classList.remove("hidden");
   // Боевой HUD на экране итогов не нужен: таймер и шкалы просвечивали
@@ -256,7 +306,8 @@ function formatTime(sec){
 // внизу и компактная пара HP/споры над ней. Цифры «74/100» в бою всё равно
 // никто не читает, а цвет и длина шкалы читаются мгновенно.
 const HUD={};
-for(const id of ["xpBar","levelDisplay","timeDisplay","hpBar","sporeBar"]){
+for(const id of ["xpBar","levelDisplay","timeDisplay","hpBar","sporeBar","burstBtn",
+                 "coinDisplay"]){
   HUD[id]=document.getElementById(id);
 }
 const hpRow=HUD.hpBar.closest(".vital"), sporeRow=HUD.sporeBar.closest(".vital");
@@ -299,6 +350,12 @@ function syncHud(){
   hpRow.classList.toggle("critical",hpPct<=0.25);
   fillBar(HUD.sporeBar,player.sporeLevel/CONFIG.sporeSystem.maxSpore);
   sporeRow.classList.toggle("critical",player.sporeLevel>=CONFIG.sporeSystem.thresholds.danger);
+  // Кнопка выброса гаснет, пока шкалы не хватает на его цену. Это не украшение:
+  // цена ресурса должна читаться до нажатия, иначе трата остаётся сюрпризом.
+  HUD.burstBtn.classList.toggle("dim",!player.canBurst());
+  // Кошелёк. Единственная цифра, вернувшаяся на боевой экран, — и только
+  // потому, что теперь она означает «хватит ли на прилавке»
+  HUD.coinDisplay.textContent=player.coins;
 }
 
 // Красная рамка по краям экрана в момент удара. Самый дешёвый способ сказать
@@ -374,6 +431,9 @@ if(new URLSearchParams(location.search).has("debug")){
     // ветки, иначе как забегом до десятого уровня нельзя, а забег до
     // десятого уровня — это десять минут на одну проверку одного числа.
     upgrades:upgradeSystem,
+    // Лавка: проверить её иначе как забегом до 80-й секунды нельзя, а это
+    // полторы минуты на одну проверку одного ценника
+    shop,
     battle,
     // Карта: декорации ставятся по хешу клетки из мешка map.bag, то есть
     // случайно и редко. Чтобы посмотреть на одну конкретную (например, на
@@ -386,9 +446,15 @@ if(new URLSearchParams(location.search).has("debug")){
     // сила темноты, размеры. Поставить игру на паузу (Esc), покрутить число,
     // сравнить два кадра одной и той же сцены — иначе сравниваешь разные.
     config:CONFIG,
+    // Выброс спор с кода: клавиатурный пробел из Playwright уходит документу,
+    // а не игре, если фокус остался на кнопке «Играть»
+    burst:()=>tryBurst(),
     stats:()=>({
       time:runTime, level:player.level, hp:player.hp, maxHp:player.maxHp,
       spore:player.sporeLevel, kills:battle.kills, gameOver,
+      // Выброс: без этих двух полей проверить трату шкалы можно только
+      // глазами по кнопке, а бот кнопку не видит
+      canBurst:player.canBurst(), burstCd:player.burstCd,
       alive:enemies.filter(e=>!e.dead).length,
       aliveLimit:spawnSystem.aliveLimit(),
       interval:spawnSystem.interval(),
@@ -413,6 +479,12 @@ function startRun(){
   started=true; init();
 }
 document.getElementById("playBtn").onclick=startRun;
+// Та же трата с пальца. Подсказку «ПРОБЕЛ» на сенсорном экране прячем: клавиши
+// там нет, а подпись к несуществующей кнопке — то же ложное обещание.
+if(input.isMobile) document.body.classList.add("touch");
+HUD.burstBtn.addEventListener("click",(e)=>{ e.preventDefault(); tryBurst(); });
+document.getElementById("shopReroll").onclick=()=>shop.reroll(player);
+document.getElementById("shopLeave").onclick=()=>shop.close();
 // Кнопка вместо надписи «R — рестарт»: на телефоне клавиши нет, и экран
 // смерти был тупиком — забег не перезапустить иначе как перезагрузкой.
 document.getElementById("restartBtn").onclick=()=>{ if(gameOver) init(); };

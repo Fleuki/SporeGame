@@ -14,6 +14,12 @@ export class InputManager {
       if(k==="m") this.onMutePress?.();
       if(k==="r") this.onRestartPress?.();
       if(k==="escape") this.onPausePress?.();
+      // Выброс спор. Пробел, потому что это единственное активное действие в
+      // игре: стрельба здесь сама, прицел на мобильных тоже сам. Повтор от
+      // зажатой клавиши (e.repeat) отсекаем здесь, а не перезарядкой: иначе
+      // удержание пробела опустошало бы шкалу тремя выбросами подряд, и
+      // «трата ресурса» превращалась бы в «слив по ошибке».
+      if((k===" "||k==="spacebar")&&!e.repeat){ e.preventDefault(); this.onBurstPress?.(); }
     });
     document.addEventListener("keyup",(e)=>{
       const k=e.key.toLowerCase();

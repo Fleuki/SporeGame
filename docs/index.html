@@ -38,6 +38,20 @@
           </div>
         </div>
       </div>
+      <!-- КОШЕЛЁК. Вернулся на боевой экран вместе с лавкой и только из-за
+           неё: до этого цифра означала «ты что-то накопил», а потратить это
+           было негде. Теперь она отвечает на вопрос «хватит ли на прилавке». -->
+      <div id="purse"><img class="icon" src="assets/images/drops/drop_coin.png" alt=""><span id="coinDisplay">0</span></div>
+      <!-- ВЫБРОС СПОР. Единственная кнопка действия в бою: стрельба и прицел
+           здесь автоматические. На клавиатуре это пробел, но на телефоне
+           клавиши нет, а трата заражения — не второстепенное удобство вроде
+           паузы, без неё шкала снова станет таймером до максимальной
+           сложности. Кнопка гаснет, когда спор не хватает: цена механики
+           должна быть видна раньше, чем её нажмут. -->
+      <button id="burstBtn" class="dim" type="button" aria-label="Выброс спор">
+        <img src="assets/images/ui/icon_spore.png" alt="">
+        <span class="key">ПРОБЕЛ</span>
+      </button>
       <!-- Опыт — тонкая полоса во всю ширину у нижнего края -->
       <div id="xpStrip">
         <span id="levelDisplay">1</span>
@@ -49,6 +63,17 @@
     <h2>ПРОКАЧКА</h2>
     <div id="upgradeCards"></div>
   </div>
+  <!-- ЛАВКА. Открывается раз в CONFIG.shop.every секунд забега (но не
+       посреди боя с боссом). В отличие от прокачки, отсюда можно уйти
+       ничего не купив: копить на дорогое — это тоже решение. -->
+  <div id="shopMenu" class="hidden">
+    <h2>ЛАВКА <span class="purse"><img class="icon" src="assets/images/drops/drop_coin.png" alt=""><span id="shopCoins">0</span></span></h2>
+    <div id="shopGoods"></div>
+    <div id="shopButtons">
+      <button id="shopReroll" class="big-btn ghost" type="button">ПЕРЕРИСОВАТЬ</button>
+      <button id="shopLeave" class="big-btn" type="button">В БОЙ</button>
+    </div>
+  </div>
   <!-- СТАРТОВЫЙ ЭКРАН. Раньше страница открывалась сразу в бой: не было ни
        момента «я начинаю забег», ни места для названия, ни повода нажать
        что-либо самому. Заодно первое касание здесь разблокирует звук —
@@ -58,16 +83,16 @@
     <h1>ГРИБНОЙ СУМРАК</h1>
     <p class="sub">Споры в воздухе. Держись, сколько сможешь.</p>
     <button id="playBtn" class="big-btn">ИГРАТЬ</button>
+    <!-- Про выброс сказано прямо здесь: это единственное, что игрок делает
+         руками сверх ходьбы, и догадаться о нём по гаснущей кнопке нельзя. -->
     <p class="hint">WASD или палец по экрану — движение. Стреляет само.</p>
+    <p class="hint">Выброс спор — <span class="key">пробел или </span>кнопка справа: 30% заражения в удар по кругу.</p>
   </div>
   <div id="gameOverScreen" class="hidden">
     <h1>СПОРЫ ПОБЕДИЛИ</h1>
     <p>Продержался <span id="finalTime">0:00</span>, уровень <span id="finalLevel">1</span></p>
-    <!-- Счётчика монет здесь больше нет: валюта убрана до магазина между
-         забегами (ЭТАП 2 в ROADMAP). Цифра, которую некуда потратить,
-         обещает накопление, которого не происходит. Вернётся вместе с тем,
-         на что её тратить. -->
-    <p><img class="icon" src="assets/images/ui/icon_kills.png" alt="Убито"> <span id="finalKills">0</span></p>
+    <p><img class="icon" src="assets/images/ui/icon_kills.png" alt="Убито"> <span id="finalKills">0</span>
+       <img class="icon" src="assets/images/drops/drop_coin.png" alt="Монет собрано"> <span id="finalCoins">0</span></p>
     <!-- КНОПКА, А НЕ ПОДПИСЬ. Здесь было написано «R — рестарт», и на
          телефоне это был тупик: клавиши нет, забег не перезапустить иначе
          как перезагрузкой страницы. -->

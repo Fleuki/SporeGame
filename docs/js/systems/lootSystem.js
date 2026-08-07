@@ -53,8 +53,11 @@ export class LootSystem {
       this.spawn("xp",enemy.x,enemy.y,{value:total});
     }
 
-    // Монеты отсюда убраны вместе с самой валютой: копить то, что негде
-    // потратить, — ложное обещание. Вернутся с магазином (ЭТАП 2).
+    // Монеты вернулись вместе с лавкой (CONFIG.shop). С босса — горстью, по
+    // той же причине, по которой горстью падает его опыт.
+    if(isBoss) for(let i=0;i<L.bossCoins;i++) this.spawn("coin",enemy.x,enemy.y);
+    else if(Math.random()<L.coinChance) this.spawn("coin",enemy.x,enemy.y);
+
     if(isBoss||Math.random()<L.antidoteChance) this.spawn("antidote",enemy.x,enemy.y);
     if(Math.random()<L.potionChance) this.spawn("potion",enemy.x,enemy.y);
   }
@@ -101,6 +104,16 @@ export class LootSystem {
       this.particles?.emit(it.x,it.y,def.particle||"#ffd24a",6);
       this.audio?.sfx("pickup");
       return player.addXp(v);
+    }
+    if(def.coin){
+      const v=it.value||def.coin;
+      player.coins+=v; player.coinsEarned+=v;
+      // Своя монета и своя цифра: без неё непонятно, что кошелёк вообще
+      // пополнился — счётчик в HUD маленький и стоит в углу
+      this.particles?.emitText(it.x,it.y-12,"+"+v,"#ffd24a",12);
+      this.audio?.sfx("coin");
+      this.particles?.emit(it.x,it.y,def.particle||"#ffd24a",6);
+      return false;
     }
     if(def.heal){
       player.hp=Math.min(player.maxHp,player.hp+def.heal);
