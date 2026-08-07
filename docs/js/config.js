@@ -448,19 +448,22 @@ export const CONFIG = {
         // который никто не мешал собирать
         name: "Плодовое Тело", hp: 70, speed: 0.5, radius: 22, damage: 7, xpReward: 15,
         color: { body: ["#6b2d5c","#c4a000","#3d1a33"] }, rim: "#a8ff6a",
-        // Раньше рисовалось кружком с двумя глазами — на фоне спрайтовых
-        // врагов это выглядело заглушкой. Лист Материнской Капли — та же
-        // грибная туша, только крупнее: берём её первый ряд и уменьшаем.
-        sprite: { key:"boss_mother_cap", frame:256, cols:4, rows:4,
+        // СВОЙ ЛИСТ, а не ряд чужого. Раньше здесь стоял первый ряд листа
+        // Материнской Капли: одна картинка обслуживала и рядового врага, и
+        // босса, и потому её нельзя было перерисовать, не задев обоих.
+        sprite: { key:"enemy_fruiting_body", frame:82, cols:4, rows:1,
                   row:0, animSpeed:12, display:82 },
         abilities: ["explode_on_death"], explodeRadius: 100, explodeDamage: 25, sporeCloudAmount: 15
       },
       mycelium_tentacle: {
         name: "Мицелиевое Щупальце", hp: 18, speed: 0, radius: 12, damage: 3, xpReward: 8,
         color: { body: ["#6b2d5c","#00d4aa","#3d1a33"] }, rim: "#8affe0",
-        // Нижний ряд листа Сердцевины — отросток с длинными щупальцами.
-        sprite: { key:"boss_mycelium_heart", frame:256, cols:4, rows:4,
-                  row:3, animSpeed:8, display:56 },
+        // СВОЙ ЛИСТ. Раньше сюда брали нижний ряд листа Сердцевины — а там
+        // нарисовано само сердце с отростками, только мельче. То есть
+        // «щупальце» на арене выглядело крошечным сердцем: существо из
+        // описания и существо на экране были разными. Теперь это щупальце.
+        sprite: { key:"enemy_mycelium_tentacle", frame:56, cols:4, rows:1,
+                  row:0, animSpeed:8, display:56 },
         // ЗАМЕДЛЕНИЕ, А НЕ ЗАХВАТ. Раньше щупальце отнимало управление на
         // секунду (grab_player, grabDuration 60): игрок не мог двигаться
         // вообще. Вся выживаемость в этой игре построена на движении, и
@@ -489,10 +492,12 @@ export const CONFIG = {
     mother_cap: {
       name: "Материнская Капля", hp: 800, speed: 0, radius: 45, damage: 20, xpReward: 200,
       color: { body: ["#6b2d5c","#c4a000","#ff3333"] },
-      // Ряды 2-3 листа (East/West) собраны из несовместимых поз, годится
-      // только вид на камеру — ряд 1.
-      sprite: { key:"boss_mother_cap", frame:256, cols:4, rows:4,
-                row:1, animSpeed:9, display:150 },
+      // Лист перерисован и теперь принадлежит только боссу: один ряд из
+      // четырёх кадров дыхания. Прежние четыре ряда были видами с разных
+      // сторон, из которых годился ровно один, — три четверти листа лежали
+      // мёртвым грузом и вдобавок мешали перерисовке.
+      sprite: { key:"boss_mother_cap", frame:150, cols:4, rows:1,
+                row:0, animSpeed:9, display:150 },
       abilities: ["spawn_minions","sneeze_burst"],
       sneezeInterval: 180, sneezeCooldown: 90,
       minionType: "spore_bearer", minionCount: 3, sporeCloudRadius: 120
@@ -500,9 +505,12 @@ export const CONFIG = {
     mycelium_heart: {
       name: "Мицелиевая Сердцевина", hp: 1200, speed: 0, radius: 40, damage: 15, xpReward: 300,
       color: { body: ["#00d4aa","#6b2d5c","#1a3d2e"] },
-      // 4 ряда листа — 4 стадии сердцебиения, они же фазы босса:
-      // ряд выбирается по остатку HP, колонки крутят удар сердца.
-      sprite: { key:"boss_mycelium_heart", frame:256, cols:4, rows:4,
+      // 4 ряда — 4 СТАДИИ ПОВРЕЖДЕНИЯ, ряд выбирается по остатку HP
+      // (phaseRows), колонки крутят удар сердца. Стадии перерисованы честно:
+      // от целого сердца к разорванному, с растущей массой щупалец. Раньше
+      // ряды были просто «больше отростков» и вдобавок последний из них
+      // одалживался рядовому Щупальцу.
+      sprite: { key:"boss_mycelium_heart", frame:140, cols:4, rows:4,
                 phaseRows:true, animSpeed:7, display:140 },
       abilities: ["summon_tentacles","pulse_damage"],
       tentacleInterval: 120, pulseInterval: 90
@@ -810,6 +818,8 @@ export const CONFIG = {
       enemy_mushroom_wolf: "assets/images/enemies/mushroom_wolf.png",
       enemy_spore_bat: "assets/images/enemies/spore_bat.png",
       enemy_spore_piper: "assets/images/enemies/spore_piper.png",
+      enemy_fruiting_body: "assets/images/enemies/fruiting_body.png",
+      enemy_mycelium_tentacle: "assets/images/enemies/mycelium_tentacle.png",
       boss_mother_cap: "assets/images/bosses/mother_cap.png",
       boss_mycelium_heart: "assets/images/bosses/mycelium_heart.png",
       // fruit_body и mycelium_tentacle пока без спрайтов — рисуются примитивами
