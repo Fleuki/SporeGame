@@ -14,10 +14,26 @@ export class AssetLoader {
       img.src=src; this.total++;
     });
   }
+  // ЗВУК СЧИТАЕТСЯ ГОТОВЫМ ПО canplay, А НЕ ПО canplaythrough.
+  //
+  // Раньше здесь стоял только canplaythrough — «хватит данных, чтобы доиграть
+  // до конца без остановки». Для короткого эффекта это одно и то же, а для
+  // восьмиминутного трека на 3.7 МБ событие может не прийти вовсе: часть
+  // браузеров при preload по умолчанию тянет только заголовок и ждёт play().
+  // Трек тогда молча не появлялся бы в игре, а игра честно считала бы, что
+  // файла нет.
+  //
+  // canplay значит «можно начинать» — для потоковой музыки этого достаточно,
+  // остальное дотянется по ходу. preload="auto" просит браузер не жадничать.
   loadSound(key,src){
     return new Promise((resolve)=>{
       const audio=new Audio();
-      audio.oncanplaythrough=()=>{ this.sounds.set(key,audio); this.loaded++; resolve(audio); };
+      audio.preload="auto";
+      const ready=()=>{
+        if(this.sounds.has(key)) return;      // события приходят парой
+        this.sounds.set(key,audio); this.loaded++; resolve(audio);
+      };
+      audio.oncanplay=ready; audio.oncanplaythrough=ready;
       audio.onerror=()=>{ console.warn("Не загрузился звук:",src); resolve(null); };
       audio.src=src; this.total++;
     });

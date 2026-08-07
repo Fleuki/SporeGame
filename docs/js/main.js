@@ -60,7 +60,7 @@ const particles=new ParticleSystem();
 const sporeSystem=new SporeSystem();
 const upgradeSystem=new UpgradeSystem();
 const loot=new LootSystem(particles,audio);
-const battle=new BattleSystem(particles,sporeSystem,loot,audio);
+const battle=new BattleSystem(particles,sporeSystem,loot,audio,loader);
 const map=new MapSystem();
 const shop=new ShopSystem(audio);
 const records=new RecordSystem();
@@ -432,6 +432,39 @@ function drawHurtVignette(){
   ctx.fillStyle=g; ctx.fillRect(0,0,w,h);
 }
 
+// ГЛУБИНА. Всё, что СТОИТ на земле, рисуется в одном порядке — снизу вверх по
+// точке касания с землёй. Иначе не работает единственный признак объёма,
+// который есть у вида сверху: кто ближе к камере, тот поверх.
+//
+// Что было: декорации рисовались отдельным слоем ПОД всеми существами, и
+// игрок, зашедший за ствол дерева, оказывался нарисован на дереве, а не за
+// ним. Заметно это стало сразу, как только у декораций появился рост.
+//
+// Точка касания у декорации — её y (drawProp рисует картинку от основания
+// вверх), у существа — центр его тени, то есть y плюс доля радиуса. Берём
+// ровно ту же формулу, что и тень: если объекты сортировать по одному месту,
+// а тень рисовать в другом, порядок и тень начнут спорить друг с другом.
+//
+// Летящее в этот список не входит: снаряды, облака спор и частицы идут поверх
+// всего. Они в воздухе, и своей точки касания у них нет.
+const DEPTH=[];
+function footY(o){ return o.y+(o.radius||0)*0.8; }
+function drawByDepth(){
+  DEPTH.length=0;
+  for(const d of map.standingProps()) DEPTH.push(d);
+  for(const e of enemies) if(!e.dead) DEPTH.push(e);
+  DEPTH.push(player);
+  DEPTH.sort((a,b)=>footY(a)-footY(b));
+  for(const o of DEPTH){
+    // Декорация — это не сущность, у неё нет draw(): у неё есть def с
+    // картинкой. Различаем по нему, а не по instanceof: заводить общий
+    // базовый класс ради одного признака в отрисовке незачем.
+    if(o===player) player.draw(renderer);
+    else if(o.def&&o.def.image) map.drawOneProp(renderer,o);
+    else o.draw(renderer);
+  }
+}
+
 function draw(){
   renderer.clear();
   renderer.playerX=player.x; renderer.playerY=player.y;
@@ -439,15 +472,14 @@ function draw(){
   // --- мировой слой: всё внутри begin/end сдвигается камерой ---
   renderer.begin();
   map.drawGround(renderer,runTime);           // земля, тропы и пятна биомов
-  map.drawDecor(renderer);                    // пни и телеги под сущностями
+  map.drawFlatDecor(renderer);                // кислотные лужи лежат на земле
   map.drawEdge(renderer);                     // мрак на границе арены
   battle.drawFields(renderer);                // живые грибницы лежат на земле
   loot.draw(renderer);
-  for(const e of enemies) e.draw(renderer);
+  drawByDepth();                  // деревья, враги и игрок — по глубине
   for(const p of projectiles) p.draw(renderer);
   battle.drawShots(renderer);     // облака спор трубачей
   particles.draw(renderer);
-  player.draw(renderer);
   battle.drawEffects(renderer);   // взрывы поверх всего
   renderer.end();
 

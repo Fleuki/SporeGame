@@ -3,7 +3,7 @@ import { Enemy } from "../entities/enemy.js";
 import { Boss } from "../entities/boss.js";
 import { SpatialGrid } from "../core/spatialGrid.js";
 import { Projectile, EnemyShot } from "../entities/projectile.js";
-import { Effect, Dissolve } from "../entities/effect.js";
+import { Effect, Dissolve, DeathAnim } from "../entities/effect.js";
 
 // Сколько живых грибниц (эволюция токсичной склянки) держим одновременно.
 // Старейшая уступает место новой: пятно живёт впятеро дольше перезарядки,
@@ -14,11 +14,16 @@ const MAX_FIELDS = 10;
 // Раньше это был один блок на 50 строк внутри main.update() вперемешку с
 // обновлением интерфейса.
 export class BattleSystem {
-  constructor(particles,sporeSystem,loot,audio){
+  // loader нужен ровно для одного решения: есть ли у убитого нарисованный
+  // лист смерти. Спросить об этом в момент смерти больше негде — рисование
+  // случится позже и в другом месте, а выбирать между настоящей анимацией и
+  // запасным растворением надо здесь и сразу.
+  constructor(particles,sporeSystem,loot,audio,loader){
     this.particles=particles;
     this.sporeSystem=sporeSystem;
     this.loot=loot;
     this.audio=audio;
+    this.loader=loader;
     this.grid=new SpatialGrid(96);
     this._near=[];        // переиспользуемый буфер, чтобы не мусорить в GC
     this.effects=[];      // одноразовые анимации взрывов
@@ -303,18 +308,21 @@ export class BattleSystem {
 
   handleBossEvent(ev,enemies,player,camera){
     const b=ev.boss;
+    // Числа берутся у САМОГО босса (b.def), а не из записи Матери. Раньше
+    // здесь стояло CONFIG.bosses.mother_cap в трёх местах, и любой другой
+    // босс с теми же способностями чихал бы её облаком и плодил её выводок.
     if(ev.type==="sneeze"){
-      this.particles.emitSporeCloud(b.x,b.y,CONFIG.bosses.mother_cap.sporeCloudRadius,"#6b2d5c");
+      this.particles.emitSporeCloud(b.x,b.y,b.def.sporeCloudRadius||120,"#6b2d5c");
       player.sporeLevel+=5;
     } else if(ev.type==="spawn_minions"){
-      const n=ev.count??CONFIG.bosses.mother_cap.minionCount;
+      const n=ev.count??b.def.minionCount??3;
       // Кольцо вокруг ИГРОКА, а не вокруг босса: на поздней фазе от выводка
       // больше нельзя просто отойти, через него надо прорываться
       const cx=ev.encircle?player.x:b.x, cy=ev.encircle?player.y:b.y;
       const r=ev.encircle?130:60;
       for(let k=0;k<n;k++){
         const ang=(Math.PI*2/n)*k+(ev.encircle?Math.random():0);
-        enemies.push(new Enemy(cx+Math.cos(ang)*r,cy+Math.sin(ang)*r,CONFIG.bosses.mother_cap.minionType));
+        enemies.push(new Enemy(cx+Math.cos(ang)*r,cy+Math.sin(ang)*r,b.def.minionType||"spore_bearer"));
       }
     } else if(ev.type==="shock"){
       // УДАРНАЯ ВОЛНА Сердцевины. Бьёт по площади, но только по игроку:
@@ -449,9 +457,19 @@ export class BattleSystem {
   killEnemy(e,enemies,player,sporeEffects,camera){
     e.dead=true; this.kills++;
     const t=e.def||{};
-    // Тело растворяется: без этого враг просто исчезал в кадре смерти
-    if(e.anim?.def) this.effects.push(new Dissolve(e.anim,e.x,e.y,t.rim||"#c58cff",
-                                                   e instanceof Boss?34:20));
+    // СМЕРТЬ: нарисованный лист, если он есть, иначе растворение прежним
+    // способом. Листы добавляются по одному врагу за раз, поэтому проверка
+    // идёт по факту загрузки картинки, а не по наличию записи в конфиге:
+    // запись может стоять раньше, чем появится файл.
+    if(t.death&&this.loader?.getImage(t.death.key)){
+      // Куда смотрел враг в момент смерти. У четвероногих направление живёт
+      // в ряду листа, у остальных в зеркале, поэтому берём не anim.flip, а
+      // сам угол движения — он есть у всех.
+      this.effects.push(new DeathAnim(t.death,e.x,e.y,Math.cos(e.moveAngle||0)<0));
+    } else if(e.anim?.def){
+      this.effects.push(new Dissolve(e.anim,e.x,e.y,t.rim||"#c58cff",
+                                     e instanceof Boss?34:20));
+    }
     this.particles.emit(e.x,e.y,"#39ff14",t.sporeCloudAmount||8);
     // Кольцо по габариту врага: смерть обязана читаться не только тем, что
     // фигура пропала. Крупный враг — заметнее кольцо, и разницу видно.

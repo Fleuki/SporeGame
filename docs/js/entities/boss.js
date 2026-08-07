@@ -59,8 +59,14 @@ export class Boss extends Enemy {
       events.push({type:"boss_phase",boss:this,phase:this.phase});
     }
 
-    if(this.typeKey==="mother_cap"){
-      const C=CONFIG.bosses.mother_cap;
+    // СЦЕНАРИЙ ВЫБИРАЕТСЯ ПО СПОСОБНОСТЯМ, А НЕ ПО ИМЕНИ БОССА. Раньше здесь
+    // стояло `if(this.typeKey==="mother_cap")`, а числа брались из
+    // CONFIG.bosses.mother_cap напрямую — то есть третий босс с теми же
+    // способностями не делал бы вообще ничего, молча стоял бы мешком с HP.
+    // Теперь всё читается из this.def, и новому боссу достаточно записи в
+    // конфиге: список abilities и его собственные интервалы.
+    if(this.abilities.includes("sneeze_burst")||this.abilities.includes("spawn_minions")){
+      const C=this.def;
       if(this.isStunned){
         this.stunTimer--; if(this.stunTimer<=0) this.isStunned=false;
         return;
@@ -84,8 +90,8 @@ export class Boss extends Enemy {
       }
     }
 
-    if(this.typeKey==="mycelium_heart"){
-      const C=CONFIG.bosses.mycelium_heart;
+    if(this.abilities.includes("summon_tentacles")||this.abilities.includes("pulse_damage")){
+      const C=this.def;
       this.tentacleTimer++;
 
       // ЗАМАХ И УДАР. Пока идёт замах, всё остальное босс не делает: одно
@@ -158,7 +164,7 @@ export class Boss extends Enemy {
     // Без этого удар по площади от неподвижного босса читается как
     // случайная потеря здоровья.
     if(this.shockWind>=0){
-      const C=CONFIG.bosses.mycelium_heart;
+      const C=this.def;
       const k=this.shockWind/C.shockWindup;
       const ctx=renderer.ctx;
       ctx.save();
@@ -179,10 +185,15 @@ export class Boss extends Enemy {
                                 2.6,"#ffd24a",8);
       }
     }
-    renderer.drawText(this.name,this.x,this.y-this.radius-20,{font:"12px "+CONFIG.fontFamily,color:"#00d4aa",align:"center"});
+    // ПОДПИСЬ СЧИТАЕТСЯ ОТ ВЕРХА КАРТИНКИ, А НЕ ОТ РАДИУСА. Радиус — это
+    // хитбокс, и у боссов он намеренно у́же рисунка; у Улья 55 при спрайте в
+    // 176, то есть имя и полоса ложились ровно в середину купола и терялись
+    // в нём. Берём половину высоты спрайта, если она больше радиуса.
+    const top=this.y-Math.max(this.radius,(this.anim.def?.display||0)/2);
+    renderer.drawText(this.name,this.x,top-20,{font:"12px "+CONFIG.fontFamily,color:"#00d4aa",align:"center"});
     const bw=100,bh=6;
-    renderer.ctx.fillStyle="#1a1a1a"; renderer.ctx.fillRect(this.x-bw/2,this.y-this.radius-14,bw,bh);
+    renderer.ctx.fillStyle="#1a1a1a"; renderer.ctx.fillRect(this.x-bw/2,top-14,bw,bh);
     renderer.ctx.fillStyle=this.hp/this.maxHp>0.5?"#ff3333":"#c4a000";
-    renderer.ctx.fillRect(this.x-bw/2,this.y-this.radius-14,bw*(this.hp/this.maxHp),bh);
+    renderer.ctx.fillRect(this.x-bw/2,top-14,bw*(this.hp/this.maxHp),bh);
   }
 }

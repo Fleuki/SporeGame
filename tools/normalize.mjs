@@ -78,6 +78,11 @@ function rulesFromConfig(){
 
   for(const t of Object.values(CONFIG.enemies.types||{})){
     const s=t.sprite; if(s) put(s.key,s.cols,s.rows,s.display);
+    // Лист смерти — такой же спрайт врага, только в один ряд. Без этой
+    // строки он проходил бы мимо правил и оставался бы в своей плотности
+    // пикселя, то есть ровно тем ассетом «из другой игры», ради которого
+    // весь конвейер и заведён.
+    if(t.death) put(t.death.key,t.death.cols,1,t.death.display);
   }
   for(const b of Object.values(CONFIG.bosses||{})){
     const s=b.sprite; if(s) put(s.key,s.cols,s.rows,s.display);
