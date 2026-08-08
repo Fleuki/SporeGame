@@ -112,6 +112,26 @@
     <h2>ПРОКАЧКА</h2>
     <div id="upgradeCards"></div>
   </div>
+  <!-- ЗВУК. Панель одна на два места: её открывает кнопка со стартового
+       экрана и она же сама появляется на паузе. Пауза до этого была пустым
+       экраном с надписью — а это ровно тот момент, когда игрок и хочет
+       что-нибудь подкрутить.
+       Громкости две, потому что мешают они порознь: выстрелов много и они
+       громкие, а музыку из-за них глушили целиком вместе с игрой. -->
+  <div id="settingsPanel" class="hidden">
+    <h2>ЗВУК</h2>
+    <label class="vol-row">
+      <span class="vol-name">Музыка</span>
+      <input type="range" id="volMusic" min="0" max="100" step="1" value="52">
+      <span class="vol-val" id="volMusicVal">52</span>
+    </label>
+    <label class="vol-row">
+      <span class="vol-name">Эффекты</span>
+      <input type="range" id="volSfx" min="0" max="100" step="1" value="50">
+      <span class="vol-val" id="volSfxVal">50</span>
+    </label>
+    <button id="settingsClose" class="big-btn" type="button">ЗАКРЫТЬ</button>
+  </div>
   <!-- ЛАВКА. Открывается раз в CONFIG.shop.every секунд забега (но не
        посреди боя с боссом). В отличие от прокачки, отсюда можно уйти
        ничего не купив: копить на дорогое — это тоже решение. -->
@@ -144,6 +164,7 @@
       <div id="charList"></div>
     </div>
     <button id="playBtn" class="big-btn">ИГРАТЬ</button>
+    <button id="soundBtn" class="big-btn ghost" type="button">ЗВУК</button>
     <!-- Про выброс сказано прямо здесь: это единственное, что игрок делает
          руками сверх ходьбы, и догадаться о нём по гаснущей кнопке нельзя. -->
     <p class="hint">WASD или палец по экрану — движение. Стреляет само.</p>
