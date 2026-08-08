@@ -448,6 +448,18 @@ export class AudioManager {
     if(!audio){ this.sfx(key); return; }   // файла нет — играем синтезом
     const clone=audio.cloneNode(); clone.volume=this.sfxVolume; clone.play().catch(()=>{});
   }
+  // ФАЙЛ ПРОПАЛ УЖЕ ПОСЛЕ ТОГО, КАК ЕГО СОЧЛИ ГОТОВЫМ. Загрузчик отдаёт
+  // звуковой элемент сразу и не ждёт загрузки (см. AssetLoader.loadSound), —
+  // значит ошибка сети или отсутствующий файл приходят позже, иногда уже
+  // посреди забега. Тогда трек надо пересобрать: applyMusic сам увидит, что
+  // файла больше нет, и включит синтез.
+  soundLost(key){
+    if(MUSIC_FILES[this.wanted]===key||MUSIC_FILES.run===key){
+      this.stopMusic();
+      this.applyMusic();
+    }
+  }
+
   // ГРОМКОСТЬ ИЗВНЕ. Числа больше не принадлежат этому классу: их хранит и
   // помнит SettingsSystem, а здесь остаётся только применение.
   //
