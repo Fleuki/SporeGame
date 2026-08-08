@@ -88,8 +88,35 @@ input.onRestartPress=()=>{ if(started&&gameOver) init(); };
 // карточку всё равно придётся.
 // Лавку, как и меню прокачки, нельзя закрыть паузой: это была бы бесплатная
 // отмена. Уйти с прилавка можно только кнопкой «В БОЙ».
-input.onPausePress=()=>{ if(!gameOver&&!waitingForUpgrade&&!shop.isOpen) paused=!paused; };
+input.onPausePress=()=>togglePause();
 input.onBurstPress=()=>tryBurst();
+
+// ПАУЗА одним местом на две двери: Escape и кнопка в углу. На телефоне
+// клавиши нет, и до кнопки забег там нельзя было прервать ничем, кроме
+// перезагрузки страницы.
+//
+// force задаёт состояние вместо переключения — им пользуется уход со
+// вкладки: свернувшийся браузер обязан ставить игру на паузу, а не снимать
+// её, если она уже стояла.
+function togglePause(force){
+  if(!started||gameOver||waitingForUpgrade||shop.isOpen||dying>0) return;
+  const next=force===undefined?!paused:force;
+  if(next===paused) return;
+  paused=next;
+  document.getElementById("pauseBtn").classList.toggle("paused",paused);
+}
+
+// ВКЛАДКУ СВЕРНУЛИ — ЗАБЕГ НА ПАУЗЕ. На телефоне это не редкость, а обычное
+// дело: пришло сообщение, позвонили, погас экран. Кадры при этом не идут
+// (браузер не зовёт requestAnimationFrame), то есть мир и так стоит, — но
+// возвращается игрок в НЕОСТАНОВЛЕННЫЙ бой, посреди толпы, которая уже
+// вплотную. Пауза даёт ту секунду, за которую он успевает понять, где он.
+//
+// Снимать паузу при возвращении НЕЛЬЗЯ: снимает её игрок, когда готов.
+document.addEventListener("visibilitychange",()=>{
+  if(document.hidden) togglePause(true);
+});
+window.addEventListener("blur",()=>togglePause(true));
 
 // Ушли с прилавка — мир снова идёт. Отдельным колбэком, потому что закрыть
 // лавку может и кнопка «В БОЙ», и опустевший ассортимент.
@@ -182,6 +209,9 @@ function init(){
   spawnSystem=new SpawnSystem(camera);
   shop.reset(); shopDue=false; nextShopAt=CONFIG.shop.every;
   gameOver=false; paused=false; waitingForUpgrade=false;
+  // Значок паузы обязан вернуться в исходное вместе с забегом: игрок мог
+  // умереть на паузе, и следующий забег начался бы с кнопкой «играть».
+  document.getElementById("pauseBtn").classList.remove("paused");
   document.getElementById("gameOverScreen").classList.add("hidden");
   // HUD показываем только в начатом забеге. init() зовётся и до старта — мир
   // нужен нарисованным за стартовым экраном, — но шкалы поверх названия там не
@@ -556,7 +586,11 @@ function draw(){
     const k=Math.min(1.4,Math.max(0.55,canvas.width/CONFIG.screen.width));
     renderer.drawText("ПАУЗА",canvas.width/2,canvas.height/2,
       {font:"bold "+Math.round(46*k)+"px "+CONFIG.fontFamily,color:"#00d4aa",align:"center"});
-    renderer.drawText("Esc — продолжить",canvas.width/2,canvas.height/2+40*k,
+    // Подсказка обязана называть ту дверь, которая у игрока есть: на телефоне
+    // клавиши Esc нет вовсе, и надпись про неё оставляла паузу тупиком —
+    // ровно тем же, каким был экран смерти с надписью «R — рестарт».
+    renderer.drawText(input.isMobile?"кнопка сверху справа — продолжить":"Esc — продолжить",
+      canvas.width/2,canvas.height/2+40*k,
       {font:Math.round(16*k)+"px "+CONFIG.fontFamily,color:"#8a8a8a",align:"center"});
   }
 
@@ -713,6 +747,7 @@ document.getElementById("playBtn").onclick=startRun;
 // там нет, а подпись к несуществующей кнопке — то же ложное обещание.
 if(input.isMobile) document.body.classList.add("touch");
 HUD.burstBtn.addEventListener("click",(e)=>{ e.preventDefault(); tryBurst(); });
+document.getElementById("pauseBtn").addEventListener("click",(e)=>{ e.preventDefault(); togglePause(); });
 document.getElementById("shopReroll").onclick=()=>shop.reroll(player);
 document.getElementById("shopLeave").onclick=()=>shop.close();
 // Кнопка вместо надписи «R — рестарт»: на телефоне клавиши нет, и экран

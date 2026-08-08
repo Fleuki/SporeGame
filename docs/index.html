@@ -2,10 +2,33 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- viewport-fit=cover — под вырез и скруглённые углы телефона: без него
+       по краям кадра остаются белые поля. maximum-scale и user-scalable
+       гасят зум по двойному тапу: в игре, где тапом ходят, он срабатывает
+       постоянно и сбивает прицел камеры. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Грибной Сумрак</title>
+  <!-- КАРТОЧКА ССЫЛКИ. Без этих строк игра, отправленная кому-нибудь в
+       мессенджер, выглядит голым адресом: ни названия, ни картинки, ни
+       строчки о том, что это. Половина решений «открыть или нет»
+       принимается по этой карточке, и стоит она пять тегов. -->
+  <meta name="description" content="Браузерный выживач в тёмном грибном лесу: враги идут потоком, оружие эволюционирует, заражение — ресурс, который тратишь сам. Играется мышью или пальцем.">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Грибной Сумрак">
+  <meta property="og:description" content="Споры в воздухе. Держись, сколько сможешь.">
+  <meta property="og:image" content="assets/cover.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <!-- Цвет полосы браузера на телефоне: белая полоса над тёмной игрой видна
+       как щель в корпусе -->
+  <meta name="theme-color" content="#0d1f15">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Грибной Сумрак">
   <!-- Без этой строки браузер сам просит /favicon.ico и получает 404 в консоль -->
   <link rel="icon" href="assets/images/ui/icon_spore.png" type="image/png">
+  <link rel="apple-touch-icon" href="assets/icon-192.png">
+  <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -56,6 +79,13 @@
         <img src="assets/images/ui/icon_spore.png" alt="">
         <span class="key">ПРОБЕЛ</span>
       </button>
+      <!-- ПАУЗА. На клавиатуре это Escape, но на телефоне клавиши нет, и до
+           этой кнопки забег на телефоне нельзя было прервать вообще ничем,
+           кроме перезагрузки страницы: ни отойти, ни ответить на сообщение.
+           Значок нарисован CSS, а не эмодзи и не картинкой — эмодзи из
+           интерфейса убраны осознанно, а ради двух прямоугольников заводить
+           файл незачем. -->
+      <button id="pauseBtn" type="button" aria-label="Пауза"><i></i><i></i></button>
       <!-- Опыт — тонкая полоса во всю ширину у нижнего края -->
       <div id="xpStrip">
         <span id="levelDisplay">1</span>
