@@ -454,7 +454,7 @@ function formatTime(sec){
 // никто не читает, а цвет и длина шкалы читаются мгновенно.
 const HUD={};
 for(const id of ["xpBar","levelDisplay","timeDisplay","hpBar","sporeBar","burstBtn",
-                 "coinDisplay"]){
+                 "coinDisplay","sporeNote","burstNotch"]){
   HUD[id]=document.getElementById(id);
 }
 const hpRow=HUD.hpBar.closest(".vital"), sporeRow=HUD.sporeBar.closest(".vital");
@@ -495,14 +495,64 @@ function syncHud(){
   // Полоска пульсирует на последней четверти здоровья и на критическом
   // заражении: движение боковое зрение ловит даже в свалке
   hpRow.classList.toggle("critical",hpPct<=0.25);
-  fillBar(HUD.sporeBar,player.sporeLevel/CONFIG.sporeSystem.maxSpore);
-  sporeRow.classList.toggle("critical",player.sporeLevel>=CONFIG.sporeSystem.thresholds.danger);
+  const S=CONFIG.sporeSystem;
+  fillBar(HUD.sporeBar,player.sporeLevel/S.maxSpore);
+  sporeRow.classList.toggle("critical",player.sporeLevel>=S.thresholds.danger);
   // Кнопка выброса гаснет, пока шкалы не хватает на его цену. Это не украшение:
   // цена ресурса должна читаться до нажатия, иначе трата остаётся сюрпризом.
   HUD.burstBtn.classList.toggle("dim",!player.canBurst());
+  // ...но одного «гаснет» мало. Заражение подходит к цене и откатывается
+  // назад по нескольку раз за забег — подобранный антидот сбивает шкалу
+  // мгновенно, — и снаружи это читается как «кнопка то работает, то нет».
+  // Заливка отвечает на вопрос «сколько ещё»: она и есть накопленная доля
+  // цены. На перезарядке (полсекунды после удара) заряда нет вовсе.
+  // Заливка показывает ЗАПАС, а не готовность: сразу после удара спор
+  // остаётся больше цены (30 из 64), и обнулённая заливка врала бы — «всё
+  // потратил», хотя следующий выброс уже почти оплачен. Полсекунды
+  // перезарядки поверх этого показывает погасшая кнопка.
+  const charge=Math.min(1,player.sporeLevel/player.burstCost());
+  HUD.burstBtn.style.setProperty("--charge",charge.toFixed(3));
+  // Насечка на шкале стоит там же, где цена выброса. Ставится отсюда, а не
+  // числом в CSS: подешевей когда-нибудь выброс — и метка уехала бы врать.
+  HUD.burstNotch.parentElement.style.setProperty("--notch",
+    (player.burstCost()/S.maxSpore).toFixed(3));
+  syncSporeNote();
   // Кошелёк. Единственная цифра, вернувшаяся на боевой экран, — и только
   // потому, что теперь она означает «хватит ли на прилавке»
   HUD.coinDisplay.textContent=player.coins;
+}
+
+// ЧТО ДЕЛАЕТ ЗАРАЖЕНИЕ — вслух, под шкалой.
+//
+// Это главная механика игры, и до этой строки она нигде не была названа:
+// шкала росла сама, враги от неё ускорялись, лут становился щедрее, на
+// критическом капал урон — и всё молча. Игрок видел растущую полоску и не
+// знал ни что она делает, ни что с ней делать. Механику, которую нельзя
+// прочитать, игрок не использует: он её терпит.
+//
+// Текст берётся из тех же порогов, по которым считаются эффекты
+// (CONFIG.sporeSystem.thresholds/effects), поэтому разъехаться с правдой он
+// не может — поменяются числа, поменяется и подпись.
+const SPORE_NOTES=[
+  { at: 0,  text: "Заражение растёт само" },
+  { at: 25, text: "Лут щедрее, враги быстрее" },
+  { at: 50, text: "Лут вдвое, враги злее" },
+  { at: 75, text: "Втрое лут, но заражение жжёт", hot: true }
+];
+let sporeNoteShown=null;
+function syncSporeNote(){
+  const T=CONFIG.sporeSystem.thresholds;
+  const lvl=player.sporeLevel;
+  // Пороги те же, что у эффектов: safe/warning/danger — границы, за которыми
+  // включается следующая запись CONFIG.sporeSystem.effects
+  let note=SPORE_NOTES[0];
+  if(lvl>=T.danger) note=SPORE_NOTES[3];
+  else if(lvl>=T.warning) note=SPORE_NOTES[2];
+  else if(lvl>=T.safe) note=SPORE_NOTES[1];
+  if(note===sporeNoteShown) return;      // строка меняется на порогах, а не каждый кадр
+  sporeNoteShown=note;
+  HUD.sporeNote.textContent=note.text;
+  HUD.sporeNote.classList.toggle("hot",!!note.hot);
 }
 
 // Красная рамка по краям экрана в момент удара. Самый дешёвый способ сказать
