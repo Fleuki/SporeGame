@@ -41,10 +41,25 @@ function fitCanvas(){
   const w=Math.round(cssW*dpr), h=Math.round(cssH*dpr);
   if(canvas.width!==w||canvas.height!==h){ canvas.width=w; canvas.height=h; }
   // Площадь кадра в мировых единицах фиксирована эталоном
-  const refArea=(CONFIG.screen.width/CONFIG.camera.zoom)*
-                (CONFIG.screen.height/CONFIG.camera.zoom);
+  const refW=CONFIG.screen.width/CONFIG.camera.zoom;
+  const refH=CONFIG.screen.height/CONFIG.camera.zoom;
+  const refArea=refW*refH;
+  // ...но только пока ФОРМА кадра недалеко от эталонной. Портретный телефон
+  // при постоянной площади вытягивал кадр в щель по ширине (см. CONFIG.camera):
+  // площадь та же, а фланг вдвое ближе. Поэтому пропорции зажимаются в
+  // aspectCap раз от эталонных, и зум считается по той стороне, которой при
+  // этом не хватает.
+  const cap=CONFIG.camera.aspectCap||1e9, refAspect=refW/refH;
+  const aspect=Math.min(refAspect*cap,Math.max(refAspect/cap,w/h));
+  // Кадр эталонной площади нужной формы. Пока пропорции окна внутри
+  // потолка, aspect равен w/h — и обе стороны дают ровно один и тот же зум,
+  // то есть на обычном экране ничего не меняется.
+  const viewW=Math.sqrt(refArea*aspect), viewH=refArea/viewW;
   const zoom=Math.min(CONFIG.camera.maxZoom,
-             Math.max(CONFIG.camera.minZoom,Math.sqrt(w*h/refArea)));
+             Math.max(CONFIG.camera.minZoom,Math.min(w/viewW,h/viewH)));
+  // Насколько кадр вышел больше эталонного, считает не здесь, а SpawnSystem
+  // по самой камере (`areaScale`): у неё камера уже есть, и после поворота
+  // телефона число обязано быть свежим без единого лишнего присваивания.
   return {w,h,zoom};
 }
 
@@ -139,6 +154,12 @@ const LEVELUP_FRAMES=32;
 // доигрывает только анимация смерти: раньше экран появлялся в тот же кадр,
 // когда HP уходило в ноль, и нарисованную смерть никто ни разу не видел.
 let dying=0;
+// Смена биома: какой показан сейчас и какой ждёт объявления. Ждать приходится
+// потому, что надпись под таймером одна на всех, а правило стычки важнее
+// (см. checkBiome).
+let biomeShown=null, biomePending=null;
+let bannerBusy=0;               // секунд, пока надпись под таймером занята
+const BANNER_TIME=2.5;          // столько живёт анимация push-banner в CSS
 
 function init(){
   // Персонаж берётся из меты в момент создания игрока, а не запоминается
@@ -155,6 +176,9 @@ function init(){
   camera.centerOn(player);
   enemies=[]; projectiles=[]; loot.reset(); particles.reset(); battle.reset();
   runTime=0; levelUpDelay=0; dying=0;
+  // Биом сбрасывается вместе с забегом: без этого рестарт из костяной гнили
+  // объявлял бы «МШИСТАЯ НИЗИНА» на первой же секунде нового забега.
+  biomeShown=map.biome(0); biomePending=null; bannerBusy=0;
   spawnSystem=new SpawnSystem(camera);
   shop.reset(); shopDue=false; nextShopAt=CONFIG.shop.every;
   gameOver=false; paused=false; waitingForUpgrade=false;
@@ -235,6 +259,8 @@ function update(dt){
     announcePush(spawnEvent.mod);
   }
 
+  checkBiome(dt);
+
   // МУЗЫКА ПО СОСТОЯНИЮ, а не по событию. Босса можно не только выпустить, но
   // и добить, и пережить его появление на паузе, и увидеть второго до смерти
   // первого — переключать трек «на выход босса» значило бы ловить все эти
@@ -277,17 +303,48 @@ function beginDeath(){
   particles.emit(player.x,player.y,"#6b2d5c",30,1,5);
 }
 
-// ПРАВИЛО СТЫЧКИ ОБЪЯВЛЕНО. Надпись перезапускается принудительно: без снятия
-// класса анимация не проигрывается второй раз, и второе правило подряд
-// прошло бы молча — то есть ровно тот случай, ради которого объявление и есть.
+// ПРАВИЛО СТЫЧКИ ОБЪЯВЛЕНО: оно меняет то, что убивает, поэтому со звуком и
+// толчком камеры — в отличие от смены биома, которая меняет только вид.
 function announcePush(mod){
+  showBanner(mod.name);
+  audio.sfx("wave");
+  camera.shake(CONFIG.feel.shakeLevel,8);
+}
+
+// СМЕНА БИОМА. Земля, цвет темноты и цвет света меняются разом
+// (CONFIG.map.biomes), но всё это — фон, и человек, занятый толпой, замечает
+// его не сразу. Название говорит прямо: место сменилось.
+//
+// Правило стычки при этом ВСЕГДА важнее: оно меняет то, что убивает, а биом —
+// то, как выглядит. Поэтому объявление биома не перебивает надпись, а ждёт
+// своей очереди (bannerBusy) — две надписи в одной точке экрана иначе
+// затирают друг друга, и обе проходят молча.
+function checkBiome(dt){
+  if(bannerBusy>0) bannerBusy-=dt;
+  const b=map.biome(runTime);
+  if(b!==biomeShown){
+    // Первый биом забега не объявляется: он не сменился, он просто есть.
+    if(biomeShown) biomePending=b;
+    biomeShown=b;
+  }
+  if(biomePending&&bannerBusy<=0){
+    showBanner(biomePending.name||"");
+    audio.sfx("wave",0.5);
+    biomePending=null;
+  }
+}
+
+// Надпись под таймером. Класс снимается и вешается заново намеренно: без
+// этого CSS-анимация не проигрывается второй раз, и второе объявление
+// подряд прошло бы молча — то есть ровно тот случай, ради которого
+// объявление и заведено.
+function showBanner(text){
   const el=document.getElementById("pushBanner");
-  el.firstElementChild.textContent=mod.name;
+  el.firstElementChild.textContent=text;
   el.classList.add("hidden");
   void el.offsetWidth;              // перезапуск анимации
   el.classList.remove("hidden");
-  audio.sfx("wave");
-  camera.shake(CONFIG.feel.shakeLevel,8);
+  bannerBusy=BANNER_TIME;
 }
 
 // ПОЛУЧЕН УРОВЕНЬ.
