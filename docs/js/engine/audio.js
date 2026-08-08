@@ -175,12 +175,13 @@ export class AudioManager {
   //
   // У трека без своего файла берётся файл забега. Это не лень: переход от
   // записанной музыки к синтезированному арпеджио в момент выхода босса
-  // звучит как поломка, а не как смена темы. Пока боссового трека нет, честнее
-  // не менять музыку вовсе — выход босса и без неё объявлен рёвом, тряской,
-  // именем и полосой здоровья.
+  // звучит как поломка, а не как смена темы. Своего файла нет — играет файл
+  // забега, и выход босса объявлен рёвом, тряской, именем и полосой здоровья.
   applyMusic(){
     const name=this.wanted;
-    if(!name){ this.stopMusicLoop(); this.stopMusic(); this.onSynth=false; return; }
+    // Тишина — это конец забега или меню, и следующий забег обязан начать
+    // тему сначала: только здесь трек перематывается в ноль.
+    if(!name){ this.stopMusicLoop(); this.stopMusic(true); this.onSynth=false; return; }
     // Откат идёт по ЗАГРУЖЕННОСТИ файла, а не по наличию имени в таблице.
     // MUSIC_FILES.boss существует всегда, файла под ним может не быть — и
     // проверка «есть ли имя» пропускала боссовый трек в синтез.
@@ -189,6 +190,12 @@ export class AudioManager {
     if(this.loader?.getSound(key)){
       this.stopMusicLoop();
       this.onSynth=false;
+      // track ставится и здесь, а не только в синтезе. Это отладочный
+      // указатель («что играет сейчас»), и с одним треком он врал безобидно:
+      // при играющем ФАЙЛЕ он оставался null, то есть выглядел как тишина.
+      // Проверить музыку иначе нельзя — звукового устройства у headless-
+      // браузера нет, — и указатель, который врёт, хуже отсутствующего.
+      this.track=name;
       this.playMusic(key);
       return;
     }
@@ -326,7 +333,23 @@ export class AudioManager {
     const audio=this.loader.getSound(key); if(!audio||this.currentMusic===audio) return;
     this.stopMusic(); audio.loop=loop; audio.volume=this.muted?0:this.musicVolume; audio.play().catch(()=>{}); this.currentMusic=audio;
   }
-  stopMusic(){ if(this.currentMusic){ this.currentMusic.pause(); this.currentMusic.currentTime=0; this.currentMusic=null; } }
+
+  // ПЕРЕКЛЮЧЕНИЕ ТРЕКА НЕ ПЕРЕМАТЫВАЕТ ЕГО В НАЧАЛО. Пока трек был один, это
+  // ничего не значило; со вторым — значит вот что: босс выходит раз в 165
+  // секунд, и тема забега начиналась бы заново после каждого. Восьмиминутный
+  // трек в таком забеге никогда не добрался бы дальше третьей минуты, то есть
+  // пять минут написанной музыки не услышал бы ни один игрок. То же и с
+  // боссовым: его добивают за полминуты, и без памяти о месте второй и третий
+  // босс играли бы ровно то же вступление.
+  //
+  // reset=true оставлен для конца забега: НОВЫЙ забег обязан начинаться с
+  // начала темы, иначе первый же рестарт стартует с середины.
+  stopMusic(reset=false){
+    if(!this.currentMusic) return;
+    this.currentMusic.pause();
+    if(reset) this.currentMusic.currentTime=0;
+    this.currentMusic=null;
+  }
   playSfx(key){
     if(this.muted) return;
     const audio=this.loader.getSound(key);
