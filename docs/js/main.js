@@ -18,6 +18,7 @@ import { LootSystem } from "./systems/lootSystem.js";
 import { ShopSystem } from "./systems/shopSystem.js";
 import { RecordSystem } from "./systems/recordSystem.js";
 import { MetaSystem } from "./systems/metaSystem.js";
+import { SettingsSystem } from "./systems/settingsSystem.js";
 
 const canvas=document.getElementById("gameCanvas");
 
@@ -80,6 +81,9 @@ const map=new MapSystem();
 const shop=new ShopSystem(audio);
 const records=new RecordSystem();
 const meta=new MetaSystem();
+// Громкости читаются из localStorage и применяются к звуку сразу при запуске:
+// игрок, убавивший эффекты в прошлый раз, не должен слышать их снова
+const settings=new SettingsSystem(audio);
 
 input.onMutePress=()=>audio.toggleMute();
 input.onRestartPress=()=>{ if(started&&gameOver) init(); };
@@ -104,6 +108,29 @@ function togglePause(force){
   if(next===paused) return;
   paused=next;
   document.getElementById("pauseBtn").classList.toggle("paused",paused);
+  // Пауза БЫЛА пустым экраном с надписью — а это ровно тот момент, когда
+  // игрок хочет что-нибудь подкрутить. Панель звука открывается вместе с
+  // паузой и закрывается вместе с ней: отдельная кнопка «настройки» посреди
+  // боя была бы ещё одним элементом, который надо найти.
+  showSettings(paused);
+}
+
+// ПАНЕЛЬ ЗВУКА. Одна на два места: её открывает кнопка со стартового экрана
+// и она же появляется на паузе. Своего состояния у неё нет — она только
+// показывает то, что уже лежит в SettingsSystem.
+function showSettings(on){
+  document.getElementById("settingsPanel").classList.toggle("hidden",!on);
+  if(on) syncSettings();
+}
+
+function syncSettings(){
+  for(const [kind,el,val] of SLIDERS){
+    const pct=Math.round(settings.values[kind]*100);
+    el.value=pct; val.textContent=pct;
+    // Ноль — это выключено, и это должно читаться, а не вычисляться по
+    // положению ручки
+    el.closest(".vol-row").classList.toggle("off",pct===0);
+  }
 }
 
 // ВКЛАДКУ СВЕРНУЛИ — ЗАБЕГ НА ПАУЗЕ. На телефоне это не редкость, а обычное
@@ -724,6 +751,9 @@ if(new URLSearchParams(location.search).has("debug")){
 // до нажатия «Играть» прячем — показывать шкалы поверх названия незачем.
 function startRun(){
   document.getElementById("startScreen").classList.add("hidden");
+  // Панель звука могла остаться открытой со стартового экрана: в бою она
+  // висела бы поверх кадра, ничего при этом не останавливая
+  showSettings(false);
   started=true; init();
   // Музыку просим отсюда нарочно: это то самое нажатие, которым браузер
   // разрешает создать звук. Раньше просьбы не было бы слышно вообще.
@@ -793,6 +823,32 @@ function showMeta(){
 showBest(); showMeta();
 
 document.getElementById("playBtn").onclick=startRun;
+// ПОЛЗУНКИ ГРОМКОСТИ. Пара «ползунок — цифра» на каждую громкость; сам список
+// собран здесь, чтобы syncSettings и обработчик ходили по одному и тому же.
+const SLIDERS=[
+  ["music",document.getElementById("volMusic"),document.getElementById("volMusicVal")],
+  ["sfx",  document.getElementById("volSfx"),  document.getElementById("volSfxVal")]
+];
+for(const [kind,el,val] of SLIDERS){
+  // input, а не change: громкость обязана меняться ПОКА тянешь. Ползунок,
+  // который слышно только после отпускания, невозможно настроить на слух.
+  el.addEventListener("input",()=>{
+    const pct=Number(el.value)||0;
+    settings.set(kind,pct/100);
+    val.textContent=pct;
+    el.closest(".vol-row").classList.toggle("off",pct===0);
+    // Эффекты проверяются на слух тем же звуком, которым игрок и недоволен:
+    // подвинул ползунок — сразу слышно, насколько тише стало.
+    if(kind==="sfx"&&pct>0) audio.sfx("shoot");
+  });
+}
+document.getElementById("settingsClose").onclick=()=>{
+  // С паузы панель закрывается вместе с самой паузой: закрыть её отдельно и
+  // остаться в замершем мире значило бы получить второй, невидимый способ
+  // стоять на месте.
+  if(paused) togglePause(false); else showSettings(false);
+};
+document.getElementById("soundBtn").onclick=()=>showSettings(true);
 // Та же трата с пальца. Подсказку «ПРОБЕЛ» на сенсорном экране прячем: клавиши
 // там нет, а подпись к несуществующей кнопке — то же ложное обещание.
 if(input.isMobile) document.body.classList.add("touch");

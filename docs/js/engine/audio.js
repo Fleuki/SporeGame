@@ -448,6 +448,22 @@ export class AudioManager {
     if(!audio){ this.sfx(key); return; }   // файла нет — играем синтезом
     const clone=audio.cloneNode(); clone.volume=this.sfxVolume; clone.play().catch(()=>{});
   }
+  // ГРОМКОСТЬ ИЗВНЕ. Числа больше не принадлежат этому классу: их хранит и
+  // помнит SettingsSystem, а здесь остаётся только применение.
+  //
+  // Музыка правится в двух местах сразу, и это не дублирование: играть может
+  // либо файл (<audio>.volume), либо синтез (musicGain) — какой именно, знает
+  // applyMusic, а ползунку до этого дела быть не должно.
+  setVolumes(music,sfx){
+    if(typeof music==="number") this.musicVolume=Math.min(1,Math.max(0,music));
+    if(typeof sfx==="number") this.sfxVolume=Math.min(1,Math.max(0,sfx));
+    if(this.currentMusic) this.currentMusic.volume=this.muted?0:this.musicVolume;
+    if(this.musicGain&&this.ctx){
+      // setTargetAtTime, а не присваивание: скачок громкости слышен щелчком
+      this.musicGain.gain.setTargetAtTime(this.muted?0:this.musicVolume,this.ctx.currentTime,0.05);
+    }
+  }
+
   toggleMute(){
     this.muted=!this.muted;
     if(this.currentMusic) this.currentMusic.volume=this.muted?0:this.musicVolume;

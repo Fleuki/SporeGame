@@ -526,6 +526,61 @@ body.touch .key { display: none; }
 #gameOverScreen .big-btn { margin-top: 18px; }
 .btn-row { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
 
+/* НАСТРОЙКИ ЗВУКА. Панель повторяет крой меню прокачки — та же резная рамка,
+   тот же тёмный фон: это второе окно, которое останавливает игру, и городить
+   для него отдельный язык значило бы учить игрока дважды. */
+#settingsPanel {
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%,-50%);
+  width: max-content; max-width: 92vw;
+  background: rgba(8,16,12,0.96);
+  border: 34px solid transparent;
+  border-image: url("../assets/images/ui/frame_panel.png") 64 round;
+  border-radius: 0;
+  padding: 4px 18px 16px;
+  text-align: center;
+  pointer-events: auto;
+  /* Выше стартового экрана (300): панель открывается и с него тоже,
+     а не только с паузы, где ей хватило бы сотни */
+  z-index: 320;
+}
+#settingsPanel h2 {
+  color: #00d4aa; margin-bottom: 18px;
+  text-shadow: 0 0 10px rgba(0,212,170,0.6);
+}
+.vol-row {
+  display: flex; align-items: center; gap: 12px;
+  margin: 0 0 14px; font-size: 15px; color: #cbb3ff;
+}
+.vol-name { width: 92px; text-align: left; }
+/* Цифра моноширинной ширины: без неё строка дёргается на каждом шаге
+   ползунка, потому что «7» и «100» занимают разное место */
+.vol-val { width: 34px; text-align: right; color: #7dffca; }
+
+/* ПОЛЗУНОК. Системный вид приходится снимать целиком: он скруглённый,
+   градиентный и с тенью — то есть ровно то, что в этом интерфейсе выключено
+   везде. Дорожка и ручка собраны прямоугольниками, как всё остальное. */
+.vol-row input[type="range"] {
+  -webkit-appearance: none; appearance: none;
+  width: 190px; height: 14px;
+  background: #16241d;
+  border: 2px solid #2d6b58; border-radius: 0;
+  cursor: pointer; pointer-events: auto;
+}
+.vol-row input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 14px; height: 22px;
+  background: #00d4aa; border: 2px solid #7dffca; border-radius: 0;
+  box-shadow: 0 0 8px rgba(0,212,170,0.5);
+}
+.vol-row input[type="range"]::-moz-range-thumb {
+  width: 14px; height: 22px;
+  background: #00d4aa; border: 2px solid #7dffca; border-radius: 0;
+}
+/* Ноль — это выключено, и это должно быть видно, а не вычисляться по
+   положению ручки */
+.vol-row.off .vol-name, .vol-row.off .vol-val { opacity: 0.45; }
+
 /* ЛАВКА. Панель и карточки повторяют меню прокачки нарочно: это одно и то же
    действие — «игра встала, выбирай», — и два разных оформления заставляли бы
    разбираться заново там, где всё уже знакомо. Отличают лавку три вещи:
