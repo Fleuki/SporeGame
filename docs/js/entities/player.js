@@ -73,6 +73,9 @@ export class Player extends Entity {
     // Прибавка к радиусу притяжения лута от карточек «Магнит мицелия»
     this.lootRadius=0;
     this.regen=0; this.xpMult=1;
+    // Кадры, оставшиеся до возобновления регенерации. Ставится в takeDamage,
+    // тикает в update: реген работает только вне боя (см. update).
+    this.regenLock=0;
     // Мутации ускоряют заражение через свой множитель, а не правкой CONFIG:
     // глобальный конфиг живёт дольше забега, и правки в нём переносились
     // в следующие партии.
@@ -159,7 +162,24 @@ export class Player extends Entity {
 
     // Щит копит заряд, пока его нет
     if(this.hasShield&&!this.shieldActive&&--this.shieldCd<=0) this.shieldActive=true;
-    if(this.regen>0 && this.hp<this.maxHp && this.life%60===0) this.hp+=this.regen;
+    // РЕГЕНЕРАЦИЯ ИДЁТ, ТОЛЬКО ПОКА В ТЕБЯ НЕ ПОПАДАЮТ.
+    //
+    // Живая игра: «можно танчить просто, вилять от врагов смысла нет». Замер
+    // подтвердил дословно — неподвижный игрок с прокачанным лечением на
+    // четвёртой-восьмой минуте в ПЛЮСЕ по здоровью (+2.6, +3.0, +5.6 HP в
+    // секунду). Виноват был не размер регена, а то, что он капал В БОЮ: 8
+    // HP/сек — это больше, чем берёт с игрока середина забега, и стоять в
+    // толпе становилось выгоднее, чем уходить от неё.
+    //
+    // Теперь удар обнуляет отсчёт (`regenLock` в takeDamage), и лечение
+    // начинается только через regenDelay кадров после последнего попадания.
+    // Смысл механики от этого не меняется, а меняется, КОГДА она работает:
+    // реген — это «отдышаться, оторвавшись от толпы», а не «стоять в толпе».
+    // Кайтинг он по-прежнему вознаграждает, причём теперь по-настоящему:
+    // оторвался — лечишься, стоишь — нет.
+    if(this.regenLock>0) this.regenLock--;
+    if(this.regen>0 && this.hp<this.maxHp && this.regenLock<=0 && this.life%60===0)
+      this.hp=Math.min(this.maxHp,this.hp+this.regen);
 
     // Заражение растёт само по себе — в этом весь смысл механики: споры
     // копятся всегда, а сбить их можно только антидотом.
@@ -263,6 +283,10 @@ export class Player extends Entity {
       this.onHurt?.(0,"secondWind");
     }
     this.sporeLevel=Math.min(CONFIG.sporeSystem.maxSpore,this.sporeLevel+CONFIG.player.sporeGrowthOnHit);
+    // Попали — регенерация замолкает на regenDelay кадров. Считается ОТ
+    // КАЖДОГО удара, включая урон по времени от луж: стоять в кислоте и
+    // лечиться было бы тем же танкованием, только в другой позе.
+    this.regenLock=CONFIG.player.regenDelay;
     if(!ignoreIFrames){ this.iframes=CONFIG.player.contactIFrames; this.hurtFlash=12; }
     this.onHurt?.(a,"hit");
     return true;

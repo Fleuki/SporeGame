@@ -17,7 +17,9 @@
 //   gain   — громкость
 //   seq    — вместо f0/f1: последовательность нот с шагом step (арпеджио)
 const RECIPES = {
-  shoot:   { type:"square",   f0:440,  f1:170,  dur:0.07, gain:0.05 },
+  // Выстрел тише остальных нарочно: он звучит чаще всех вместе взятых,
+  // и на прежних 0.05 три ствола перекрикивали и попадания, и музыку
+  shoot:   { type:"square",   f0:440,  f1:170,  dur:0.07, gain:0.032 },
   hit:     { type:"square",   f0:820,  f1:380,  dur:0.05, gain:0.04 },
   crit:    { type:"square",   f0:1500, f1:620,  dur:0.10, gain:0.08 },
   kill:    { noise:true,      f0:1600, f1:180,  dur:0.16, gain:0.11 },
@@ -43,6 +45,21 @@ const RECIPES = {
 // Минимальный зазор между двумя одинаковыми звуками. Без него три ствола и
 // десяток попаданий за кадр сливаются в треск.
 const THROTTLE = 0.035;
+
+// ...но одного зазора на всех мало, и это выяснилось живой игрой: «звуки
+// выстрелов просто каждую секунду вылетают на прокаченном персонаже, музыку
+// не слышно». Так и есть — к десятой минуте три ствола с прокачанной
+// скорострельностью стреляют почти каждый кадр, и выстрел, пролезающий раз в
+// 35 миллисекунд, превращается в сплошной треск поверх всего остального.
+//
+// Зазор поэтому свой у каждого звука. Логика простая: чем чаще событие, тем
+// длиннее зазор — событие, которое случается тридцать раз в секунду, не
+// сообщает ничего и обязано звучать как фон, а не как реплика.
+const THROTTLES = {
+  shoot: 0.16,   // выстрел: реплика превращается в ритм, а не в очередь
+  hit:   0.09,   // попадание: их столько же, сколько выстрелов
+  kill:  0.07    // смерть врага — событие поважнее, но в толпе их десятки
+};
 
 // === МУЗЫКА ============================================================
 //
@@ -111,7 +128,9 @@ function noteHz(root,step){
 
 export class AudioManager {
   constructor(loader){
-    this.loader=loader; this.musicVolume=0.4; this.sfxVolume=0.6;
+    // Музыка громче прежнего (0.4), эффекты тише (0.6): при трёх стволах
+    // эффекты забивали трек целиком, и «музыки не слышно» было правдой
+    this.loader=loader; this.musicVolume=0.52; this.sfxVolume=0.5;
     this.currentMusic=null; this.muted=false;
     this.ctx=null; this.master=null; this.noise=null;
     this.lastAt=new Map();
@@ -306,7 +325,7 @@ export class AudioManager {
     const r=RECIPES[name]; if(!r) return;
     const ctx=this.ctx; if(!ctx||ctx.state!=="running") return;
     const now=ctx.currentTime;
-    if(now-(this.lastAt.get(name)??-1)<THROTTLE) return;
+    if(now-(this.lastAt.get(name)??-1)<(THROTTLES[name]??THROTTLE)) return;
     this.lastAt.set(name,now);
     const g=r.gain*this.sfxVolume*volume;
     if(r.seq) r.seq.forEach((f,i)=>this.blip(now+i*r.step,r,f,null,g));
