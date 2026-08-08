@@ -36,9 +36,15 @@ html, body {
   display: flex;
   justify-content: center;
   align-items: center;
+  /* 100vh на телефоне врёт: браузер считает его по экрану БЕЗ своих панелей,
+     и нижняя полоса опыта уезжает под адресную строку. dvh считает по тому,
+     что видно сейчас, и переезжает вместе с панелями. Строка с vh оставлена
+     первой — это запасной вариант для браузеров, которые dvh не знают. */
   height: 100vh;
+  height: 100dvh;
   width: 100vw;
   overflow: hidden;
+  overscroll-behavior: none;   /* потянул пальцем вниз — не перезагружать страницу */
   font-family: "Pixelify Sans", "Courier New", monospace;
   touch-action: none; /* отключаем зум на телефоне */
   -webkit-user-select: none;
@@ -113,7 +119,10 @@ canvas {
    (окно 60..1238 из 1276 пикселей) — менять их надо вместе с картинками.
    Их читает syncHud() в main.js. */
 #vitals {
-  position: absolute; left: 12px; bottom: 20px;
+  /* Отступ снизу считается не «на глаз»: под шкалами лежит полоса опыта во
+     всю ширину, а теперь ещё и подпись под шкалой спор. При прежних 20px
+     подпись садилась полосе опыта на голову. */
+  position: absolute; left: 12px; bottom: 30px;
   display: flex; flex-direction: column; gap: 2px;
 }
 .orn-bar {
@@ -138,6 +147,26 @@ canvas {
 #hpBar { filter: drop-shadow(0 0 6px rgba(255,60,70,0.35)); }
 /* Мало HP или высокое заражение — шкала пульсирует. Подписей и цифр нет,
    поэтому тревога передаётся движением. */
+/* НАСЕЧКА НА ЦЕНЕ ВЫБРОСА. Стоит внутри окна шкалы (--win-a..--win-b), а не
+   на всей картинке: наросты рамки заходят внутрь кадра, и метка «30%»,
+   отмеренная от края файла, показала бы не то место. Позицию считает
+   syncHud и кладёт в --notch. */
+.notch {
+  position: absolute; top: 6px; bottom: 6px;
+  left: calc((var(--win-a) + (var(--win-b) - var(--win-a)) * var(--notch,0.3)) * 1%);
+  width: 2px; background: rgba(230,215,255,0.75);
+  box-shadow: 0 0 5px rgba(190,140,255,0.9);
+  pointer-events: none;
+}
+/* ПОДПИСЬ ПОД ШКАЛОЙ СПОР. Мелкая нарочно: она объясняет механику, а не
+   сообщает событие, и спорить со шкалами за внимание не должна. */
+.vital-note {
+  font-size: 11px; letter-spacing: 1px;
+  color: #b79ae0; opacity: 0.85;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.95);
+  padding-left: 3px; margin-top: 1px;
+}
+.vital-note.hot { color: #ff9a6b; }
 .vital.critical { animation: bar-alarm 0.7s ease-in-out infinite; }
 @keyframes bar-alarm {
   0%, 100% { filter: none; }
@@ -196,7 +225,23 @@ canvas {
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
 }
+#burstBtn { position: absolute; overflow: hidden; }
+#burstBtn img, #burstBtn .key { position: relative; z-index: 1; }
 #burstBtn img { width: 34px; height: 34px; image-rendering: pixelated; }
+/* ЗАРЯД: заливка снизу вверх на долю накопленного из цены выброса. Кнопка,
+   которая просто гаснет, отвечает «нельзя», но не отвечает «сколько ещё» —
+   а заражение подходит к цене и откатывается назад по нескольку раз за
+   забег (антидот сбивает шкалу мгновенно). Снаружи это выглядело как
+   кнопка, которая сама решает, работать ей или нет. */
+#burstBtn .charge {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 0;
+  height: calc(var(--charge,0) * 100%);
+  background: linear-gradient(rgba(138,61,255,0.55), rgba(138,61,255,0.22));
+  transition: height 0.18s linear;
+  pointer-events: none;
+}
+/* Готовая кнопка заливается целиком — это и есть «можно» */
+#burstBtn:not(.dim) .charge { background: rgba(138,61,255,0.42); }
 /* Готов — светится и мерцает: заряженный ресурс обязан проситься в дело */
 #burstBtn:not(.dim) { box-shadow: 0 0 12px rgba(138,61,255,0.55); }
 #burstBtn:not(.dim) img { animation: burst-ready 1.4s ease-in-out infinite; }
@@ -211,6 +256,36 @@ canvas {
 /* Клавиатурная подсказка на сенсорном экране — обман: клавиши там нет.
    Тот же класс носит слово «Пробел» в подсказке стартового экрана. */
 body.touch .key { display: none; }
+
+/* ПАУЗА. Правый верхний угол — единственный свободный: таймер по центру
+   сверху, кошелёк и шкалы снизу слева, выброс снизу справа.
+   Мелкая нарочно: это кнопка «мне надо отойти», а не боевое действие, и
+   спорить с выбросом за внимание она не должна. Значок — два прямоугольника
+   на псевдоэлементах: ставить сюда картинку значило бы завести файл и
+   загрузку ради двух заливок. */
+#pauseBtn {
+  position: absolute; top: 10px; right: 12px;
+  pointer-events: auto;
+  display: flex; align-items: center; justify-content: center; gap: 4px;
+  width: 38px; height: 34px;
+  background: rgba(6,9,11,0.72);
+  border: 2px solid #2f6b57;
+  cursor: url("../assets/images/ui/cursor.png") 27 32, pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+#pauseBtn i { width: 5px; height: 15px; background: #7fd8bd; display: block; }
+#pauseBtn:hover { border-color: #4fd0a8; }
+/* На паузе значок становится «играть»: тот же прибор обязан показывать, что
+   он сделает по нажатию, иначе кнопка паузы на паузе читается как «ещё
+   больше паузы». Треугольник собран из тех же двух полосок скосом. */
+#pauseBtn.paused i:first-child {
+  width: 0; height: 0; background: none;
+  border-left: 13px solid #7fd8bd;
+  border-top: 8px solid transparent;
+  border-bottom: 8px solid transparent;
+}
+#pauseBtn.paused i:last-child { display: none; }
 
 /* ОПЫТ — тонкая полоса во всю ширину кадра у нижнего края.
    Текстурную шкалу здесь намеренно не используем: её ширина зависит от
@@ -595,7 +670,7 @@ body.touch .key { display: none; }
   #ui { font-size: 12px; }
   #timer { font-size: 22px; top: 6px; }
   #timer .icon { width: 16px; height: 16px; }
-  #vitals { left: 6px; bottom: 16px; }
+  #vitals { left: 6px; bottom: 26px; }
   /* Шкалы здесь по 28 пикселей — кошелёк садится ниже, но по-прежнему над ними */
   #purse { left: 8px; bottom: 78px; font-size: 13px; }
   .shop-card { width: 150px; padding: 9px 9px 10px; }

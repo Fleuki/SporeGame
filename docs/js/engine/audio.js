@@ -127,9 +127,13 @@ export class AudioManager {
     this.onSynth=false;
     // Браузер не даёт создать звук до действия пользователя — включаемся на
     // первом же нажатии и больше не слушаем.
+    // Слушаем ВСЕ жесты, а не только первый. Первого хватало, пока музыка
+    // была синтезом: контекст, однажды разбуженный, не засыпал. Телефон его
+    // усыпляет — при сворачивании вкладки, звонке, блокировке экрана, — и
+    // единственное место, где его разрешено будить обратно, это жест.
     const wake=()=>{ this.unlock(); };
     for(const ev of ["pointerdown","keydown","touchstart"]){
-      window.addEventListener(ev,wake,{once:true,passive:true});
+      window.addEventListener(ev,wake,{passive:true});
     }
   }
 
@@ -155,6 +159,14 @@ export class AudioManager {
     // Просьба сыграть трек могла прийти раньше, чем появился контекст —
     // например, из того же нажатия «Играть», которое его и разбудило
     if(this.wanted&&!this.musicTimer&&!this.currentMusic) this.applyMusic();
+    // Трек мог начаться до того, как появился контекст (тогда он играет мимо
+    // него и на телефоне попадает под переключатель «без звука»), а мог быть
+    // отклонён автоплеем. Оба случая чинятся здесь, потому что unlock зовётся
+    // из жеста пользователя — единственного места, где браузер это разрешает.
+    if(this.currentMusic){
+      this.routeThroughContext(this.currentMusic);
+      if(this.currentMusic.paused) this.tryPlay(this.currentMusic);
+    }
     return this.ctx;
   }
 
@@ -329,9 +341,70 @@ export class AudioManager {
   }
 
   // --- файлы (на случай, если появятся треки) --------------------------
+  // ФАЙЛ ИГРАЕТ ЧЕРЕЗ WEB AUDIO, А НЕ САМ ПО СЕБЕ.
+  //
+  // На iPhone боковой переключатель «без звука» глушит <audio> целиком, а
+  // звук из AudioContext через него проходит. Игра на телефоне из-за этого
+  // выглядела так: эффекты (они синтезируются) слышно, музыки (она файл) нет
+  // вовсе, и при этом ничего не сломано — ни ошибки, ни предупреждения.
+  // Пропустив элемент через контекст, мы кладём музыку в тот же тракт, что и
+  // эффекты: одна дорога — одна судьба.
+  //
+  // Источник у элемента создаётся РОВНО ОДИН РАЗ (второй вызов бросает
+  // исключение), поэтому он запоминается на самом элементе.
+  routeThroughContext(el){
+    const ctx=this.ctx;
+    if(!ctx||el._routed) return;
+    try{
+      const src=ctx.createMediaElementSource(el);
+      if(!this.fileGain){
+        this.fileGain=ctx.createGain();
+        this.fileGain.gain.value=1;
+        this.fileGain.connect(this.master);   // «M» гасит и музыку тоже
+      }
+      src.connect(this.fileGain);
+      el._routed=true;
+    }catch(e){ /* не вышло — элемент играет сам, как раньше */ }
+  }
+
   playMusic(key,loop=true){
     const audio=this.loader.getSound(key); if(!audio||this.currentMusic===audio) return;
-    this.stopMusic(); audio.loop=loop; audio.volume=this.muted?0:this.musicVolume; audio.play().catch(()=>{}); this.currentMusic=audio;
+    this.stopMusic();
+    audio.loop=loop;
+    audio.playsInline=true;
+    this.routeThroughContext(audio);
+    audio.volume=this.muted?0:this.musicVolume;
+    this.currentMusic=audio;
+    this.tryPlay(audio);
+  }
+
+  // Браузер имеет право ОТКАЗАТЬ в воспроизведении, и отказ приходит
+  // отклонённым промисом, а не исключением. Раньше он молча проглатывался —
+  // и был случай, когда это означало тишину до конца вкладки: файл на 3.8 МБ
+  // догружается уже ПОСЛЕ нажатия «Играть», просьба сыграть приходит из
+  // игрового цикла, то есть вне жеста пользователя, и Safari её отклоняет.
+  // Поэтому отказ запоминается и повторяется на ближайшем касании — там он
+  // снова внутри жеста и проходит.
+  tryPlay(el){
+    const pr=el.play();
+    if(!pr||!pr.catch) return;
+    pr.catch(()=>{ this.needsGesture=true; this.armRetry(); });
+  }
+
+  armRetry(){
+    if(this._retryArmed) return;
+    this._retryArmed=true;
+    const retry=()=>{
+      this.unlock();
+      const el=this.currentMusic;
+      if(el&&el.paused){ const pr=el.play(); if(pr&&pr.catch) pr.catch(()=>{}); }
+      if(!el||!el.paused){
+        this.needsGesture=false;
+        for(const ev of ["pointerdown","touchend","keydown"]) window.removeEventListener(ev,retry);
+        this._retryArmed=false;
+      }
+    };
+    for(const ev of ["pointerdown","touchend","keydown"]) window.addEventListener(ev,retry,{passive:true});
   }
 
   // ПЕРЕКЛЮЧЕНИЕ ТРЕКА НЕ ПЕРЕМАТЫВАЕТ ЕГО В НАЧАЛО. Пока трек был один, это

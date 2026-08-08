@@ -88,8 +88,35 @@ input.onRestartPress=()=>{ if(started&&gameOver) init(); };
 // карточку всё равно придётся.
 // Лавку, как и меню прокачки, нельзя закрыть паузой: это была бы бесплатная
 // отмена. Уйти с прилавка можно только кнопкой «В БОЙ».
-input.onPausePress=()=>{ if(!gameOver&&!waitingForUpgrade&&!shop.isOpen) paused=!paused; };
+input.onPausePress=()=>togglePause();
 input.onBurstPress=()=>tryBurst();
+
+// ПАУЗА одним местом на две двери: Escape и кнопка в углу. На телефоне
+// клавиши нет, и до кнопки забег там нельзя было прервать ничем, кроме
+// перезагрузки страницы.
+//
+// force задаёт состояние вместо переключения — им пользуется уход со
+// вкладки: свернувшийся браузер обязан ставить игру на паузу, а не снимать
+// её, если она уже стояла.
+function togglePause(force){
+  if(!started||gameOver||waitingForUpgrade||shop.isOpen||dying>0) return;
+  const next=force===undefined?!paused:force;
+  if(next===paused) return;
+  paused=next;
+  document.getElementById("pauseBtn").classList.toggle("paused",paused);
+}
+
+// ВКЛАДКУ СВЕРНУЛИ — ЗАБЕГ НА ПАУЗЕ. На телефоне это не редкость, а обычное
+// дело: пришло сообщение, позвонили, погас экран. Кадры при этом не идут
+// (браузер не зовёт requestAnimationFrame), то есть мир и так стоит, — но
+// возвращается игрок в НЕОСТАНОВЛЕННЫЙ бой, посреди толпы, которая уже
+// вплотную. Пауза даёт ту секунду, за которую он успевает понять, где он.
+//
+// Снимать паузу при возвращении НЕЛЬЗЯ: снимает её игрок, когда готов.
+document.addEventListener("visibilitychange",()=>{
+  if(document.hidden) togglePause(true);
+});
+window.addEventListener("blur",()=>togglePause(true));
 
 // Ушли с прилавка — мир снова идёт. Отдельным колбэком, потому что закрыть
 // лавку может и кнопка «В БОЙ», и опустевший ассортимент.
@@ -182,6 +209,9 @@ function init(){
   spawnSystem=new SpawnSystem(camera);
   shop.reset(); shopDue=false; nextShopAt=CONFIG.shop.every;
   gameOver=false; paused=false; waitingForUpgrade=false;
+  // Значок паузы обязан вернуться в исходное вместе с забегом: игрок мог
+  // умереть на паузе, и следующий забег начался бы с кнопкой «играть».
+  document.getElementById("pauseBtn").classList.remove("paused");
   document.getElementById("gameOverScreen").classList.add("hidden");
   // HUD показываем только в начатом забеге. init() зовётся и до старта — мир
   // нужен нарисованным за стартовым экраном, — но шкалы поверх названия там не
@@ -424,7 +454,7 @@ function formatTime(sec){
 // никто не читает, а цвет и длина шкалы читаются мгновенно.
 const HUD={};
 for(const id of ["xpBar","levelDisplay","timeDisplay","hpBar","sporeBar","burstBtn",
-                 "coinDisplay"]){
+                 "coinDisplay","sporeNote","burstNotch"]){
   HUD[id]=document.getElementById(id);
 }
 const hpRow=HUD.hpBar.closest(".vital"), sporeRow=HUD.sporeBar.closest(".vital");
@@ -465,14 +495,64 @@ function syncHud(){
   // Полоска пульсирует на последней четверти здоровья и на критическом
   // заражении: движение боковое зрение ловит даже в свалке
   hpRow.classList.toggle("critical",hpPct<=0.25);
-  fillBar(HUD.sporeBar,player.sporeLevel/CONFIG.sporeSystem.maxSpore);
-  sporeRow.classList.toggle("critical",player.sporeLevel>=CONFIG.sporeSystem.thresholds.danger);
+  const S=CONFIG.sporeSystem;
+  fillBar(HUD.sporeBar,player.sporeLevel/S.maxSpore);
+  sporeRow.classList.toggle("critical",player.sporeLevel>=S.thresholds.danger);
   // Кнопка выброса гаснет, пока шкалы не хватает на его цену. Это не украшение:
   // цена ресурса должна читаться до нажатия, иначе трата остаётся сюрпризом.
   HUD.burstBtn.classList.toggle("dim",!player.canBurst());
+  // ...но одного «гаснет» мало. Заражение подходит к цене и откатывается
+  // назад по нескольку раз за забег — подобранный антидот сбивает шкалу
+  // мгновенно, — и снаружи это читается как «кнопка то работает, то нет».
+  // Заливка отвечает на вопрос «сколько ещё»: она и есть накопленная доля
+  // цены. На перезарядке (полсекунды после удара) заряда нет вовсе.
+  // Заливка показывает ЗАПАС, а не готовность: сразу после удара спор
+  // остаётся больше цены (30 из 64), и обнулённая заливка врала бы — «всё
+  // потратил», хотя следующий выброс уже почти оплачен. Полсекунды
+  // перезарядки поверх этого показывает погасшая кнопка.
+  const charge=Math.min(1,player.sporeLevel/player.burstCost());
+  HUD.burstBtn.style.setProperty("--charge",charge.toFixed(3));
+  // Насечка на шкале стоит там же, где цена выброса. Ставится отсюда, а не
+  // числом в CSS: подешевей когда-нибудь выброс — и метка уехала бы врать.
+  HUD.burstNotch.parentElement.style.setProperty("--notch",
+    (player.burstCost()/S.maxSpore).toFixed(3));
+  syncSporeNote();
   // Кошелёк. Единственная цифра, вернувшаяся на боевой экран, — и только
   // потому, что теперь она означает «хватит ли на прилавке»
   HUD.coinDisplay.textContent=player.coins;
+}
+
+// ЧТО ДЕЛАЕТ ЗАРАЖЕНИЕ — вслух, под шкалой.
+//
+// Это главная механика игры, и до этой строки она нигде не была названа:
+// шкала росла сама, враги от неё ускорялись, лут становился щедрее, на
+// критическом капал урон — и всё молча. Игрок видел растущую полоску и не
+// знал ни что она делает, ни что с ней делать. Механику, которую нельзя
+// прочитать, игрок не использует: он её терпит.
+//
+// Текст берётся из тех же порогов, по которым считаются эффекты
+// (CONFIG.sporeSystem.thresholds/effects), поэтому разъехаться с правдой он
+// не может — поменяются числа, поменяется и подпись.
+const SPORE_NOTES=[
+  { at: 0,  text: "Заражение растёт само" },
+  { at: 25, text: "Лут щедрее, враги быстрее" },
+  { at: 50, text: "Лут вдвое, враги злее" },
+  { at: 75, text: "Втрое лут, но заражение жжёт", hot: true }
+];
+let sporeNoteShown=null;
+function syncSporeNote(){
+  const T=CONFIG.sporeSystem.thresholds;
+  const lvl=player.sporeLevel;
+  // Пороги те же, что у эффектов: safe/warning/danger — границы, за которыми
+  // включается следующая запись CONFIG.sporeSystem.effects
+  let note=SPORE_NOTES[0];
+  if(lvl>=T.danger) note=SPORE_NOTES[3];
+  else if(lvl>=T.warning) note=SPORE_NOTES[2];
+  else if(lvl>=T.safe) note=SPORE_NOTES[1];
+  if(note===sporeNoteShown) return;      // строка меняется на порогах, а не каждый кадр
+  sporeNoteShown=note;
+  HUD.sporeNote.textContent=note.text;
+  HUD.sporeNote.classList.toggle("hot",!!note.hot);
 }
 
 // Красная рамка по краям экрана в момент удара. Самый дешёвый способ сказать
@@ -556,7 +636,11 @@ function draw(){
     const k=Math.min(1.4,Math.max(0.55,canvas.width/CONFIG.screen.width));
     renderer.drawText("ПАУЗА",canvas.width/2,canvas.height/2,
       {font:"bold "+Math.round(46*k)+"px "+CONFIG.fontFamily,color:"#00d4aa",align:"center"});
-    renderer.drawText("Esc — продолжить",canvas.width/2,canvas.height/2+40*k,
+    // Подсказка обязана называть ту дверь, которая у игрока есть: на телефоне
+    // клавиши Esc нет вовсе, и надпись про неё оставляла паузу тупиком —
+    // ровно тем же, каким был экран смерти с надписью «R — рестарт».
+    renderer.drawText(input.isMobile?"кнопка сверху справа — продолжить":"Esc — продолжить",
+      canvas.width/2,canvas.height/2+40*k,
       {font:Math.round(16*k)+"px "+CONFIG.fontFamily,color:"#8a8a8a",align:"center"});
   }
 
@@ -713,6 +797,7 @@ document.getElementById("playBtn").onclick=startRun;
 // там нет, а подпись к несуществующей кнопке — то же ложное обещание.
 if(input.isMobile) document.body.classList.add("touch");
 HUD.burstBtn.addEventListener("click",(e)=>{ e.preventDefault(); tryBurst(); });
+document.getElementById("pauseBtn").addEventListener("click",(e)=>{ e.preventDefault(); togglePause(); });
 document.getElementById("shopReroll").onclick=()=>shop.reroll(player);
 document.getElementById("shopLeave").onclick=()=>shop.close();
 // Кнопка вместо надписи «R — рестарт»: на телефоне клавиши нет, и экран

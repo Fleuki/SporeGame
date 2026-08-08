@@ -1,0 +1,16 @@
+{
+  "name": "Грибной Сумрак",
+  "short_name": "Сумрак",
+  "description": "Браузерный выживач в тёмном грибном лесу: враги идут потоком, оружие эволюционирует, заражение — ресурс, который тратишь сам.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#0d1f15",
+  "theme_color": "#0d1f15",
+  "icons": [
+    { "src": "assets/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "assets/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
