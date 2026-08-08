@@ -163,6 +163,10 @@ function tryBurst(){
   syncHud();
 }
 
+// Звук, отвалившийся уже после запуска, обязан вернуть игру к синтезу:
+// загрузчик отдаёт элемент сразу и об ошибке узнаёт позже (см. loadSound).
+loader.onSoundError=(key)=>audio.soundLost(key);
+
 (async()=>{ await loader.loadAll(CONFIG.assets); })();
 
 // ШРИФТ ДЛЯ ХОЛСТА ГРУЗИМ ЯВНО. Браузер подтягивает woff2 лениво — когда
