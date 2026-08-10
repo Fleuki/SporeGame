@@ -146,6 +146,10 @@ export class Enemy extends Entity {
       const k=CONFIG.enemies.touchPush;
       this.x+=Math.cos(push)*k; this.y+=Math.sin(push)*k;
     }
+    // Наружу арены не выходит никто (см. Entity.clampToArena). Прыжок волка и
+    // расталкивание в упор двигают врага помимо отдачи, поэтому проверка стоит
+    // в конце кадра, а не только там, где затухает отдача.
+    this.clampToArena();
   }
 
   // ПРЫЖОК ЭЛИТНОГО ВОЛКА. Возвращает множитель скорости на этот кадр:
