@@ -28,6 +28,8 @@ export class SpawnSystem {
   reset(){
     this.time=0; this.spawnTimer=0; this.bossesSpawned=0;
     this.phaseTimer=CONFIG.spawn.pushTime; this.lull=false;
+    // ФИНАЛ. Сказано ли уже про него и вышел ли последний босс.
+    this.finalWarned=false; this.finalSpawned=false;
     // Правило текущей стычки (CONFIG.spawn.modifiers). null — обычный поток.
     this.mod=null;
   }
@@ -121,9 +123,50 @@ export class SpawnSystem {
   // Секунд до следующего босса — это же показывает интерфейс, если надо
   nextBossIn(){ return Math.max(0,(this.bossesSpawned+1)*CONFIG.spawn.bossEvery-this.time); }
 
+  // === ФИНАЛ ЗАБЕГА ===
+  // Секунд до выхода последнего босса. Отрицательное — финал уже начался.
+  finalIn(){
+    const F=CONFIG.spawn.final;
+    return F?F.at-this.time:Infinity;
+  }
+  // Идёт ли финал: последний босс вышел и ещё не убит. Пока он идёт, рядовой
+  // поток молчит — единственный именной бой игры не должен тонуть в той же
+  // толпе, что была все пятнадцать минут.
+  inFinal(){ return this.finalSpawned; }
+
+  tryFinal(enemies){
+    const F=CONFIG.spawn.final;
+    if(!F||this.finalSpawned) return null;
+    if(!this.finalWarned&&this.time>=F.at-(F.warnAt||0)){
+      this.finalWarned=true;
+      return {type:"final_warn",seconds:Math.round(F.warnAt||0)};
+    }
+    if(this.time<F.at) return null;
+    // Рядовой босс, вышедший перед самым финалом, ещё может быть жив. Ждём:
+    // два босса разом — это не финал, это свалка, в которой не видно, кто из
+    // них последний.
+    if(enemies.some(e=>e instanceof Boss&&!e.dead)) return null;
+    this.finalSpawned=true;
+    // Правило стычки снимается вместе с началом финала. Иначе «ТУМАН»,
+    // выпавший на последнюю минуту, висит весь финальный бой: правило живёт
+    // ровно один натиск, а натисков больше не будет.
+    this.mod=null; this.lull=true;
+    const p=this.camera.pointOutside(CONFIG.spawn.bossSpawnMargin);
+    const boss=new Boss(p.x,p.y,F.boss);
+    boss.isFinal=true;
+    boss.maxHp*=F.hpMult||1; boss.hp=boss.maxHp;
+    boss.damage*=this.scale().damage*(F.damageMult||1);
+    return {type:"boss",boss,final:true,name:F.name};
+  }
+
   update(dt,enemies,player,sporeEffects){
     if(!this.active) return null;
     this.time+=dt;
+
+    // Финал важнее всего остального: он и есть конец забега
+    const fin=this.tryFinal(enemies);
+    if(fin) return fin;
+    if(this.finalSpawned) return null;
 
     // Босс идёт вне очереди и вне затишья: он и есть главное событие забега
     const boss=this.tryBoss(enemies);
@@ -164,6 +207,10 @@ export class SpawnSystem {
     const S=CONFIG.spawn;
     if(this.time<(this.bossesSpawned+1)*S.bossEvery) return null;
     if(enemies.some(e=>e instanceof Boss&&!e.dead)) return null;
+    // Рядовой босс не выходит на пороге финала: игрок, дожимающий одного
+    // босса ровно в ту секунду, когда объявлен последний, не понимает, какой
+    // из них какой, — а финал обязан читаться как отдельное событие.
+    if(this.finalIn()<(S.final?.warnAt||0)) return null;
     this.bossesSpawned++;
     // ОЧЕРЕДЬ БОССОВ — просто список по кругу. Раньше здесь стояло
     // «каждый второй — Сердцевина», и добавить третьего значило бы переписать

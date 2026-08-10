@@ -214,6 +214,15 @@ let pendingUpgrades=0;
 // доигрывает только анимация смерти: раньше экран появлялся в тот же кадр,
 // когда HP уходило в ноль, и нарисованную смерть никто ни разу не видел.
 let dying=0;
+// ПОБЕДА. Последний босс мёртв, но экран итогов ждёт: секунды на то, чтобы
+// увидеть, как он разваливается, и услышать тишину после боя. Ноль — забег
+// идёт как шёл. Считается ровно так же, как dying, и по той же причине:
+// событие, которого никто не увидел, всё равно что не случилось.
+let winning=0;
+const WIN_DELAY=2.2;            // секунд между смертью последнего босса и итогом
+// Сам последний босс — по нему и определяется победа. Ссылка, а не флаг:
+// проверять надо «мёртв ли ОН», а не «пусто ли поле».
+let finalBoss=null;
 // Смена биома: какой показан сейчас и какой ждёт объявления. Ждать приходится
 // потому, что надпись под таймером одна на всех, а правило стычки важнее
 // (см. checkBiome).
@@ -238,7 +247,7 @@ function init(){
   };
   camera.centerOn(player);
   enemies=[]; projectiles=[]; loot.reset(); particles.reset(); battle.reset();
-  runTime=0; pendingUpgrades=0; dying=0;
+  runTime=0; pendingUpgrades=0; dying=0; winning=0; finalBoss=null;
   // Биом сбрасывается вместе с забегом: без этого рестарт из костяной гнили
   // объявлял бы «МШИСТАЯ НИЗИНА» на первой же секунде нового забега.
   biomeShown=map.biome(0); biomePending=null; bannerBusy=0;
@@ -297,7 +306,22 @@ function update(dt){
     map.update(camera);
     camera.follow(player);
     syncHud();
-    if(--dying<=0) endGame();
+    if(--dying<=0) endGame(false);
+    return;
+  }
+
+  // ПОБЕДА. Последний босс убит — забег кончился, но экран итогов ждёт: игрок
+  // обязан увидеть, как эта туша разваливается, и услышать, что стало тихо.
+  // Мир при этом стоит (как и на смерти), доигрывают только частицы: отставшие
+  // враги, догрызающие победителя на экране итогов, отменяли бы саму победу.
+  if(winning>0){
+    winning-=dt;
+    particles.update();
+    battle.updateEffects();
+    map.update(camera);
+    camera.follow(player);
+    syncHud();
+    if(winning<=0) endGame(true);
     return;
   }
 
@@ -334,8 +358,24 @@ function update(dt){
   if(spawnEvent&&spawnEvent.type==="boss"){
     enemies.push(spawnEvent.boss);
     audio.sfx("boss"); camera.shake(CONFIG.feel.shakeBoss,40);
+    // ПОСЛЕДНИЙ БОСС ОБЪЯВЛЕН ИМЕНЕМ. Рядовые выходят молча — их узнают по
+    // размеру, — но этот кончает забег, и спутать его с четвёртым по счёту
+    // выходом по таймеру нельзя.
+    if(spawnEvent.final){
+      finalBoss=spawnEvent.boss;
+      showBanner(spawnEvent.name||spawnEvent.boss.name);
+      camera.shake(CONFIG.feel.shakeBoss*1.5,60);
+    }
   } else if(spawnEvent&&spawnEvent.type==="push"){
     announcePush(spawnEvent.mod);
+  } else if(spawnEvent&&spawnEvent.type==="final_warn"){
+    // ПРЕДУПРЕЖДЕНИЕ О ФИНАЛЕ говорится там, куда игрок УЖЕ смотрит, — под
+    // таймером, в той же очереди, что правило стычки и смена биома. Иначе
+    // конец забега станет сюрпризом, а к финальному бою хочется прийти
+    // готовым: добрать уровень, потратить монеты, сбить заражение.
+    showBanner("ПОСЛЕДНЯЯ МИНУТА");
+    audio.sfx("wave");
+    camera.shake(CONFIG.feel.shakeLevel,10);
   }
 
   checkBiome(dt);
@@ -357,6 +397,7 @@ function update(dt){
   syncHud();
 
   if(player.hp<=0) beginDeath();
+  else if(finalBoss&&finalBoss.dead) beginWin();
 }
 
 // Открыть лавку, если сейчас подходящий момент. Возвращает true, если
@@ -379,6 +420,22 @@ function beginDeath(){
   audio.sfx("hurt"); audio.sfx("boom");
   camera.shake(CONFIG.feel.shakeBoss,30);
   particles.emit(player.x,player.y,"#6b2d5c",30,1,5);
+}
+
+// ПОБЕДА. Зеркало beginDeath: то же ожидание перед экраном итогов, только
+// повод обратный.
+//
+// Музыка глушится СРАЗУ, а не на экране итогов: боссовая тема, продолжающая
+// бить над развалившимся боссом, съедает единственную тишину, которая в этой
+// игре что-то значит. Своего трека у победы нет — и пусть лучше не будет
+// никакого, чем чужой (то же решение, что с темой смерти, см. HANDOFF).
+function beginWin(){
+  if(winning>0||gameOver) return;
+  winning=WIN_DELAY;
+  audio.music(null);
+  audio.sfx("evolve"); audio.sfx("boom");
+  camera.shake(CONFIG.feel.shakeBoss*1.4,50);
+  particles.emit(finalBoss.x,finalBoss.y,"#ffd24a",44,1.6,7);
 }
 
 // ПРАВИЛО СТЫЧКИ ОБЪЯВЛЕНО: оно меняет то, что убивает, поэтому со звуком и
@@ -479,7 +536,7 @@ function startLevelUp(){
 // состояния здесь: посреди лавки, смерти и уже открытого меню открывать
 // нечего.
 function openUpgradeMenu(){
-  if(!started||gameOver||dying>0||waitingForUpgrade||shop.isOpen) return;
+  if(!started||gameOver||dying>0||winning>0||waitingForUpgrade||shop.isOpen) return;
   if(pendingUpgrades<=0){
     // Пустая кнопка обязана звучать отказом — молчание читается как «игра не
     // заметила нажатие», и её жмут ещё трижды
@@ -492,8 +549,11 @@ function openUpgradeMenu(){
   upgradeSystem.showMenu(upgradeSystem.generateCards(player),player);
 }
 
-function endGame(){
-  player.hp=0; gameOver=true; dying=0;
+// Экран итогов. won — дошёл ли забег до конца: у победы и у поражения одни и
+// те же цифры, но разные заголовок, цвет и музыка. Двух экранов не заводим —
+// итог у забега один, меняется только то, чем он кончился.
+function endGame(won=false){
+  player.hp=won?player.hp:0; gameOver=true; dying=0; winning=0;
   shop.reset();
   // СВОЙ ТРЕК НА ЭКРАНЕ ИТОГОВ. Здесь была тишина, и она была правильной:
   // тема забега, продолжающая бодро играть над «СПОРЫ ПОБЕДИЛИ», отменяет
@@ -501,7 +561,17 @@ function endGame(){
   // самое: она про конец, а не про бой, играет один раз и затихает
   // (MUSIC_LOOP в audio.js). Файла нет — снова тишина, а не подмена темой
   // забега (NO_FALLBACK там же).
-  audio.music("death");
+  //
+  // У ПОБЕДЫ ТРЕКА НЕТ, и тема смерти ей не подходит по смыслу: она про
+  // «споры победили». Пока автор не сделает тему победы, здесь тишина —
+  // ровно по тому же правилу, по которому её однажды оставили на смерти.
+  audio.music(won?null:"death");
+  // Заголовок и цвет экрана. Иллюстрация с проросшим противогазом на победе
+  // прячется классом `won`: она говорит обратное тому, что говорит заголовок.
+  const over=document.getElementById("gameOverScreen");
+  over.classList.toggle("won",won);
+  document.getElementById("overTitle").textContent=won?"СУМРАК РАССЕЯН":"СПОРЫ ПОБЕДИЛИ";
+  document.getElementById("overLead").textContent=won?"Прошёл за":"Продержался";
   // Счётчик убитых переехал сюда с игрового экрана: в бою на него не
   // смотрят, а на экране итогов он как раз и есть итог. Монет показываем
   // СОБРАННЫЕ за забег, а не оставшиеся в кошельке: итог — это сколько ты
@@ -521,18 +591,27 @@ function endGame(){
   }
   // Рекорд подаётся ПОСЛЕ цифр забега: сначала «сколько получилось», потом
   // «лучше ли, чем раньше». Обратный порядок читается как упрёк.
-  const beaten=records.submit({time:runTime,level:player.level,kills:battle.kills});
+  const beaten=records.submit({time:runTime,level:player.level,kills:battle.kills,won});
+  document.getElementById("newRecord").textContent=
+    beaten&&won&&!records.prev?.won?"ЗАБЕГ ПРОЙДЕН":"НОВЫЙ РЕКОРД";
   document.getElementById("newRecord").classList.toggle("hidden",!beaten);
   const prev=records.prev;
   const prevLine=document.getElementById("prevBest");
   prevLine.classList.toggle("hidden",beaten||!prev);
-  if(prev) document.getElementById("prevBestTime").textContent=formatTime(prev.time);
+  if(prev) document.getElementById("prevBestTime").textContent=recordText(prev);
   showBest();
   document.getElementById("finalTime").textContent=formatTime(runTime);
   document.getElementById("gameOverScreen").classList.remove("hidden");
   // Боевой HUD на экране итогов не нужен: таймер и шкалы просвечивали
   // сквозь затемнение и спорили с итоговыми цифрами
   document.getElementById("ui").classList.add("hidden");
+}
+
+// Как читается рекорд. Пройденный забег и погибший меряются РАЗНЫМ: у первого
+// достижение в том, ЗА СКОЛЬКО он пройден, у второго — сколько продержался.
+// Одна и та же строка «14:12» значила бы в этих двух случаях противоположное.
+function recordText(b){
+  return b.won?("пройден за "+formatTime(b.time)):formatTime(b.time);
 }
 
 function formatTime(sec){
@@ -834,8 +913,31 @@ if(new URLSearchParams(location.search).has("debug")){
       damage:player.damage,
       // Не просто «сколько стволов», а какие именно: эволюция подменяет
       // описание ствола, и по числу её не видно
-      weapons:player.weapons.map(w=>w.def.key)
-    })
+      weapons:player.weapons.map(w=>w.def.key),
+      // ФИНАЛ. Сколько секунд до него, идёт ли он и сколько осталось у
+      // последнего босса — иначе про конец забега можно узнать только
+      // пятнадцатиминутным прогоном.
+      finalIn:Math.round(spawnSystem.finalIn()),
+      finalBossHp:finalBoss?Math.round(finalBoss.hp):null,
+      winning, won:gameOver&&!!finalBoss&&finalBoss.dead
+    }),
+    // ПЕРЕМОТКА ЗАБЕГА. Финал наступает на 900-й секунде, и проверить его
+    // иначе как пятнадцатиминутным прогоном нельзя — а он в headless идёт
+    // раз в десять медленнее реального времени, то есть проверка одного числа
+    // стоит два часа. Перемотка двигает ОБА счётчика: runTime (по нему живут
+    // лавка, биомы и заражение) и время спавна (по нему — сложность и финал).
+    // Сложность при этом становится честной для новой секунды, а вот уровень
+    // и стволы остаются как есть: перемотка проверяет конец забега, а не
+    // балансирует его.
+    // Очередь боссов двигается вместе со временем: иначе перемотка на
+    // пятнадцатую минуту немедленно выпускает ПЕРВОГО босса по таймеру, он
+    // оказывается жив в секунду финала — и финал честно ждёт его смерти,
+    // выглядя как «конец забега не работает».
+    jumpTo:(sec)=>{
+      runTime=sec; spawnSystem.time=sec;
+      spawnSystem.bossesSpawned=Math.floor(sec/CONFIG.spawn.bossEvery);
+      nextShopAt=sec+CONFIG.shop.every;
+    }
   };
 }
 
@@ -870,7 +972,7 @@ function showBest(){
   const b=records.best, line=document.getElementById("bestLine");
   line.classList.toggle("hidden",!b);
   if(!b) return;
-  document.getElementById("bestTime").textContent=formatTime(b.time);
+  document.getElementById("bestTime").textContent=recordText(b);
   document.getElementById("bestLevel").textContent=b.level;
 }
 
