@@ -1,3 +1,5 @@
+import { CONFIG } from "../config.js";
+
 // РЕКОРД ЗАБЕГА.
 //
 // Забег заканчивался — и всё. Ни следа, ни повода начать заново: экран
@@ -19,16 +21,39 @@
 
 const KEY="sporegame.best";
 
+// РЕКОРД У КАЖДОЙ СЛОЖНОСТИ СВОЙ. Один общий рекорд на все три означал бы,
+// что «пройден за 15:01» на лёгкой отменяет собой любую попытку на тяжёлой, —
+// то есть сложности, ради которых игрок и возвращается, обесценивали бы себя
+// сами. Ключ хранения — KEY + сложность; старый общий ключ читается как
+// рекорд первой сложности, чтобы у тех, кто уже играл, ничего не пропало.
 export class RecordSystem {
-  constructor(){ this.best=this.load(); }
+  constructor(scope=null){ this.scope=scope; this.best=this.load(); }
 
-  load(){
+  key(){ return this.scope?KEY+"."+this.scope:KEY; }
+
+  // Смена сложности на стартовом экране. Рекорд перечитывается, prev
+  // сбрасывается: «прошлый забег» другой сложности — это не прошлый забег.
+  setScope(scope){
+    if(this.scope===scope) return;
+    this.scope=scope; this.prev=null; this.best=this.load();
+  }
+
+  read(key){
     try{
-      const raw=localStorage.getItem(KEY);
+      const raw=localStorage.getItem(key);
       if(!raw) return null;
       const b=JSON.parse(raw);
       return (typeof b?.time==="number")?b:null;
     }catch{ return null; }
+  }
+
+  load(){
+    const own=this.read(this.key());
+    if(own) return own;
+    // Наследство одного общего рекорда: он был поставлен до появления
+    // сложностей, то есть на первой.
+    if(this.scope===CONFIG.difficulties.starter) return this.read(KEY);
+    return null;
   }
 
   // ЧТО СЧИТАТЬ ЛУЧШИМ ЗАБЕГОМ, когда забег стало возможно ПРОЙТИ.
@@ -53,7 +78,7 @@ export class RecordSystem {
     if(beaten){
       this.prev=this.best;
       this.best={time:run.time,level:run.level,kills:run.kills,won:!!run.won};
-      try{ localStorage.setItem(KEY,JSON.stringify(this.best)); }catch{}
+      try{ localStorage.setItem(this.key(),JSON.stringify(this.best)); }catch{}
     } else {
       this.prev=this.best;
     }

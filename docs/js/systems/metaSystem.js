@@ -37,6 +37,56 @@ export class MetaSystem {
     // Выбранный — только тот, который открыт: сохранение могло прийти из
     // версии игры, где персонаж был, а сейчас его нет.
     this.selected=this.has(s?.selected)?s.selected:CONFIG.characters.starter;
+
+    // СЛОЖНОСТИ. Открываются не за банк, а ПОБЕДОЙ: за деньги здесь не
+    // продаётся ничего, кроме другого способа играть, а сложность — это
+    // вообще не покупка, это разрешение, которое выдаёт сама игра.
+    const D=CONFIG.difficulties;
+    this.beaten=new Set((s?.beaten||[]).filter(k=>D.list[k]));
+    this.difficulty=this.diffUnlocked(s?.difficulty)?s.difficulty:D.starter;
+  }
+
+  // --- сложности --------------------------------------------------------
+  // Открыта первая и каждая следующая за пройденной предыдущей. Правило одно
+  // на всё: список сложностей — это ЛЕСТНИЦА, а не набор галочек, и перепрыгнуть
+  // ступень нельзя даже сохранением из другой версии игры.
+  diffUnlocked(key){
+    const D=CONFIG.difficulties, i=D.order.indexOf(key);
+    if(i<0) return false;
+    if(i===0) return true;
+    return this.beaten.has(D.order[i-1]);
+  }
+
+  diffList(){
+    return CONFIG.difficulties.order.map(key=>({
+      key, def:CONFIG.difficulties.list[key],
+      unlocked:this.diffUnlocked(key),
+      beaten:this.beaten.has(key),
+      selected:this.difficulty===key
+    }));
+  }
+
+  diffDef(key){
+    const D=CONFIG.difficulties;
+    return D.list[key]||D.list[D.starter];
+  }
+  curDiff(){ return this.diffDef(this.difficulty); }
+
+  selectDiff(key){
+    if(!this.diffUnlocked(key)) return false;
+    this.difficulty=key; this.save();
+    return true;
+  }
+
+  // Победа на сложности. Возвращает ключ ОТКРЫВШЕЙСЯ следующей — экран итогов
+  // обязан о ней сказать: молча открытая ступень равна неоткрытой.
+  beat(key){
+    const D=CONFIG.difficulties, i=D.order.indexOf(key);
+    if(i<0) return null;
+    const fresh=!this.beaten.has(key);
+    this.beaten.add(key); this.save();
+    const next=D.order[i+1];
+    return fresh&&next?next:null;
   }
 
   load(){
@@ -49,7 +99,8 @@ export class MetaSystem {
   save(){
     try{
       localStorage.setItem(KEY,JSON.stringify({
-        bank:this.bank, unlocked:[...this.unlocked], selected:this.selected
+        bank:this.bank, unlocked:[...this.unlocked], selected:this.selected,
+        beaten:[...this.beaten], difficulty:this.difficulty
       }));
     }catch{}
   }

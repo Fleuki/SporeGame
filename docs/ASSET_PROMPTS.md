@@ -659,8 +659,22 @@ bursts into spores.
 (`phaseRows: true`), а не направления. Ряд 0 — целый босс, ряд 3 — почти
 убитый. Это редкая, но очень выигрышная схема: босс визуально звереет.
 
-**Третий босс — Споровый Улей** (третий в очереди боссов, двенадцатая минута
-забега):
+**Споровый Улей — ФИНАЛЬНЫЙ БОСС** (третий в очереди по таймеру и он же
+выходит на 15-й минуте как конец забега, см. `CONFIG.spawn.final`).
+
+Сейчас он живёт **одним кадром 352x352** (`cols:1, rows:1`): целый и почти
+убитый выглядят одинаково, хотя код честно считает четыре фазы. На рядовом
+боссе это было терпимо, на финальном — нет: это единственная кульминация
+игры, и она сейчас беднее её середины.
+
+Что нужно: **лист 4x4, кадр 352**, то есть файл ровно 1408x1408 (кадр обязан
+быть кратен `display: 176` — почему, см. пункт 4 выше, на этом Улей однажды
+уже вышел на арену невидимым). Ряды — ФАЗЫ ПОВРЕЖДЕНИЯ, колонки — дыхание.
+После сборки в конфиг: `frame:352, cols:4, rows:4, phaseRows:true` вместо
+нынешних `cols:1, rows:1, row:0`.
+
+Если бот отдаёт шесть колонок (так уже было) — берутся ПЕРВЫЕ ЧЕТЫРЕ,
+последние обычно порченые.
 
 ```
 [БАЗА СТИЛЯ]
@@ -687,7 +701,25 @@ acid green #39ff14, the stalk splitting.
 
 Within each row the 4 columns are one breathing pulse of that stage: the
 hive contracts, holds, swells, releases.
+
+The hive must stay in exactly the same place and at exactly the same scale
+in all 16 cells: only the damage and the breathing change, never the camera,
+never the size, never the angle. Every cell has the same flat magenta
+background, no cell borders drawn, no gaps between cells.
 ```
+
+**Три вещи, на которых этот лист уже ломался и сломается снова:**
+
+1. **Кадр обязан быть 352.** Файл 1408x1408 и ничего другого. Скрипт
+   нормализации разрешение файла не меняет, поэтому «почти квадрат» 1447
+   означает, что движок возьмёт из файла левый верхний угол размером с кадр —
+   у центрированного спрайта там пусто, и босс выйдет на арену невидимым.
+2. **Масштаб между рядами уезжает.** Модель охотно рисует «разрушенный»
+   вариант крупнее или мельче целого, и в бою босс дёргается в размере ровно в
+   тот момент, когда у него меняется фаза. Сверять надо по силуэту первого и
+   последнего кадра, наложив их друг на друга.
+3. **Фон.** Магента, и только магента — про нарисованную «шахматку
+   прозрачности» см. пункт 2 в начале файла.
 
 ```js
 boss_spore_hive: "assets/images/bosses/spore_hive.png",
@@ -703,6 +735,115 @@ spore_hive: {
   minionType: "spore_bat", minionCount: 5, sporeCloudRadius: 140
 }
 ```
+
+---
+
+## МУЗЫКА (Suno)
+
+В игре три трека: забег, босс, смерть. **Не хватает четвёртого — победы**, и
+это не «было бы неплохо»: игрок доходит до конца забега, убивает финального
+босса, и наступает тишина, потому что тема смерти над победой звучала бы
+издевательством. Пока файла нет, в коде стоит осознанная тишина.
+
+### Требования ко всем трекам этой игры
+
+- **Зацикливаемость.** Трек играет по кругу всю игру (`MUSIC_LOOP` в
+  `audio.js`), кроме темы смерти и победы — те играют один раз и затихают.
+- **Никакого вокала и никаких слов.** Голос перетягивает внимание с боя.
+- **Громкость наравне с остальными.** У нынешней пары −18.7 и −17.7 LUFS.
+  Трек, который громче темы забега на пять децибел, слышен как ошибка
+  громкости, а не как смена темы. Проверять: `ffmpeg -af ebur128`.
+- **Вес.** Моно, 64 кбит/с — стерео и выше дают 11 МБ на трек, а вся графика
+  игры весит 1.2 МБ:
+
+```
+ffmpeg -i исходник.mp3 -ac 1 -ar 44100 -b:a 64k -map_metadata -1 \
+       docs/assets/sounds/music_victory.mp3
+```
+
+- **Новый трек сверять со старым замером, а не верить ссылке** — присланная
+  ссылка один раз уже вела на трек, который в игре уже играл (см. HANDOFF).
+
+### ПОБЕДА — нужен сейчас
+
+Ставится в `CONFIG.assets.sounds` ключом `music_victory`, играет один раз на
+экране итогов, если забег пройден.
+
+Смысл: это не триумф с фанфарами. Игрок пятнадцать минут выживал в сумраке и
+только что убил то, что этим сумраком дышало. Правильное чувство — «выдохнул
+и стало тихо», с проблеском, а не с парадом.
+
+**Стиль (Style of Music):**
+```
+dark ambient fantasy, slow triumphant outro, 16-bit era game soundtrack,
+soft analog synth pads, single clean bell melody, distant low strings,
+subdued timpani swell once, no vocals, no lyrics, no drums groove,
+mysterious relief, bittersweet, spacious reverb, 60 bpm, instrumental
+```
+
+**Описание (Lyrics / Description, режим Instrumental):**
+```
+A quiet exhale after a long fight. Opens almost silent, one bell note over
+a low pad. A single warm chord rises around 0:12 like light reaching the
+forest floor. Gentle bell melody carries the middle, hopeful but tired.
+One deep drum swell at 0:35, then everything settles and fades into soft
+spore-like shimmer. Ends fully resolved, no cliffhanger.
+```
+
+**Длина:** 50–70 секунд, дальше не нужно — экран итогов столько не смотрят.
+**Конец обязателен.** Трек не зацикливается: он должен ЗАКОНЧИТЬСЯ, а не
+оборваться на середине фразы.
+
+### МЕНЮ — второй по нужности
+
+На стартовом экране сейчас тишина, и первое, что слышит новый игрок, — это
+сразу бой.
+
+**Стиль:**
+```
+dark ambient, slow eerie fungal forest, 16-bit era game soundtrack,
+low drone, sparse detuned bells, faint wet dripping percussion, no vocals,
+no lyrics, no melody hook, loopable, 55 bpm, instrumental
+```
+
+**Описание:**
+```
+Standing at the edge of a rotting forest before going in. Almost no melody,
+just a breathing drone and rare bell drops. Nothing happens; something is
+watching. Loops seamlessly, no build-up, no climax, no ending.
+```
+
+**Длина:** 60–90 секунд, ровный характер от начала до конца — это фон под
+меню, а не вступление.
+
+### ПОЗДНЯЯ ТЕМА ЗАБЕГА — третья
+
+Одна тема на пятнадцать минут приедается. Идея: та же тема забега, но
+злее — включается после десятой минуты.
+
+**Стиль:**
+```
+dark industrial ambient, driving low pulse, 16-bit era game soundtrack,
+distorted bass throb, tense high strings, tribal toms, no vocals, no lyrics,
+relentless, claustrophobic, loopable, 100 bpm, instrumental
+```
+
+**Описание:**
+```
+Same rotting forest, but it is winning. A steady low pulse under everything,
+toms pushing forward, strings tightening. No release, no chorus, no ending —
+it just keeps coming. Loops seamlessly.
+```
+
+**Длина:** 90–120 секунд.
+
+### ЗВУКИ (не музыка)
+
+Все звуки игры — синтез осцилляторами прямо в `audio.js`, файлов нет ни
+одного, и это осознанно: ноль байт, ноль лицензий, правится числом в коде.
+Если понадобятся настоящие — сначала браузерные генераторы ретро-звуков
+(jfxr, ChipTone, Bfxr) и бесплатные библиотеки под CC0, и только потом
+платный генератор по тексту.
 
 ---
 

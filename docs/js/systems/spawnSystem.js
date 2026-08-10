@@ -14,8 +14,14 @@ import { Boss } from "../entities/boss.js";
 // границы волн, а чередование натиска и затишья (pushTime / lullTime): в
 // тишине между стычками и живёт вся атмосфера.
 export class SpawnSystem {
-  constructor(camera){
+  // diff — множители выбранной сложности (CONFIG.difficulties). Приходят
+  // снаружи, а не читаются из конфига здесь: сложность выбирается на стартовом
+  // экране и обязана быть зафиксирована НА ВЕСЬ забег. Читай спавн её сам —
+  // и смена сложности в меню посреди уже идущего забега (а туда можно попасть
+  // с экрана итогов) меняла бы правила по ходу дела.
+  constructor(camera,diff=null){
     this.camera=camera;
+    this.diff=diff||CONFIG.difficulties.list[CONFIG.difficulties.starter];
     this.active=true;
     this.time=0;          // секунд с начала забега, тикает в update
     this.spawnTimer=0;    // кадров до следующего врага
@@ -68,8 +74,8 @@ export class SpawnSystem {
   scale(){
     const S=CONFIG.spawn, m=this.time/60;
     return {
-      hp: S.baseHp*(1+m*S.hpPerMin)*this.modMult("hpMult"),
-      damage: S.baseDamage*(1+m*S.dmgPerMin)*this.modMult("dmgMult"),
+      hp: S.baseHp*(1+m*S.hpPerMin)*this.modMult("hpMult")*this.diff.hpMult,
+      damage: S.baseDamage*(1+m*S.dmgPerMin)*this.modMult("dmgMult")*this.diff.dmgMult,
       // Скорость упирается в потолок ДАЖЕ С ПРАВИЛОМ: враг быстрее игрока
       // превращает игру в безвыходную погоню, а не в бой, и «Стая» не должна
       // становиться исключением из этого.
@@ -100,7 +106,7 @@ export class SpawnSystem {
     if(late>0&&S.aliveLatePerMin){
       n=Math.min(S.aliveLateMax??n,n+late/60*S.aliveLatePerMin);
     }
-    return Math.round(n*this.modMult("countMult")*this.areaScale());
+    return Math.round(n*this.modMult("countMult")*this.areaScale()*this.diff.countMult);
   }
 
   // Потолок задан для ЭТАЛОННОГО кадра (900x700 при зуме 1.6). Кадр обычно
@@ -156,7 +162,7 @@ export class SpawnSystem {
     const p=this.camera.pointOutside(CONFIG.spawn.bossSpawnMargin);
     const boss=new Boss(p.x,p.y,F.boss);
     boss.isFinal=true;
-    boss.maxHp*=F.hpMult||1; boss.hp=boss.maxHp;
+    boss.maxHp*=(F.hpMult||1)*(this.diff.finalHpMult||1); boss.hp=boss.maxHp;
     boss.damage*=this.scale().damage*(F.damageMult||1);
     return {type:"boss",boss,final:true,name:F.name};
   }
