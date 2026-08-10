@@ -117,7 +117,18 @@ const TRACKS={
 // плата: музыка в этом жанре держит темп сильнее половины визуальных правок.
 // Игру она не задерживает — загрузчик не блокирует запуск, а до прихода файла
 // звучит синтез.
-const MUSIC_FILES={ run:"music_run", boss:"music_boss" };
+const MUSIC_FILES={ run:"music_run", boss:"music_boss", death:"music_death" };
+
+// Треки, у которых НЕТ подмены темой забега. Обычный трек, файла которого не
+// оказалось, играет тему забега — это лучше, чем тишина, и лучше, чем скачок
+// в синтез посреди боя. Но на экране итогов бодрая тема забега поверх «СПОРЫ
+// ПОБЕДИЛИ» отменяет собой всё, что этот экран говорит, — так что если файла
+// смерти нет, правильный ответ тишина.
+const NO_FALLBACK=new Set(["death"]);
+
+// Зациклены не все. Тема смерти играет один раз и затихает: экран итогов —
+// это конец, а музыка, идущая по кругу, превращает его в ожидание.
+const MUSIC_LOOP={ death:false };
 
 // Частота ступени гаммы. Ступени идут дальше семи: 7 — это тоника октавой
 // выше, а не ошибка индекса.
@@ -217,7 +228,12 @@ export class AudioManager {
     // MUSIC_FILES.boss существует всегда, файла под ним может не быть — и
     // проверка «есть ли имя» пропускала боссовый трек в синтез.
     let key=MUSIC_FILES[name];
-    if(!key||!this.loader?.getSound(key)) key=MUSIC_FILES.run;
+    if(!key||!this.loader?.getSound(key)){
+      // Своего файла нет: у обычного трека подменяем темой забега, у трека
+      // смерти — молчим (см. NO_FALLBACK)
+      if(NO_FALLBACK.has(name)){ this.stopMusicLoop(); this.stopMusic(true); this.onSynth=false; return; }
+      key=MUSIC_FILES.run;
+    }
     if(this.loader?.getSound(key)){
       this.stopMusicLoop();
       this.onSynth=false;
@@ -227,7 +243,7 @@ export class AudioManager {
       // Проверить музыку иначе нельзя — звукового устройства у headless-
       // браузера нет, — и указатель, который врёт, хуже отсутствующего.
       this.track=name;
-      this.playMusic(key);
+      this.playMusic(key,MUSIC_LOOP[name]!==false);
       return;
     }
     // Файла нет или ещё не пришёл — играет синтез, и мы помним, что ждём
