@@ -94,6 +94,7 @@ input.onRestartPress=()=>{ if(started&&gameOver) init(); };
 // отмена. Уйти с прилавка можно только кнопкой «В БОЙ».
 input.onPausePress=()=>togglePause();
 input.onBurstPress=()=>tryBurst();
+input.onUpgradePress=()=>openUpgradeMenu();
 
 // ПАУЗА одним местом на две двери: Escape и кнопка в углу. На телефоне
 // клавиши нет, и до кнопки забег там нельзя было прервать ничем, кроме
@@ -206,8 +207,9 @@ let runTime=0;   // секунды с начала забега, идут тол
 // не увидит — меню накрывает их в тот же кадр.
 // 32 кадра (полсекунды) вместо прежних 32, посчитанных по длине спрайтовой
 // вспышки: её больше нет, а пауза на осознание нужна ровно та же.
-let levelUpDelay=0;
-const LEVELUP_FRAMES=32;
+// Уровни, за которые прокачка ещё не взята. Меню открывает игрок сам
+// (см. startLevelUp), поэтому счётчик может расти до любого числа.
+let pendingUpgrades=0;
 // Кадры, оставшиеся до экрана поражения. Пока счётчик тикает, мир стоит и
 // доигрывает только анимация смерти: раньше экран появлялся в тот же кадр,
 // когда HP уходило в ноль, и нарисованную смерть никто ни разу не видел.
@@ -216,6 +218,9 @@ let dying=0;
 // потому, что надпись под таймером одна на всех, а правило стычки важнее
 // (см. checkBiome).
 let biomeShown=null, biomePending=null;
+// Объявление о переходе заражения через порог и задержка, чтобы оно не мигало
+// у самой границы (см. checkBiome).
+let sporePending=null, sporeCooldown=0;
 let bannerBusy=0;               // секунд, пока надпись под таймером занята
 const BANNER_TIME=2.5;          // столько живёт анимация push-banner в CSS
 
@@ -233,10 +238,11 @@ function init(){
   };
   camera.centerOn(player);
   enemies=[]; projectiles=[]; loot.reset(); particles.reset(); battle.reset();
-  runTime=0; levelUpDelay=0; dying=0;
+  runTime=0; pendingUpgrades=0; dying=0;
   // Биом сбрасывается вместе с забегом: без этого рестарт из костяной гнили
   // объявлял бы «МШИСТАЯ НИЗИНА» на первой же секунде нового забега.
   biomeShown=map.biome(0); biomePending=null; bannerBusy=0;
+  sporeNoteShown=null; sporePending=null; sporeCooldown=0;
   spawnSystem=new SpawnSystem(camera);
   shop.reset(); shopDue=false; nextShopAt=CONFIG.shop.every;
   gameOver=false; paused=false; waitingForUpgrade=false;
@@ -254,7 +260,19 @@ function init(){
 window.addEventListener("upgradeChosen",(e)=>{
   const card=upgradeSystem.applyUpgrade(e.detail,player);
   if(card?.category==="evolution") announceEvolution(card);
+  pendingUpgrades=Math.max(0,pendingUpgrades-1);
+  // Накоплено несколько уровней — показываем следующую тройку СРАЗУ, не
+  // выходя в бой. Игрок нажал кнопку именно для того, чтобы разобраться с
+  // прокачкой целиком; заставлять его жать её трижды подряд, каждый раз с
+  // возвратом в бой, значило бы вернуть ту же дёрганность, только руками.
+  if(pendingUpgrades>0){
+    upgradeSystem.showMenu(upgradeSystem.generateCards(player),player);
+    syncHud();
+    return;
+  }
+  upgradeSystem.hideMenu();
   waitingForUpgrade=false; paused=false;
+  syncHud();
 });
 
 // ЭВОЛЮЦИЯ СТВОЛА. Единственная карточка за забег, после которой оружие в
@@ -332,7 +350,6 @@ function update(dt){
   battle.update(dt,{player,enemies,projectiles,sporeEffects,camera});
   // Опыт даёт не смерть врага, а подобранный предмет
   if(loot.update(player,camera)) startLevelUp();
-  if(levelUpDelay>0&&--levelUpDelay===0) openUpgradeMenu();
 
   particles.update();
   map.update(camera);              // кадры анимации и список видимых декораций
@@ -388,7 +405,22 @@ function checkBiome(dt){
     if(biomeShown) biomePending=b;
     biomeShown=b;
   }
-  if(biomePending&&bannerBusy<=0){
+  if(sporeCooldown>0) sporeCooldown-=dt;
+  // ОЧЕРЕДЬ НАДПИСЕЙ. Место под таймером одно, а сказать хотят трое: правило
+  // стычки (оно важнее всех — меняет то, что убивает), смена биома и переход
+  // заражения через порог. Правило перебивает, эти двое ждут.
+  //
+  // Заражение вперёд биома: биом — это про вид, заражение — про то, что с
+  // игроком прямо сейчас происходит.
+  if(sporePending&&bannerBusy<=0&&sporeCooldown<=0){
+    showBanner(sporePending.call);
+    audio.sfx("wave",0.45);
+    sporePending=null;
+    // Порог можно переходить туда-сюда (антидот сбивает шкалу мгновенно), и
+    // без задержки объявление мигало бы у границы. Шесть секунд — заметно
+    // дольше, чем длится колебание у порога.
+    sporeCooldown=6;
+  } else if(biomePending&&bannerBusy<=0){
     showBanner(biomePending.name||"");
     audio.sfx("wave",0.5);
     biomePending=null;
@@ -418,25 +450,58 @@ function showBanner(text){
 // Событие и без него сообщается тремя способами сразу: искры из игрока, звук и
 // короткий толчок камеры. Плюс номер уровня всплывающим текстом — тем же, что
 // показывает урон, то есть в стиле остального кадра.
+// ПОЛУЧЕН УРОВЕНЬ — НО МЕНЮ БОЛЬШЕ НЕ ОТКРЫВАЕТСЯ САМО.
+//
+// Раньше уровень мгновенно останавливал игру и разворачивал карточки на весь
+// экран. В начале забега уровни идут часто, и живая игра показала, во что это
+// превращается, дословно: «уровень на начальных очень быстрый, и вот
+// постоянно прокачка выскакивает на весь экран и отрывает от игры».
+//
+// Дело не в самой паузе — выбор карточки её стоит, — а в том, КТО выбирает
+// момент. Игра выдёргивала игрока из манёвра, который он вёл: за секунду до
+// этого он уходил от волка, а теперь читает три карточки и, вернувшись,
+// обнаруживает волка вплотную.
+//
+// Теперь уровни КОПЯТСЯ (pendingUpgrades), а меню открывает сам игрок кнопкой
+// в углу или клавишей «E». Три накопленных уровня — три выбора подряд, и все
+// в тот момент, который выбрал он. Сам выбор не изменился: те же три карточки
+// и та же остановка мира на время меню.
 function startLevelUp(){
   particles.emit(player.x,player.y,"#00d4aa",26,1,5);
   particles.emitText(player.x,player.y-player.radius-16,
                      "УРОВЕНЬ "+player.level,"#7dffca",17);
   audio.sfx("levelup"); camera.shake(CONFIG.feel.shakeLevel,10);
-  levelUpDelay=LEVELUP_FRAMES;
+  pendingUpgrades++;
+  syncHud();
 }
 
+// Открыть накопленное. Зовётся кнопкой и клавишей, поэтому все проверки
+// состояния здесь: посреди лавки, смерти и уже открытого меню открывать
+// нечего.
 function openUpgradeMenu(){
+  if(!started||gameOver||dying>0||waitingForUpgrade||shop.isOpen) return;
+  if(pendingUpgrades<=0){
+    // Пустая кнопка обязана звучать отказом — молчание читается как «игра не
+    // заметила нажатие», и её жмут ещё трижды
+    audio.sfx("hit",0.4);
+    return;
+  }
   waitingForUpgrade=true; paused=true;
+  // Панель звука с паузы здесь мешала бы: два окна поверх одного мира
+  showSettings(false);
   upgradeSystem.showMenu(upgradeSystem.generateCards(player),player);
 }
 
 function endGame(){
   player.hp=0; gameOver=true; dying=0;
   shop.reset();
-  // Тишина на экране итогов. Трек, продолжающий бодро играть над «СПОРЫ
-  // ПОБЕДИЛИ», отменяет собой всё, что этот экран говорит.
-  audio.music(null);
+  // СВОЙ ТРЕК НА ЭКРАНЕ ИТОГОВ. Здесь была тишина, и она была правильной:
+  // тема забега, продолжающая бодро играть над «СПОРЫ ПОБЕДИЛИ», отменяет
+  // собой всё, что этот экран говорит. Отдельная тема смерти — не то же
+  // самое: она про конец, а не про бой, играет один раз и затихает
+  // (MUSIC_LOOP в audio.js). Файла нет — снова тишина, а не подмена темой
+  // забега (NO_FALLBACK там же).
+  audio.music("death");
   // Счётчик убитых переехал сюда с игрового экрана: в бою на него не
   // смотрят, а на экране итогов он как раз и есть итог. Монет показываем
   // СОБРАННЫЕ за забег, а не оставшиеся в кошельке: итог — это сколько ты
@@ -485,7 +550,7 @@ function formatTime(sec){
 // никто не читает, а цвет и длина шкалы читаются мгновенно.
 const HUD={};
 for(const id of ["xpBar","levelDisplay","timeDisplay","hpBar","sporeBar","burstBtn",
-                 "coinDisplay","sporeNote","burstNotch"]){
+                 "coinDisplay","sporeNote","burstNotch","upgradeBtn","upgradeCount"]){
   HUD[id]=document.getElementById(id);
 }
 const hpRow=HUD.hpBar.closest(".vital"), sporeRow=HUD.sporeBar.closest(".vital");
@@ -547,6 +612,15 @@ function syncHud(){
   // числом в CSS: подешевей когда-нибудь выброс — и метка уехала бы врать.
   HUD.burstNotch.parentElement.style.setProperty("--notch",
     (player.burstCost()/S.maxSpore).toFixed(3));
+  // Кнопка прокачки: есть что взять — она появляется и пульсирует. Число
+  // показываем только когда уровней несколько: «1» рядом с одной кнопкой
+  // ничего не сообщает.
+  HUD.upgradeBtn.classList.toggle("hidden",pendingUpgrades<=0);
+  HUD.upgradeBtn.classList.toggle("single",pendingUpgrades<=1);
+  // Один уровень — восклицательный знак, несколько — их число. «1» рядом с
+  // одной кнопкой не сообщает ничего, а знак читается как «тебе тут дали» с
+  // того же расстояния, с какого видно саму кнопку.
+  HUD.upgradeCount.textContent=pendingUpgrades>1?pendingUpgrades:"!";
   syncSporeNote();
   // Кошелёк. Единственная цифра, вернувшаяся на боевой экран, — и только
   // потому, что теперь она означает «хватит ли на прилавке»
@@ -564,11 +638,18 @@ function syncHud(){
 // Текст берётся из тех же порогов, по которым считаются эффекты
 // (CONFIG.sporeSystem.thresholds/effects), поэтому разъехаться с правдой он
 // не может — поменяются числа, поменяется и подпись.
+// text — постоянная подпись под шкалой, call — объявление под таймером в
+// момент перехода. Второе появилось после живой игры: подпись под шкалой
+// новый игрок НЕ ЗАМЕЧАЕТ вовсе — «даже не видела эту надпись, потому что
+// играла и была сосредоточена на игре». Смотрят в середину экрана и на
+// таймер, туда и надо говорить; подпись под шкалой остаётся справочником,
+// который можно перечитать в любой момент.
 const SPORE_NOTES=[
-  { at: 0,  text: "Заражение растёт само" },
-  { at: 25, text: "Лут щедрее, враги быстрее" },
-  { at: 50, text: "Лут вдвое, враги злее" },
-  { at: 75, text: "Втрое лут, но заражение жжёт", hot: true }
+  { at: 0,  text: "Заражение растёт само", call: null },
+  { at: 25, text: "Лут щедрее, враги быстрее", call: "ЗАРАЖЕНИЕ 25% · ЛУТ ЩЕДРЕЕ" },
+  { at: 50, text: "Лут вдвое, враги злее",    call: "ЗАРАЖЕНИЕ 50% · ЛУТ ВДВОЕ, ВРАГИ ЗЛЕЕ" },
+  { at: 75, text: "Втрое лут, но заражение жжёт", hot: true,
+    call: "ЗАРАЖЕНИЕ 75% · ВТРОЕ ЛУТ, НО ОНО ЖЖЁТ" }
 ];
 let sporeNoteShown=null;
 function syncSporeNote(){
@@ -581,6 +662,14 @@ function syncSporeNote(){
   else if(lvl>=T.warning) note=SPORE_NOTES[2];
   else if(lvl>=T.safe) note=SPORE_NOTES[1];
   if(note===sporeNoteShown) return;      // строка меняется на порогах, а не каждый кадр
+  // Порог перейден — говорим об этом туда, куда игрок смотрит. Первый показ
+  // за забег (sporeNoteShown === null) не объявляем: это не переход, это
+  // начальное состояние.
+  // Кладём в очередь САМ ПОРОГ, а не готовую строку, и кладём при каждой
+  // смене: если порогов сменилось два, пока надпись была занята, показать
+  // надо последний. Иначе игрок увидит объявление о состоянии, которого у
+  // него уже нет.
+  if(sporeNoteShown&&note.call) sporePending=note;
   sporeNoteShown=note;
   HUD.sporeNote.textContent=note.text;
   HUD.sporeNote.classList.toggle("hot",!!note.hot);
@@ -858,6 +947,7 @@ document.getElementById("soundBtn").onclick=()=>showSettings(true);
 if(input.isMobile) document.body.classList.add("touch");
 HUD.burstBtn.addEventListener("click",(e)=>{ e.preventDefault(); tryBurst(); });
 document.getElementById("pauseBtn").addEventListener("click",(e)=>{ e.preventDefault(); togglePause(); });
+HUD.upgradeBtn.addEventListener("click",(e)=>{ e.preventDefault(); openUpgradeMenu(); });
 document.getElementById("shopReroll").onclick=()=>shop.reroll(player);
 document.getElementById("shopLeave").onclick=()=>shop.close();
 // Кнопка вместо надписи «R — рестарт»: на телефоне клавиши нет, и экран

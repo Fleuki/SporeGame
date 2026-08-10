@@ -145,6 +145,16 @@ canvas {
   filter: drop-shadow(0 0 6px rgba(150,60,255,0.35));
 }
 #hpBar { filter: drop-shadow(0 0 6px rgba(255,60,70,0.35)); }
+/* ШКАЛА СПОР ЯРЧЕ ОСТАЛЬНЫХ. Живая игра: «полоска, которая заполняется на
+   заражение, слишком тусклая». Так и было: сама картинка нарисована холодным
+   фиолетовым по тёмному камню, а рядом висит багровая шкала здоровья — глаз
+   уводило к ней, и заражение читалось как декорация рамки, а не как
+   показание прибора. Поднимаем яркость и насыщенность самой заливки и делаем
+   ореол вдвое сильнее: рисунок остаётся тот же, меняется только накал. */
+#sporeBar {
+  filter: brightness(1.45) saturate(1.35)
+          drop-shadow(0 0 9px rgba(170,90,255,0.75));
+}
 /* Мало HP или высокое заражение — шкала пульсирует. Подписей и цифр нет,
    поэтому тревога передаётся движением. */
 /* НАСЕЧКА НА ЦЕНЕ ВЫБРОСА. Стоит внутри окна шкалы (--win-a..--win-b), а не
@@ -256,6 +266,40 @@ canvas {
 /* Клавиатурная подсказка на сенсорном экране — обман: клавиши там нет.
    Тот же класс носит слово «Пробел» в подсказке стартового экрана. */
 body.touch .key { display: none; }
+
+/* КНОПКА ПРОКАЧКИ. Слева снизу, над шкалами: правый нижний угол занят
+   выбросом, а эти две кнопки нельзя ставить рядом — выброс жмут в панике, и
+   промах по нему, открывающий меню на весь экран, стоил бы жизни.
+   Появляется только когда есть что взять. */
+#upgradeBtn {
+  position: absolute; left: 12px; bottom: 122px;
+  pointer-events: auto;
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 10px 6px 8px;
+  background: rgba(6,9,11,0.72);
+  border: 2px solid #ffd24a;
+  color: #ffd24a;
+  font: 12px "Pixelify Sans", "Courier New", monospace;
+  letter-spacing: 1px;
+  cursor: url("../assets/images/ui/cursor.png") 27 32, pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  /* Пульс — то самое «загорелась иконка»: доступную прокачку надо заметить
+     боковым зрением, не отрываясь от толпы */
+  animation: up-ready 1.2s ease-in-out infinite;
+}
+#upgradeBtn img { width: 26px; height: 26px; image-rendering: pixelated; }
+#upgradeBtn .count {
+  min-width: 16px; text-align: center;
+  font-size: 15px; font-weight: bold; color: #fff2c4;
+}
+/* Один уровень — восклицательный знак, несколько — число (текст ставит
+   syncHud). Знак крупнее числа: он и есть то, что должно поймать взгляд. */
+#upgradeBtn.single .count { font-size: 18px; color: #fff; }
+@keyframes up-ready {
+  0%, 100% { box-shadow: 0 0 8px rgba(255,210,74,0.35); }
+  50%      { box-shadow: 0 0 18px rgba(255,210,74,0.85); }
+}
 
 /* ПАУЗА. Правый верхний угол — единственный свободный: таймер по центру
    сверху, кошелёк и шкалы снизу слева, выброс снизу справа.
