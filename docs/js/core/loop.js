@@ -16,17 +16,35 @@ export const STEP = 1 / 60;
 // накопится минута отставания и цикл повесит страницу, пытаясь её отыграть.
 const MAX_STEPS = 5;
 
+// ПОТОЛОК ЧАСТОТЫ РИСОВАНИЯ.
+//
+// requestAnimationFrame зовут столько раз, сколько герц у экрана, и на
+// ProMotion-телефоне (iPhone 13 Pro и новее) это 120 раз в секунду. Симуляция
+// от этого не ускоряется — она давно фиксированная, — а вот КАРТИНКА рисуется
+// вдвое чаще, чем нужно: те же шесть полноэкранных заливок (земля, тинт,
+// темнота, виньетка), только 120 раз вместо 60. Телефон греется ровно на этой
+// разнице, и заметить её в игре нельзя: пиксель-арт при 60 и 120 кадрах
+// выглядит одинаково, потому что сама анимация идёт по 60 шагам симуляции.
+//
+// Допуск в миллисекунду обязателен: на честном 60-герцовом экране кадры
+// приходят через 16.6 мс с дрожанием, и сравнение «>= 16.67» выбрасывало бы
+// каждый второй кадр, превращая 60 Гц в 30.
+const RENDER_TOLERANCE = 1;
+
 export class Loop {
-  constructor(update, render) {
+  constructor(update, render, maxFps = 60) {
     this.update = update;
     this.render = render;
     this.acc = 0;
     this.last = 0;
     this.frameId = 0;
+    this.renderStep = maxFps > 0 ? 1000 / maxFps : 0;
+    this.lastRender = 0;
   }
 
   start() {
     this.last = performance.now();
+    this.lastRender = 0;
     const tick = (now) => {
       this.frameId = requestAnimationFrame(tick);
       let elapsed = (now - this.last) / 1000;
@@ -37,6 +55,8 @@ export class Loop {
         this.acc -= STEP;
         this.update(STEP);
       }
+      if (now - this.lastRender < this.renderStep - RENDER_TOLERANCE) return;
+      this.lastRender = now;
       this.render();
     };
     this.frameId = requestAnimationFrame(tick);

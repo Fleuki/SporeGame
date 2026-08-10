@@ -64,12 +64,20 @@ export class Renderer {
   }
 
   // Затемнение по краям экрана: рисуется в экранном слое, после end()
+  // Виньетка не меняется вообще никогда: ни от игрока, ни от времени, ни от
+  // биома — только от размера холста. Градиент под неё собирался заново каждый
+  // кадр (то есть шестьдесят раз в секунду ради одной и той же картинки), а
+  // пересобрать его надо ровно при повороте телефона.
   drawVignette(strength=0.5){
     if(strength<=0) return;
     const w=this.canvas.width, h=this.canvas.height;
-    const grad=this.ctx.createRadialGradient(w/2,h/2,Math.min(w,h)*0.35,w/2,h/2,Math.max(w,h)*0.72);
-    grad.addColorStop(0,"rgba(0,0,0,0)"); grad.addColorStop(1,`rgba(0,0,0,${strength})`);
-    this.ctx.fillStyle=grad; this.ctx.fillRect(0,0,w,h);
+    let v=this._vignette;
+    if(!v||v.w!==w||v.h!==h||v.strength!==strength){
+      const grad=this.ctx.createRadialGradient(w/2,h/2,Math.min(w,h)*0.35,w/2,h/2,Math.max(w,h)*0.72);
+      grad.addColorStop(0,"rgba(0,0,0,0)"); grad.addColorStop(1,`rgba(0,0,0,${strength})`);
+      v=this._vignette={w,h,strength,grad};
+    }
+    this.ctx.fillStyle=v.grad; this.ctx.fillRect(0,0,w,h);
   }
 
   // --- декорации карты -----------------------------------------------
@@ -188,21 +196,61 @@ export class Renderer {
   // Восемь сдвигов, а не четыре: по диагоналям иначе остаются разрывы, и
   // контур выглядит рваным. Силуэт берётся из того же кэша, что и вспышка
   // попадания, поэтому перекраска листа происходит один раз за игру.
+  // ...но восемь раз за КАДР их рисовать незачем: контур зависит только от
+  // листа, цвета и толщины, а всё это не меняется весь забег. Восемь сдвигов
+  // делаются ОДИН раз в отдельный лист с полями по краям кадра, и на каждого
+  // врага остаётся ровно одна отрисовка вместо восьми.
+  //
+  // Это была самая дорогая строчка в кадре, и не по времени JS, а по работе
+  // видеокарты: тридцать врагов на экране — это 240 полупрозрачных копий
+  // спрайта, то есть больше заливки, чем у всей остальной игры вместе. На
+  // телефоне это чувствуется рукой.
   drawOutline(img,key,x,y,frameW,frameH,col,row,displaySize,flip,color,width=2,alpha=0.55){
     if(!img||!img.width||alpha<=0||width<=0) return;
-    const sil=this.silhouette(img,key,color);
+    // Толщина задана в МИРОВЫХ единицах, а поля листа считаются в пикселях
+    // самого листа: кадр 64 пикселя показывается размером display.
+    const sx=displaySize/frameW, sy=displaySize/frameH;
+    const pad=Math.max(1,Math.round(width/sx));
+    const sheet=this.outlineSheet(img,key,color,pad,frameW,frameH);
+    if(!sheet) return;
+    const cw=frameW+pad*2, ch=frameH+pad*2;
     const ctx=this.ctx;
     ctx.save();
     ctx.globalAlpha=alpha;
     ctx.translate(x,y);
     if(flip) ctx.scale(-1,1);
-    const d=displaySize;
-    for(let i=0;i<8;i++){
-      const a=Math.PI/4*i;
-      ctx.drawImage(sil,col*frameW,row*frameH,frameW,frameH,
-        -d/2+Math.cos(a)*width, -d/2+Math.sin(a)*width, d, d);
-    }
+    ctx.drawImage(sheet,col*cw,row*ch,cw,ch,
+      -cw*sx/2,-ch*sy/2,cw*sx,ch*sy);
     ctx.restore();
+  }
+
+  // Лист контуров: тот же лист силуэтов, но каждый кадр раздут на pad
+  // пикселей во все стороны. Кадры лежат в той же сетке, только клетка больше
+  // на поля — иначе контур соседнего кадра залезал бы в этот.
+  outlineSheet(img,key,color,pad,frameW,frameH){
+    if(!this._outlineCache) this._outlineCache=new Map();
+    const id=key+"|"+color+"|"+pad+"|"+frameW+"x"+frameH;
+    let cv=this._outlineCache.get(id);
+    if(cv) return cv;
+    const cols=Math.max(1,Math.round(img.width/frameW));
+    const rows=Math.max(1,Math.round(img.height/frameH));
+    const cw=frameW+pad*2, ch=frameH+pad*2;
+    cv=document.createElement("canvas");
+    cv.width=cols*cw; cv.height=rows*ch;
+    const c=cv.getContext("2d");
+    c.imageSmoothingEnabled=false;
+    const sil=this.silhouette(img,key,color);
+    for(let r=0;r<rows;r++){
+      for(let q=0;q<cols;q++){
+        for(let i=0;i<8;i++){
+          const a=Math.PI/4*i;
+          c.drawImage(sil,q*frameW,r*frameH,frameW,frameH,
+            q*cw+pad+Math.cos(a)*pad, r*ch+pad+Math.sin(a)*pad, frameW,frameH);
+        }
+      }
+    }
+    this._outlineCache.set(id,cv);
+    return cv;
   }
 
   // --- примитивы -----------------------------------------------------

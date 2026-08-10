@@ -955,7 +955,7 @@ document.getElementById("shopLeave").onclick=()=>shop.close();
 document.getElementById("restartBtn").onclick=()=>{ if(gameOver) init(); };
 document.getElementById("menuBtn").onclick=()=>{ if(gameOver) backToMenu(); };
 
-const loop=new Loop(update,draw);
+const loop=new Loop(update,draw,CONFIG.maxFps);
 init();
 loop.start();
 console.log("Грибной Сумрак запущен! WASD/джойстик — движение, мышь/авто-прицел — стрельба, M — звук, R — рестарт");
