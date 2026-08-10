@@ -1400,7 +1400,13 @@ export const CONFIG = {
     sounds: {
       music_run: "assets/sounds/music_run.mp3",
       music_boss: "assets/sounds/music_boss.mp3",
-      music_death: "assets/sounds/music_death.mp3"
+      music_death: "assets/sounds/music_death.mp3",
+      // ПОБЕДА. Файл пришёл на 4:30 и на 5 дБ громче темы забега — в игру
+      // положен кусок 0:00–1:18 с затуханием в тихой доле трека и приведённый
+      // к −19 LUFS (у забега −18.7, у смерти −20.0). Экран итогов дольше минуты
+      // не смотрят, а трек громче остальных слышен как ошибка громкости, а не
+      // как смена темы. Играет один раз и затихает — как и тема смерти.
+      music_victory: "assets/sounds/music_victory.mp3"
     }
   }
 };
