@@ -114,8 +114,15 @@ export class EnemyShot {
   isOffScreen(camera){ return camera?!camera.sees(this.x,this.y,80):false; }
 
   draw(renderer){
-    const ctx=renderer.ctx, glow=this.def.glow||"#ffe066";
+    const ctx=renderer.ctx, glow=this.def.glow||"#ff4d5e";
     ctx.save();
+    // ТЁМНОЕ ЯДРО ПОД КОМКОМ. Цвета мало: лут в этой игре тоже светящийся
+    // кружок, а в свалке из двадцати тел цвет читается последним — раньше
+    // читается ФОРМА. У снаряда теперь есть тёмная сердцевина, которой нет ни
+    // у одной точки опыта: даже боковым зрением это «дырка», а не искра.
+    ctx.globalAlpha=0.55;
+    renderer.drawCircle(this.x,this.y,this.radius*1.15,"#1a0508");
+    ctx.globalAlpha=1;
     // Рыхлый комок: три подрагивающих кружка вместо одного ровного
     for(let i=0;i<3;i++){
       const a=this.spin+i*(Math.PI*2/3);

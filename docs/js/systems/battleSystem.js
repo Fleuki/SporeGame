@@ -444,7 +444,7 @@ export class BattleSystem {
           player.sporeLevel=Math.min(CONFIG.sporeSystem.maxSpore,
                                      player.sporeLevel+s.def.spore);
         }
-        this.particles.emit(s.x,s.y,s.def.glow||"#ffe066",10);
+        this.particles.emit(s.x,s.y,s.def.glow||"#ff4d5e",10);
         this.enemyShots.splice(i,1);
         continue;
       }
