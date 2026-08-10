@@ -109,11 +109,27 @@ export class MapSystem {
       renderer.drawMyceliumVeins(); renderer.drawGrid();
       return;
     }
+    // ЗЕМЛЯ РИСУЕТСЯ НЕ КАЖДЫЙ КАДР. Все её слои детерминированы координатами
+    // мира: тайлы, пятна, тропы и рельеф в одном и том же месте выглядят
+    // одинаково всегда. Значит кадр за кадром пересчитывались одни и те же
+    // десятки градиентов и сотни поворотов тайла — только ради того, что
+    // сдвинулось на три пикселя. Теперь кусок земли с запасом по краям
+    // собирается в отдельный холст и просто кладётся на кадр, а пересобирается
+    // лишь когда камера выходит за этот запас или меняется биом.
+    const layer=this.groundLayer(renderer,biome,img,c);
+    if(layer) ctx.drawImage(layer.canvas,layer.x,layer.y,layer.w,layer.h);
+    else this.paintGround(ctx,renderer,biome,img,c.x-1,c.y-1,c.w+2,c.h+2);
+  }
+
+  // Слои земли внутри прямоугольника мира. ctx может быть как кадром, так и
+  // холстом кэша — отсюда и параметры вместо камеры: рисуемый кусок больше
+  // видимого, и брать границы у камеры уже нельзя.
+  paintGround(ctx,renderer,biome,img,rx,ry,rw,rh){
     // Земля есть только внутри арены — за границей пустота
-    const x0=Math.max(c.x-1,WORLD.minX), y0=Math.max(c.y-1,WORLD.minY);
-    const x1=Math.min(c.x+c.w+1,WORLD.maxX), y1=Math.min(c.y+c.h+1,WORLD.maxY);
+    const x0=Math.max(rx,WORLD.minX), y0=Math.max(ry,WORLD.minY);
+    const x1=Math.min(rx+rw,WORLD.maxX), y1=Math.min(ry+rh,WORLD.maxY);
     ctx.fillStyle=CONFIG.world.voidColor;
-    ctx.fillRect(c.x-1,c.y-1,c.w+2,c.h+2);
+    ctx.fillRect(rx,ry,rw,rh);
     if(x1<=x0||y1<=y0) return;
 
     ctx.save();
@@ -129,6 +145,45 @@ export class MapSystem {
     // протоптанным местом.
     ctx.fillStyle=biome.tint;
     ctx.fillRect(x0,y0,x1-x0,y1-y0);
+  }
+
+  // Готовый кусок земли с запасом по краям. Возвращает null, если кэш
+  // почему-то не собрался — тогда земля рисуется по-старому, прямо в кадр.
+  //
+  // Начало куска ОКРУГЛЯЕТСЯ до целого экранного пикселя тем же способом, что
+  // и сдвиг камеры (`Camera.begin`). Без этого готовый холст ложился бы на
+  // дробное смещение, и вся земля подрагивала бы на пиксель при каждом шаге —
+  // ровно то дрожание пиксель-арта, ради которого камера и округляется.
+  groundLayer(renderer,biome,img,c){
+    const pad=CONFIG.map.groundPad;
+    if(!(pad>0)) return null;
+    const zoom=c.zoom;
+    const w=c.w*(1+pad*2), h=c.h*(1+pad*2);
+    const g=this._ground;
+    const inside=g&&g.biome===biome&&g.zoom===zoom&&g.w===w&&g.h===h
+      &&c.x>=g.x&&c.y>=g.y&&c.x+c.w<=g.x+g.w&&c.y+c.h<=g.y+g.h;
+    if(inside) return g;
+
+    const pw=Math.ceil(w*zoom), ph=Math.ceil(h*zoom);
+    if(!(pw>0)||!(ph>0)) return null;
+    let cv=g&&g.canvas;
+    if(!cv||cv.width!==pw||cv.height!==ph){
+      cv=document.createElement("canvas");
+      cv.width=pw; cv.height=ph;
+    }
+    // Камера смотрит в середину куска: уйдя в любую сторону, игрок получает
+    // полный запас, а не половину его с одного бока
+    const x=Math.round((c.x-c.w*pad)*zoom)/zoom;
+    const y=Math.round((c.y-c.h*pad)*zoom)/zoom;
+    const gc=cv.getContext("2d");
+    gc.setTransform(1,0,0,1,0,0);
+    gc.clearRect(0,0,pw,ph);
+    gc.imageSmoothingEnabled=false;
+    gc.setTransform(zoom,0,0,zoom,-x*zoom,-y*zoom);
+    this.paintGround(gc,renderer,biome,img,x,y,w,h);
+    gc.setTransform(1,0,0,1,0,0);
+    this._ground={canvas:cv,x,y,w,h,zoom,biome};
+    return this._ground;
   }
 
   // Слой 1. Тайлы с разворотом по хешу клетки.
@@ -423,13 +478,22 @@ export class MapSystem {
     const cam=renderer.camera; if(!cam||!player) return;
     const w=renderer.canvas.width, h=renderer.canvas.height;
 
+    // Слой темноты собирается в ПОЛОВИННОМ разрешении и растягивается на кадр.
+    // В нём нет ни одной детали мельче круга света: сплошная заливка и мягкие
+    // градиенты, растянуть которые вдвое нельзя заметить даже на скриншоте, —
+    // а платился он полным размером холста дважды за кадр (заливка плюс вывод)
+    // и был самой дорогой строчкой всей отрисовки. Вчетверо меньше пикселей.
+    const s=D.layerScale||1;
+    const lw=Math.max(1,Math.round(w*s)), lh=Math.max(1,Math.round(h*s));
+
     let cv=this._dark;
-    if(!cv||cv.width!==w||cv.height!==h){
+    if(!cv||cv.width!==lw||cv.height!==lh){
       cv=this._dark=document.createElement("canvas");
-      cv.width=w; cv.height=h;
+      cv.width=lw; cv.height=lh;
       this._darkCtx=cv.getContext("2d");
     }
     const dc=this._darkCtx;
+    dc.setTransform(s,0,0,s,0,0);   // рисуем по-прежнему в пикселях КАДРА
     dc.globalCompositeOperation="source-over";
     // Цвет темноты берётся у биома: чёрный везде одинаков, а «зеленовато-
     // чёрный» и «лиловый мрак» различаются даже боковым зрением — именно
@@ -458,8 +522,12 @@ export class MapSystem {
 
     renderer.ctx.save();
     renderer.ctx.globalAlpha=D.strength;
-    renderer.ctx.drawImage(cv,0,0);
-    renderer.ctx.restore();
+    // Сглаживание включается ровно на эту одну картинку: слой уменьшенный, и
+    // без него край круга света пошёл бы ступеньками. Всей остальной игре оно
+    // по-прежнему запрещено — пиксель-арт от него мылится.
+    renderer.ctx.imageSmoothingEnabled=true;
+    renderer.ctx.drawImage(cv,0,0,w,h);
+    renderer.ctx.restore();   // restore возвращает и запрет сглаживания
 
     // Налёт цвета на самом круге света. Темноты биома мало: игрок смотрит в
     // освещённый круг, а он до сих пор был одинаковым во всех четырёх.

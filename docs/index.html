@@ -161,7 +161,7 @@
   <div id="startScreen">
     <img id="emblem" src="assets/images/ui/emblem.png" alt="">
     <h1>ГРИБНОЙ СУМРАК</h1>
-    <p class="sub">Споры в воздухе. Держись, сколько сможешь.</p>
+    <p class="sub">Споры в воздухе. Продержись пятнадцать минут и добей то, что придёт.</p>
     <!-- РЕКОРД. Забег заканчивался — и всё: ни следа, ни повода начать
          заново. Одна строка превращает «поиграл» в «в прошлый раз было
          6:40». Прячется, пока рекорда нет: пустое место честнее нулей. -->
@@ -182,8 +182,11 @@
     <p class="hint">Выброс спор — <span class="key">пробел или </span>кнопка справа: 30% заражения в удар по кругу.</p>
   </div>
   <div id="gameOverScreen" class="hidden">
-    <h1>СПОРЫ ПОБЕДИЛИ</h1>
-    <p>Продержался <span id="finalTime">0:00</span>, уровень <span id="finalLevel">1</span></p>
+    <!-- ЗАГОЛОВОК И ПЕРВОЕ СЛОВО МЕНЯЮТСЯ: у забега теперь два исхода, а не
+         один (CONFIG.spawn.final). Экран при этом один — итог у забега один,
+         разные у него только заголовок, цвет и музыка. -->
+    <h1 id="overTitle">СПОРЫ ПОБЕДИЛИ</h1>
+    <p><span id="overLead">Продержался</span> <span id="finalTime">0:00</span>, уровень <span id="finalLevel">1</span></p>
     <p class="record hidden" id="newRecord">НОВЫЙ РЕКОРД</p>
     <p class="record hidden" id="prevBest">Лучшее: <span id="prevBestTime">0:00</span></p>
     <p><img class="icon" src="assets/images/ui/icon_kills.png" alt="Убито"> <span id="finalKills">0</span>
