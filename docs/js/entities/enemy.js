@@ -146,6 +146,10 @@ export class Enemy extends Entity {
       const k=CONFIG.enemies.touchPush;
       this.x+=Math.cos(push)*k; this.y+=Math.sin(push)*k;
     }
+    // Наружу арены не выходит никто (см. Entity.clampToArena). Прыжок волка и
+    // расталкивание в упор двигают врага помимо отдачи, поэтому проверка стоит
+    // в конце кадра, а не только там, где затухает отдача.
+    this.clampToArena();
   }
 
   // ПРЫЖОК ЭЛИТНОГО ВОЛКА. Возвращает множитель скорости на этот кадр:
@@ -281,7 +285,7 @@ export class Enemy extends Entity {
     // оно обязано читаться в толпе, а не только на пустом экране.
     if(this.charge>=0){
       const R=this.def.ranged;
-      this.drawWindup(renderer,this.charge/R.chargeTime,R.shot.glow||"#ffe066");
+      this.drawWindup(renderer,this.charge/R.chargeTime,R.shot.glow||"#ff4d5e");
     }
     // Замах прыжка элитного волка — то же самое кольцо и тем же способом:
     // один знак на всю игру означает «сейчас прилетит». Заводить волку свой

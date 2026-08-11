@@ -722,7 +722,18 @@ body.touch .key { display: none; }
 #metaBox { margin-top: 14px; }
 #bankLine { font-size: 13px; opacity: 0.85; }
 #bankLine .icon { width: 14px; height: 14px; vertical-align: -2px; image-rendering: pixelated; }
-#charList { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 10px; }
+#charList, #diffList { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 10px; }
+/* СЛОЖНОСТИ — те же карточки, что персонажи, только уже: у них нет иконки и
+   ценника, а есть одна строка про то, чем эта ступень отличается. */
+#diffBox { margin-top: 6px; }
+.char-card.diff { width: 150px; }
+.char-card.diff .done {
+  margin-top: 6px; color: #00d4aa; font-size: 11px; letter-spacing: 2px;
+}
+/* Закрытая сложность не покупается ни за что — её открывает только победа,
+   поэтому цвет ожидания холодный, а не золотой, как у ценника персонажа. */
+.char-card.diff.locked { border-color: #2f3a36; color: #6f7d77; }
+.char-card.diff.locked .title { color: #8ea59b; }
 .char-card {
   position: relative;
   width: 190px; padding: 9px 10px 10px;
@@ -812,8 +823,8 @@ body.touch .key { display: none; }
   .shop-card { width: auto; }
   /* Две карточки по 190 в 390 пикселей не влезают и переносятся друг под
      друга вразнобой — ставим их сеткой в две колонки */
-  #charList { display: grid; grid-template-columns: 1fr 1fr; }
-  .char-card { width: auto; font-size: 11px; }
+  #charList, #diffList { display: grid; grid-template-columns: 1fr 1fr; }
+  .char-card, .char-card.diff { width: auto; font-size: 11px; }
   #shopMenu { padding: 14px 16px; }
   #shopMenu h2 { font-size: 18px; margin-bottom: 10px; }
 }

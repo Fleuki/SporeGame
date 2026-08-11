@@ -7,6 +7,7 @@
 // (иммунитет к цепному взрыву, гарантированный дроп антидота).
 
 import { CONFIG } from "../config.js";
+import { WORLD } from "../core/camera.js";
 
 export class Entity {
   constructor(x,y,radius){
@@ -39,7 +40,25 @@ export class Entity {
       this.kx*=f; this.ky*=f;
       if(Math.abs(this.kx)<0.05) this.kx=0;
       if(Math.abs(this.ky)<0.05) this.ky=0;
+      this.clampToArena();
     }
+  }
+
+  // НИКТО НЕ ВЫХОДИТ ЗА АРЕНУ. Игрок зажат её границами с самого начала
+  // (`Player.update`), а вот врагов не держало ничто — их двигала только
+  // погоня за игроком, и уйти наружу они не могли. Отдача могла.
+  //
+  // Живой игрой: Улей вытолкали ударами за верхний край, а он НЕПОДВИЖЕН —
+  // сам не вернулся, а игрок за ним выйти не может. Босс остался жив
+  // навсегда, и вместе с ним застрял финал забега, который ждёт, пока арена
+  // освободится. Один невыталкиваемый босс отменил конец игры.
+  //
+  // Отдача при этом остаётся: она толкает, просто не наружу. Радиус вычтен —
+  // иначе туша упирается в край половиной себя, и по ней трудно попасть.
+  clampToArena(){
+    const r=this.radius||0;
+    this.x=Math.min(Math.max(this.x,WORLD.minX+r),WORLD.maxX-r);
+    this.y=Math.min(Math.max(this.y,WORLD.minY+r),WORLD.maxY-r);
   }
 
   distTo(o){ return Math.hypot(o.x-this.x,o.y-this.y); }

@@ -79,8 +79,9 @@ const loot=new LootSystem(particles,audio);
 const battle=new BattleSystem(particles,sporeSystem,loot,audio,loader);
 const map=new MapSystem();
 const shop=new ShopSystem(audio);
-const records=new RecordSystem();
 const meta=new MetaSystem();
+// Рекорд у каждой сложности свой — область хранения задаётся выбранной
+const records=new RecordSystem(meta.difficulty);
 // Громкости читаются из localStorage и применяются к звуку сразу при запуске:
 // игрок, убавивший эффекты в прошлый раз, не должен слышать их снова
 const settings=new SettingsSystem(audio);
@@ -252,7 +253,9 @@ function init(){
   // объявлял бы «МШИСТАЯ НИЗИНА» на первой же секунде нового забега.
   biomeShown=map.biome(0); biomePending=null; bannerBusy=0;
   sporeNoteShown=null; sporePending=null; sporeCooldown=0;
-  spawnSystem=new SpawnSystem(camera);
+  // Сложность фиксируется в момент создания забега и дальше не меняется:
+  // см. комментарий у конструктора SpawnSystem.
+  spawnSystem=new SpawnSystem(camera,meta.curDiff());
   shop.reset(); shopDue=false; nextShopAt=CONFIG.shop.every;
   gameOver=false; paused=false; waitingForUpgrade=false;
   // Значок паузы обязан вернуться в исходное вместе с забегом: игрок мог
@@ -565,7 +568,10 @@ function endGame(won=false){
   // У ПОБЕДЫ ТРЕКА НЕТ, и тема смерти ей не подходит по смыслу: она про
   // «споры победили». Пока автор не сделает тему победы, здесь тишина —
   // ровно по тому же правилу, по которому её однажды оставили на смерти.
-  audio.music(won?null:"death");
+  // «victory» — трека ещё нет, и это не забывчивость: пока файла нет, играет
+  // ТИШИНА (NO_FALLBACK в audio.js), а не тема забега и не тема смерти. Как
+  // только файл ляжет в CONFIG.assets.sounds, эта же строка его и заиграет.
+  audio.music(won?"victory":"death");
   // Заголовок и цвет экрана. Иллюстрация с проросшим противогазом на победе
   // прячется классом `won`: она говорит обратное тому, что говорит заголовок.
   const over=document.getElementById("gameOverScreen");
@@ -591,6 +597,15 @@ function endGame(won=false){
   }
   // Рекорд подаётся ПОСЛЕ цифр забега: сначала «сколько получилось», потом
   // «лучше ли, чем раньше». Обратный порядок читается как упрёк.
+  // ПОБЕДА ОТКРЫВАЕТ СЛЕДУЮЩУЮ СЛОЖНОСТЬ — и обязана об этом сказать. Молча
+  // открытая ступень равна неоткрытой: игрок закрыл экран итогов и никогда не
+  // узнал, что игра стала другой.
+  const opened=won?meta.beat(meta.difficulty):null;
+  const unlockLine=document.getElementById("unlockedLine");
+  unlockLine.classList.toggle("hidden",!opened);
+  if(opened){
+    document.getElementById("unlockedName").textContent=meta.diffDef(opened).name;
+  }
   const beaten=records.submit({time:runTime,level:player.level,kills:battle.kills,won});
   document.getElementById("newRecord").textContent=
     beaten&&won&&!records.prev?.won?"ЗАБЕГ ПРОЙДЕН":"НОВЫЙ РЕКОРД";
@@ -964,7 +979,7 @@ function backToMenu(){
   document.getElementById("gameOverScreen").classList.add("hidden");
   document.getElementById("startScreen").classList.remove("hidden");
   init();
-  showBest(); showMeta();
+  showBest(); showMeta(); showDiff();
 }
 // Рекорд на стартовом экране. Прячется, пока его нет: пустое место честнее
 // нулей, которые выглядят как «ты уже играл и продержался ноль».
@@ -974,6 +989,9 @@ function showBest(){
   if(!b) return;
   document.getElementById("bestTime").textContent=recordText(b);
   document.getElementById("bestLevel").textContent=b.level;
+  // Рекорд принадлежит сложности, и это надо назвать: иначе «пройден за 15:01»
+  // на первой выглядит как рекорд игры вообще.
+  document.getElementById("bestDiff").textContent=meta.curDiff().name;
 }
 
 // ВЫБОР ПЕРСОНАЖА И БАНК на стартовом экране.
@@ -985,6 +1003,41 @@ function showBest(){
 // Пока открыт один персонаж и банк пуст, ряда нет вовсе: карточка без выбора
 // и цифра «0» ничего не сообщают. Первая же отложенная монета его показывает —
 // иначе она пропала бы молча, а это то самое ложное обещание.
+// ВЫБОР СЛОЖНОСТИ на стартовом экране. Ряд карточек, тот же вид, что у
+// персонажей и у прилавка: игрок уже знает, что карточку жмут.
+//
+// Ряда нет, пока открыта одна сложность: карточка без выбора ничего не
+// сообщает, а «ЗАКРЫТО» рядом с ней на первом же запуске читается как упрёк.
+// Первая победа его и показывает — вместе с тем, что она открыла.
+function showDiff(){
+  const list=meta.diffList();
+  const box=document.getElementById("diffBox");
+  const visible=list.some(d=>d.unlocked&&d.key!==CONFIG.difficulties.starter);
+  box.classList.toggle("hidden",!visible);
+  if(!visible) return;
+  const row=document.getElementById("diffList");
+  row.innerHTML="";
+  for(const d of list){
+    const div=document.createElement("div");
+    div.className="char-card diff"+(d.selected?" on":"")+(d.unlocked?"":" locked");
+    div.innerHTML=
+      '<div class="title">'+d.def.name+'</div>'+
+      '<div class="desc">'+(d.unlocked?d.def.desc:"Пройди предыдущую")+'</div>'+
+      (d.beaten?'<div class="done">ПРОЙДЕНО</div>':"");
+    div.onclick=()=>{
+      const ok=meta.selectDiff(d.key);
+      // Закрытая сложность обязана звучать отказом: молчащая карточка
+      // читается как «игра не заметила нажатие».
+      audio.sfx(ok?"pickup":"hit",ok?1:0.4);
+      if(!ok) return;
+      // Рекорд принадлежит сложности: переключил — показывай её рекорд.
+      records.setScope(meta.difficulty);
+      showDiff(); showBest();
+    };
+    row.appendChild(div);
+  }
+}
+
 function showMeta(){
   const box=document.getElementById("metaBox");
   box.classList.toggle("hidden",!meta.isVisible());
@@ -1015,7 +1068,7 @@ function showMeta(){
     list.appendChild(div);
   }
 }
-showBest(); showMeta();
+showBest(); showMeta(); showDiff();
 
 document.getElementById("playBtn").onclick=startRun;
 // ПОЛЗУНКИ ГРОМКОСТИ. Пара «ползунок — цифра» на каждую громкость; сам список
