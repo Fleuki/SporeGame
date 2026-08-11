@@ -1494,3 +1494,141 @@ The 4 frames are a pulsing loop: the spines flare brighter and dim, spores
 drift outward.
 ```
 
+
+---
+
+## ПРОМОМАТЕРИАЛЫ ДЛЯ ПЛОЩАДКИ: ИКОНКА, ОБЛОЖКА, ЛОГОТИП
+
+Это единственные картинки в проекте, которые **не проходят через
+`tools/normalize.mjs`**: конвейер приводит всё к палитре и к «один пиксель
+картинки = одна мировая единица», а промо живёт не в игре, а в карточке
+магазина. Кладутся они в `docs/assets/` как есть.
+
+Правила площадки, которые здесь важнее художественного вкуса (см.
+`YANDEX.md`):
+
+- **скриншот в качестве иконки или обложки запрещён прямым пунктом.** То
+  есть `cover.png`, снятый прогоном боя, для карточки не годится вовсе —
+  нужен нарисованный ключевой арт;
+- **ни рамок, ни скруглённых углов** — их дорисует сама площадка;
+- **текст внутри картинки не должен быть обрезан краем**;
+- **название пишется ровно так же, как в игре**: «ГРИБНОЙ СУМРАК». Латиницей
+  нельзя — в игре она русская.
+
+**Кириллицу генераторы врут чаще всего.** Просить надо явной строкой в
+кавычках и заглавными, а после генерации ЧИТАТЬ буквы по одной: «Й» без
+краткой, «Ы» как «Ь!», лишняя «С» — обычный результат. Если после нескольких
+попыток надпись не выходит, правильный ход не воевать с моделью, а взять
+картинку БЕЗ текста и положить название сверху шрифтом игры.
+
+### Иконка 512x512 — лицо игры в списке
+
+Иконку видят в каталоге размером с ноготь, поэтому в ней ОДИН предмет
+крупно, без текста и без сцены. У этой игры такой предмет уже есть и он же
+стоит на экране смерти: противогаз, из которого растут грибы.
+
+```
+Pixel art game icon, 16-bit SNES era style, square 1:1 composition,
+1024x1024.
+
+Subject fills most of the frame: a battered gas mask seen from the front,
+its round glass lenses glowing bioluminescent teal #00d4aa from inside.
+Clusters of small fungal caps in fungal purple #6b2d5c grow out of the
+mask's straps and filter, a few teal spores drift around it.
+
+Colour palette, use only these: deep forest green #1a3d2e, near-black green
+#0d1f15, fungal purple #6b2d5c, toxic yellow #c4a000, bioluminescent teal
+#00d4aa, worn leather brown #5c3a21, gas-mask black #2a2a2a, spore grey
+#8a8a8a.
+
+Chunky readable pixels, hard edges, no anti-aliasing, no blur, strong
+silhouette that stays readable when the image is scaled down to 64x64.
+Dark background of near-black green with a soft teal glow behind the mask,
+no scene, no horizon, no other objects.
+
+No text, no letters, no logo, no watermark, no frame, no border, no rounded
+corners, no drop shadow outside the artwork.
+```
+
+Второй заход, если противогаз выйдет невнятным: тот же промпт, но subject —
+**одна светящаяся грибная шляпка** крупным планом, вид сверху, с кольцом
+спор. Читается на ногте лучше любого лица, но хуже говорит про жанр.
+
+### Обложка — сцена с названием
+
+Пропорции берутся из формы черновика (она же скажет точные числа), а
+генерировать надо ШИРЕ и БОЛЬШЕ, с запасом по краям: обрезать лишнее можно,
+дорисовать — нет. Название целиком внутри кадра, не впритык к краю.
+
+```
+Pixel art key art banner for a dark fungal survival game, 16-bit SNES era
+style, wide horizontal composition, 1920x1080, no frame, no border.
+
+Scene: a dead forest swallowed by giant glowing mushrooms at night. Huge
+caps in fungal purple #6b2d5c and bioluminescent teal #00d4aa light the fog
+from above, bare black trunks and roots frame the sides, spores drift as
+tiny bright specks. In the centre middle-ground, small and lit from behind,
+stands a lone survivor in a gas mask and a long coat, holding a glowing
+green vial — he is small enough that the forest dwarfs him.
+
+Big title text across the upper half, in Russian Cyrillic, spelled EXACTLY:
+"ГРИБНОЙ СУМРАК"
+Two lines, centred, chunky pixel letters carved from dark purple stone with
+warm golden edges and a violet glow, small mushroom caps growing on the tops
+of some letters. Every letter fully inside the frame, nothing cropped.
+
+Colour palette: deep forest green #1a3d2e, near-black green #0d1f15, fungal
+purple #6b2d5c, toxic yellow #c4a000, bioluminescent teal #00d4aa, worn
+leather brown #5c3a21.
+
+Chunky readable pixels, hard edges, no anti-aliasing, no modern soft glow
+blur. No UI, no health bars, no buttons, no watermark, no logos, no rounded
+corners.
+```
+
+### Логотип-надпись отдельным слоем
+
+Полезен дважды: на обложке его можно положить на сцену самому, а на
+стартовом экране он заменит набранное шрифтом название.
+
+```
+Pixel art game logo, 16-bit SNES era style, on a solid uniform pure magenta
+background #FF00FF, absolutely flat, nothing else in the image.
+
+The logo is Russian Cyrillic text, spelled EXACTLY, in two centred lines:
+"ГРИБНОЙ"
+"СУМРАК"
+Chunky pixel letters carved from dark purple stone #6b2d5c with warm golden
+#c4a000 bevelled edges and a soft violet outer glow. Small pale mushroom
+caps and thin mycelium threads grow out of the tops of a few letters.
+Letters are heavy, wide and readable, no thin strokes, no script, no serifs
+thinner than two pixels.
+
+No background scene, no frame, no border, no shadow on the background, no
+watermark. Do not draw a transparency checkerboard.
+```
+
+Магента здесь по той же причине, что и у спрайтов (пункт 2 выше): просить
+прозрачность бесполезно, а магента снимается скриптом `tools/cut_key.py`.
+
+### Правка готовой картинки вместо новой генерации
+
+Если баннер уже нарисован и нравится всем, кроме языка, дешевле не
+перегенерировать его, а попросить модель переписать надпись. Формулировка
+для редактирования по образцу:
+
+```
+Keep this image exactly as it is: same composition, same colours, same
+lighting, same mushrooms growing on the letters, same pixel art style.
+Change ONLY the lettering. Replace the English words with Russian Cyrillic
+text spelled EXACTLY, on two lines:
+"ГРИБНОЙ"
+"СУМРАК"
+Keep the same carved stone look, the same golden bevel and violet glow, the
+same mushroom caps sprouting from the letter tops. Do not add or remove
+anything else. Do not add a frame or rounded corners.
+```
+
+**Читать результат по буквам.** «ГРИБНОЙ СУМРАК» — четырнадцать знаков, и
+ошибка ровно в одном из них означает отказ на модерации по пункту про
+совпадение названия.
