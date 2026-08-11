@@ -7,7 +7,8 @@
 // мешают выстрелы, вынужден был глушить заодно и трек, ради которого всё
 // затевалось.
 //
-// Хранится в localStorage рядом с рекордом и банком. Он может быть недоступен
+// Хранится через Store (engine/store.js) рядом с рекордом и банком.
+// Хранилище может быть недоступно
 // вовсе — приватное окно, жёсткие настройки, iframe, — и это НЕ должно ломать
 // игру: настройки просто не переживут вкладку, а звучать всё будет как звучало.
 
@@ -18,6 +19,8 @@ const KEY="sporegame.audio";
 // принадлежит настройкам, а не звуку.
 const DEFAULTS={ music: 0.52, sfx: 0.5 };
 
+import { Store } from "../engine/store.js";
+
 export class SettingsSystem {
   constructor(audio){
     this.audio=audio;
@@ -25,9 +28,16 @@ export class SettingsSystem {
     this.apply();
   }
 
+  // Хранилище подменили уже после первого чтения (площадка отдаёт своё
+  // промисом — см. Store.use): громкости перечитываются и применяются.
+  reload(){
+    this.values={...DEFAULTS,...this.load()};
+    this.apply();
+  }
+
   load(){
     try{
-      const raw=localStorage.getItem(KEY);
+      const raw=Store.getItem(KEY);
       if(!raw) return {};
       const v=JSON.parse(raw);
       const out={};
@@ -42,7 +52,7 @@ export class SettingsSystem {
   }
 
   save(){
-    try{ localStorage.setItem(KEY,JSON.stringify(this.values)); }catch{}
+    Store.setItem(KEY,JSON.stringify(this.values));
   }
 
   // Громкость применяется СРАЗУ, а не по кнопке «сохранить»: ползунок, который

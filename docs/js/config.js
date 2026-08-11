@@ -57,7 +57,7 @@ export const CONFIG = {
   // Держим одной строкой здесь, иначе при следующей смене шрифта два-три
   // места обязательно забудутся и в кадре окажутся два разных шрифта.
   // Запасные — на случай, если woff2 не догрузился: текст обязан остаться.
-  fontFamily: '"Pixelify Sans", "Courier New", monospace',
+  fontFamily: '"Tiny5", "Courier New", monospace',
   colors: {
     grass: "#1a3d2e", grassDark: "#0d1f15", mushroom: "#6b2d5c",
     toxic: "#c4a000", biolum: "#00d4aa", acid: "#39ff14",

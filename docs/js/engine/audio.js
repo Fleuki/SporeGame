@@ -151,6 +151,10 @@ export class AudioManager {
     // эффекты забивали трек целиком, и «музыки не слышно» было правдой
     this.loader=loader; this.musicVolume=0.52; this.sfxVolume=0.5;
     this.currentMusic=null; this.muted=false;
+    // Временная остановка по внешней причине — см. suspend(): сворачивание
+    // вкладки, реклама, пауза. От muted отличается тем, что это НЕ решение
+    // игрока и снимается само.
+    this.suspended=false;
     this.ctx=null; this.master=null; this.noise=null;
     this.lastAt=new Map();
     // МУЗЫКА. wanted — какой трек должен играть; играть он начнёт, только
@@ -193,6 +197,11 @@ export class AudioManager {
       const data=this.noise.getChannelData(0);
       for(let i=0;i<len;i++) data[i]=Math.random()*2-1;
     }
+    // Пока звук остановлен снаружи (реклама, свёрнутая вкладка, пауза),
+    // жест НЕ будит его обратно: касание ползунка громкости на паузе или
+    // тычок в экран поверх рекламного ролика вернули бы музыку в тот самый
+    // момент, ради которого её и глушили.
+    if(this.suspended) return this.ctx;
     if(this.ctx.state==="suspended") this.ctx.resume().catch(()=>{});
     // Просьба сыграть трек могла прийти раньше, чем появился контекст —
     // например, из того же нажатия «Играть», которое его и разбудило
@@ -505,5 +514,37 @@ export class AudioManager {
     if(this.currentMusic) this.currentMusic.volume=this.muted?0:this.musicVolume;
     if(this.master) this.master.gain.value=this.muted?0:1;
     return this.muted;
+  }
+
+  // ЗВУК ЗАМОЛКАЕТ ЦЕЛИКОМ И ВОЗВРАЩАЕТСЯ ТУДА ЖЕ, ГДЕ ОСТАНОВИЛСЯ.
+  //
+  // Это не «ещё один mute», и разница принципиальная: mute — решение игрока,
+  // оно живёт до следующего его нажатия, а это — временная остановка по
+  // внешней причине. Причин три, и все три требуют одного и того же:
+  //   — вкладку свернули (требование площадки: свёрнутая игра не звучит);
+  //   — показывается полноэкранная реклама (там своё звуковое сопровождение,
+  //     и музыка игры поверх него читается как поломка);
+  //   — игра на паузе.
+  //
+  // Останавливаются ОБА источника: файл (<audio>) и синтез (AudioContext).
+  // Глушить только громкость нельзя — звук, играющий в ноль, продолжает
+  // расходовать батарею и, что важнее, продолжает ИДТИ: вернувшись через
+  // минуту, игрок попал бы в середину трека.
+  //
+  // Возврат мягкий: файл просят играть ровно тогда, когда он и должен, а
+  // отказ автоплея (после сворачивания браузер вправе не пустить) уже умеет
+  // подождать ближайшего касания — см. tryPlay/armRetry.
+  suspend(on){
+    if(this.suspended===!!on) return;
+    this.suspended=!!on;
+    if(on){
+      if(this.currentMusic&&!this.currentMusic.paused) this.currentMusic.pause();
+      // Синтез: контекст усыпляем целиком — вместе с ним замолкают и
+      // отложенные ноты, которые иначе выстрелили бы очередью при возврате.
+      try{ if(this.ctx&&this.ctx.state==="running") this.ctx.suspend(); }catch{}
+      return;
+    }
+    try{ if(this.ctx&&this.ctx.state==="suspended") this.ctx.resume(); }catch{}
+    if(this.currentMusic&&this.currentMusic.paused) this.tryPlay(this.currentMusic);
   }
 }

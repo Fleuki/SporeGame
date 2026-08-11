@@ -19,6 +19,8 @@ import { ShopSystem } from "./systems/shopSystem.js";
 import { RecordSystem } from "./systems/recordSystem.js";
 import { MetaSystem } from "./systems/metaSystem.js";
 import { SettingsSystem } from "./systems/settingsSystem.js";
+import { Store } from "./engine/store.js";
+import { YandexPlatform } from "./platform/yandex.js";
 
 const canvas=document.getElementById("gameCanvas");
 
@@ -86,8 +88,19 @@ const records=new RecordSystem(meta.difficulty);
 // игрок, убавивший эффекты в прошлый раз, не должен слышать их снова
 const settings=new SettingsSystem(audio);
 
+// ПЛОЩАДКА. На своём адресе (GitHub Pages) SDK нет вовсе, и адаптер молча
+// ничего не делает; на Яндекс Играх он же держит рекламу, отсчёт геймплея и
+// хранилище. Boot ниже, вместе с ассетами: до его ответа игра уже играется.
+const platform=new YandexPlatform();
+// ЗВУК НА ВРЕМЯ РЕКЛАМНОГО БЛОКА — требование площадки. Флаг держим здесь же:
+// без него возврат на вкладку посреди ролика вернул бы музыку поверх рекламы.
+let advSuspend=false;
+platform.onAdvSound=(on)=>{ advSuspend=on; audio.suspend(on); };
+
 input.onMutePress=()=>audio.toggleMute();
-input.onRestartPress=()=>{ if(started&&gameOver) init(); };
+// Рестарт с клавиатуры идёт через ту же рекламную паузу, что и кнопка: иначе
+// у игры был бы тихий путь в обход рекламы, о котором знает один человек.
+input.onRestartPress=()=>{ if(started&&gameOver) platform.commercialBreak(()=>init()); };
 // Escape раньше просто закрывал меню прокачки — это была бесплатная отмена
 // выбора. Теперь это честная пауза, а меню прокачки закрыть нельзя: выбрать
 // карточку всё равно придётся.
@@ -109,6 +122,10 @@ function togglePause(force){
   const next=force===undefined?!paused:force;
   if(next===paused) return;
   paused=next;
+  // Пауза — тоже «не играет»: площадка не должна считать боем стоящий мир.
+  // Музыку здесь НЕ глушим намеренно: на паузе открыта панель громкости, и
+  // её ползунки настраиваются на слух.
+  if(paused) platform.gameplayStop(); else platform.gameplayStart();
   document.getElementById("pauseBtn").classList.toggle("paused",paused);
   // Пауза БЫЛА пустым экраном с надписью — а это ровно тот момент, когда
   // игрок хочет что-нибудь подкрутить. Панель звука открывается вместе с
@@ -143,7 +160,18 @@ function syncSettings(){
 //
 // Снимать паузу при возвращении НЕЛЬЗЯ: снимает её игрок, когда готов.
 document.addEventListener("visibilitychange",()=>{
-  if(document.hidden) togglePause(true);
+  if(document.hidden){
+    togglePause(true);
+    // СВЁРНУТАЯ ИГРА НЕ ЗВУЧИТ. Это требование площадки, и оно же простая
+    // вежливость: кадры на свёрнутой вкладке не идут, а <audio> и синтез
+    // спокойно играют дальше — из свёрнутой вкладки в наушники.
+    audio.suspend(true);
+    platform.gameplayStop();
+  }else if(!advSuspend){
+    // Возврат: звук отмерзает там же, где остановился. Рекламный блок —
+    // исключение: вкладка снова видна, но ролик ещё идёт.
+    audio.suspend(false);
+  }
 });
 window.addEventListener("blur",()=>togglePause(true));
 
@@ -169,15 +197,42 @@ function tryBurst(){
 // загрузчик отдаёт элемент сразу и об ошибке узнаёт позже (см. loadSound).
 loader.onSoundError=(key)=>audio.soundLost(key);
 
-(async()=>{ await loader.loadAll(CONFIG.assets); })();
+(async()=>{
+  await loader.loadAll(CONFIG.assets);
+  // ИГРА ГОТОВА — площадка снимает свой экран загрузки. Раньше этого вызова
+  // нет ничего осмысленного: картинок нет, стартовый экран стоял бы пустым.
+  platform.ready();
+})();
+
+// SDK площадки поднимаем ОТДЕЛЬНО от ассетов и не ждём его нигде: ответит —
+// появятся реклама, отсчёт геймплея и своё хранилище; не ответит (свой адрес,
+// блокировщик, оборванная сеть) — игра идёт ровно так же.
+platform.boot();
+
+// ХРАНИЛИЩЕ ПЛОЩАДКИ ПРИШЛО ПОЗЖЕ ПЕРВОГО ЧТЕНИЯ. Рекорд, банк и громкости
+// читаются на первом кадре — до SDK, — и на iPhone внутри чужого iframe это
+// чтение возвращает пустоту (см. engine/store.js). Пришло настоящее
+// хранилище — перечитываем всё и обновляем стартовый экран: иначе игрок,
+// у которого всё сохранено, видит «рекорда нет» и запертых персонажей.
+Store.onSwap=()=>{
+  if(started) return;      // посреди забега менять правила нельзя
+  meta.reload();
+  // Порядок важен: сложность приходит из меты, а рекорд у каждой сложности
+  // свой. setScope при совпадении ключа выходит сразу и НЕ перечитывает —
+  // поэтому reload отдельной строкой, а не «и так сработает».
+  records.setScope(meta.difficulty);
+  records.reload();
+  settings.reload();
+  syncSettings(); showBest(); showDiff(); showMeta();
+};
 
 // ШРИФТ ДЛЯ ХОЛСТА ГРУЗИМ ЯВНО. Браузер подтягивает woff2 лениво — когда
 // текст этим шрифтом впервые понадобился РАЗМЕТКЕ. Холст в этот учёт не
 // входит: если файл ещё не пришёл, canvas молча нарисует системным, и первые
 // цифры урона в забеге будут другим шрифтом. Подмножества раздельные, поэтому
 // просим обе буквы — латинскую и кириллическую.
-document.fonts?.load('16px "Pixelify Sans"', "0A");
-document.fonts?.load('bold 16px "Pixelify Sans"', "Я");
+document.fonts?.load('16px "Tiny5"', "0A");
+document.fonts?.load('16px "Tiny5"', "Я");
 
 // Поворот телефона, смена размера окна, появление адресной строки — всё это
 // приходит сюда. Камеру пересобираем и сразу центрируем на игроке: иначе
@@ -263,6 +318,10 @@ function init(){
   spawnSystem=new SpawnSystem(camera,meta.curDiff());
   shop.reset(); shopDue=false; nextShopAt=CONFIG.shop.every;
   gameOver=false; paused=false; waitingForUpgrade=false;
+  // Рестарт с экрана итогов — это снова геймплей. init() зовётся и до
+  // стартового экрана (мир нужен нарисованным под ним), поэтому по `started`:
+  // там ещё никто не играет.
+  if(started) platform.gameplayStart();
   // Значок паузы обязан вернуться в исходное вместе с забегом: игрок мог
   // умереть на паузе, и следующий забег начался бы с кнопкой «играть».
   document.getElementById("pauseBtn").classList.remove("paused");
@@ -585,6 +644,7 @@ function openUpgradeMenu(){
 function endGame(won=false){
   player.hp=won?player.hp:0; gameOver=true; dying=0; winning=0;
   shop.reset();
+  platform.gameplayStop();
   // СВОЙ ТРЕК НА ЭКРАНЕ ИТОГОВ. Здесь была тишина, и она была правильной:
   // тема забега, продолжающая бодро играть над «СПОРЫ ПОБЕДИЛИ», отменяет
   // собой всё, что этот экран говорит. Отдельная тема смерти — не то же
@@ -876,7 +936,7 @@ function draw(){
     // меньше 900 пикселей, и кегль в 46px занял бы половину экрана
     const k=Math.min(1.4,Math.max(0.55,canvas.width/CONFIG.screen.width));
     renderer.drawText("ПАУЗА",canvas.width/2,canvas.height/2,
-      {font:"bold "+Math.round(46*k)+"px "+CONFIG.fontFamily,color:"#00d4aa",align:"center"});
+      {font:Math.round(46*k)+"px "+CONFIG.fontFamily,color:"#00d4aa",align:"center"});
     // Подсказка обязана называть ту дверь, которая у игрока есть: на телефоне
     // клавиши Esc нет вовсе, и надпись про неё оставляла паузу тупиком —
     // ровно тем же, каким был экран смерти с надписью «R — рестарт».
@@ -926,6 +986,11 @@ if(new URLSearchParams(location.search).has("debug")){
     // «как игрок» — это несколько забегов подряд. GAME.meta.bank=999 плюс
     // GAME.meta.unlock("ranger") показывает второго персонажа сразу.
     meta,
+    // Площадка и хранилище. Обе ветки — «SDK есть» и «SDK нет» — проверяются
+    // только прогоном с подставным window.YaGames: увидеть глазами, что
+    // реклама вызвалась, а сохранение легло в хранилище площадки, негде.
+    platform,
+    store:Store,
     // Живой конфиг: правки видны со следующего кадра, без перезагрузки.
     // Нужен для подбора того, что оценивается только глазами — контур врагов,
     // сила темноты, размеры. Поставить игру на паузу (Esc), покрутить число,
@@ -998,6 +1063,9 @@ function startRun(){
   // Музыку просим отсюда нарочно: это то самое нажатие, которым браузер
   // разрешает создать звук. Раньше просьбы не было бы слышно вообще.
   audio.music("run");
+  // Площадка ведёт свой счёт: где игрок играет, а где стоит в меню. По этим
+  // двум вызовам она и решает, можно ли показать рекламу.
+  platform.gameplayStart();
   // Остальные треки не качались до этой секунды вовсе (CONFIG.assets.
   // deferSounds): человек, который открыл страницу и закрыл её, не должен
   // платить за музыку, которой не услышал. Здесь забег уже начался — и с
@@ -1021,6 +1089,7 @@ function startRun(){
 // перезагружать вкладку.
 function backToMenu(){
   started=false; gameOver=false; audio.music(null);
+  platform.gameplayStop();
   document.getElementById("gameOverScreen").classList.add("hidden");
   document.getElementById("startScreen").classList.remove("hidden");
   init();
@@ -1152,8 +1221,21 @@ document.getElementById("shopReroll").onclick=()=>shop.reroll(player);
 document.getElementById("shopLeave").onclick=()=>shop.close();
 // Кнопка вместо надписи «R — рестарт»: на телефоне клавиши нет, и экран
 // смерти был тупиком — забег не перезапустить иначе как перезагрузкой.
-document.getElementById("restartBtn").onclick=()=>{ if(gameOver) init(); };
-document.getElementById("menuBtn").onclick=()=>{ if(gameOver) backToMenu(); };
+// РЕКЛАМА ЖИВЁТ ЗДЕСЬ, и это единственное её место в игре.
+//
+// Кнопка «ЗАНОВО» — самая честная пауза, какая в этой игре есть: забег
+// кончился, цифры прочитаны, следующий ещё не начался. Показывать блок в
+// момент смерти было бы рекламой поверх события, ради которого играли, а
+// посреди боя реклама запрещена и правилами площадки, и здравым смыслом.
+//
+// commercialBreak зовёт продолжение в любом случае — даже если блока не было
+// вовсе (площадка сама решает, показывать ли, и чаще всего не показывает).
+document.getElementById("restartBtn").onclick=()=>{
+  if(gameOver) platform.commercialBreak(()=>init());
+};
+document.getElementById("menuBtn").onclick=()=>{
+  if(gameOver) platform.commercialBreak(()=>backToMenu());
+};
 
 const loop=new Loop(update,draw,CONFIG.maxFps);
 init();
