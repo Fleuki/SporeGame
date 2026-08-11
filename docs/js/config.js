@@ -124,6 +124,18 @@ export const CONFIG = {
     // подмена тела при первом же шаге видна (см. Player.bodyFrame). Ставить
     // сюда стоит кадр с ногами вместе — в цикле бега это обычно нулевой.
     idleFrame: 0,
+    // === ЛИСТ СТОЙКИ (необязательный) ===
+    // Правильное решение той же беды, которую idleFrame лечит подпоркой:
+    // отдельный лист, нарисованный ТЕМ ЖЕ пером и в том же кадре 64, где
+    // персонаж стоит и дышит. Есть файл — стойка берётся из него, нет —
+    // работает подпорка выше, то есть один кадр листа бега.
+    //
+    // Сетка та же, что у бега: четыре ряда направлений, кадры — цикл дыхания.
+    // Размер кадра снова считается из самой картинки (см. Player.bodyFrame).
+    // Сам путь живёт в CONFIG.assets.images (там же — почему он пока
+    // закомментирован); здесь только сетка кадров.
+    idleCols: 4, idleRows: 4,
+    idleAnimSpeed: 16,   // вдвое медленнее шага: это дыхание, а не топтание
     // === КУДА СМОТРИТ ПЕРСОНАЖ ===
     // Ряд листа выбирается ТОЛЬКО по направлению ходьбы. Ни прицел, ни мышь на
     // него больше не влияют: раньше стоящий на месте персонаж разворачивался
@@ -207,7 +219,11 @@ export const CONFIG = {
         name:"Егерь", cost:60,
         desc:"Быстрее на 20%, здоровья на треть меньше. Токсичная склянка",
         weapon:"toxic", icon:"toxic",
-        hpMult:0.68, speedMult:1.2, dmgMult:1, sporeMult:1
+        hpMult:0.68, speedMult:1.2, dmgMult:1, sporeMult:1,
+        // Свои листы. Файла нет — персонаж ходит спрайтом Алхимика и забег
+        // от этого не страдает (см. Player.art): листы приходят по одному.
+        art:{ walk:"playerWalkRanger", idle:"playerIdleRanger",
+              death:"playerDeathRanger" }
       },
       // ЗАРАЖЁННЫЙ. Появился не ради длины списка, а потому что банку стало
       // не на что тратиться: Егерь открыт, а счётчик копится дальше в пустоту.
@@ -237,6 +253,8 @@ export const CONFIG = {
         name:"Заражённый", cost:110,
         desc:"Стартует с 40% спор и горит ими всегда. Выброс вдвое чаще",
         weapon:"incendiary", icon:"burst",
+        art:{ walk:"playerWalkInfected", idle:"playerIdleInfected",
+              death:"playerDeathInfected" },
         hpMult:1.15, speedMult:1, dmgMult:1, sporeMult:1.5,
         startSpore:40,
         // 2.0 при полной шкале, то есть 0.8 в секунду на старте забега.
@@ -1320,6 +1338,27 @@ export const CONFIG = {
       player: "assets/images/player/alchemist_purple.png",
       playerWalk: "assets/images/player/alchemist_run.png",
       playerDeath: "assets/images/player/alchemist_death.png",
+      // === ЛИСТЫ, КОТОРЫХ ЕЩЁ НЕТ ===
+      //
+      // Ключи и откаты для них уже написаны (Player.art, DEFAULT_ART), места
+      // в optional заняты — не хватает только файлов. Появился файл: снять
+      // комментарий с его строки, и персонаж начинает выглядеть собой. Ни
+      // строчки кода для этого не нужно.
+      //
+      // ОБЪЯВЛЯТЬ ИХ ЗАРАНЕЕ НЕЛЬЗЯ, и это не педантизм: загрузчик молчит про
+      // необязательный ассет, а БРАУЗЕР всё равно пишет 404 в консоль — по
+      // одному на каждый несуществующий файл, на каждой загрузке у каждого
+      // игрока. «Нет технических сообщений и ошибок» — отдельный пункт
+      // критериев площадки, и семь красных строк в консоли под него подходят
+      // ровно так же, как настоящая поломка.
+      //
+      // playerIdle: "assets/images/player/alchemist_idle.png",
+      // playerWalkRanger: "assets/images/player/ranger_run.png",
+      // playerIdleRanger: "assets/images/player/ranger_idle.png",
+      // playerDeathRanger: "assets/images/player/ranger_death.png",
+      // playerWalkInfected: "assets/images/player/infected_run.png",
+      // playerIdleInfected: "assets/images/player/infected_idle.png",
+      // playerDeathInfected: "assets/images/player/infected_death.png",
       projectile: "assets/images/projectiles/potion.png",
       vial_toxic: "assets/images/projectiles/vial_toxic.png",
       vial_fire: "assets/images/projectiles/vial_fire.png",
@@ -1373,7 +1412,13 @@ export const CONFIG = {
     optional: [
       "enemy_spore_bearer_death","enemy_mushroom_wolf_death",
       "enemy_spore_piper_death","enemy_spore_bat_death",
-      "enemy_fruiting_body_death","enemy_mycelium_tentacle_death"
+      "enemy_fruiting_body_death","enemy_mycelium_tentacle_death",
+      // Лист стойки и листы Егеря с Заражённым: сами записи в images пока
+      // закомментированы (там же объяснено, почему), а места здесь заняты
+      // заранее — чтобы включение готового листа стоило РОВНО одной строки.
+      "playerIdle",
+      "playerWalkRanger","playerIdleRanger","playerDeathRanger",
+      "playerWalkInfected","playerIdleInfected","playerDeathInfected"
     ],
     // МУЗЫКА ТЕПЕРЬ НАСТОЯЩАЯ. Раньше здесь было пусто и стояла заметка, что
     // так, скорее всего, и останется: синтез ничего не весит, а трек файлом
