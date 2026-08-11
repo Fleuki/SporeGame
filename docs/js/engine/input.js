@@ -1,3 +1,40 @@
+// КЛАВИША ЧИТАЕТСЯ ПО ФИЗИЧЕСКОМУ ПОЛОЖЕНИЮ (e.code), А НЕ ПО БУКВЕ (e.key).
+//
+// Здесь стоял `e.key.toLowerCase()`, и для игры на русском языке это было
+// приговором: при русской раскладке браузер отдаёт для клавиши W букву «ц»,
+// для A — «ф», для S — «ы», для D — «в». То есть игрок, у которого в системе
+// включён русский (а это ровно тот игрок, для которого игра написана), не мог
+// ходить вообще. Заодно молчали E (прокачка) и R (рестарт). Снаружи это
+// читается не как «переключи раскладку», а как «игра не работает».
+//
+// e.code от раскладки не зависит: KeyW — это верхняя клавиша под средним
+// пальцем левой руки на любом языке и на любой раскладке, хоть на AZERTY.
+const CODE_ACTIONS={
+  KeyW:"w", KeyA:"a", KeyS:"s", KeyD:"d",
+  // Стрелки. Их не было, и это отдельная потеря: половина игроков жанра
+  // берётся за стрелки первыми, а WASD пробует уже потом.
+  ArrowUp:"w", ArrowLeft:"a", ArrowDown:"s", ArrowRight:"d",
+  KeyM:"mute", KeyR:"restart", KeyE:"upgrade", Space:"burst", Escape:"pause",
+};
+// ЗАПАСНАЯ ТАБЛИЦА ПО БУКВЕ. e.code есть во всех живых браузерах, но приходит
+// пустым с части экранных и внешних клавиатур — там остаётся только буква.
+// Кириллица в ней стоит по той же причине, по которой появился e.code: если
+// до этой ветки дошло, то русская раскладка не должна ломаться и здесь.
+const KEY_ACTIONS={
+  "w":"w","a":"a","s":"s","d":"d",
+  "ц":"w","ф":"a","ы":"s","в":"d",
+  "arrowup":"w","arrowleft":"a","arrowdown":"s","arrowright":"d",
+  "m":"mute","ь":"mute","r":"restart","к":"restart","e":"upgrade","у":"upgrade",
+  " ":"burst","spacebar":"burst","escape":"pause","esc":"pause",
+};
+const MOVES=new Set(["w","a","s","d"]);
+// Что именно нажали, независимо от языка системы. null — клавиша не наша, и
+// её надо оставить браузеру: F5, Ctrl+T и переключение вкладок игре не
+// принадлежат.
+function actionOf(e){
+  return CODE_ACTIONS[e.code] || KEY_ACTIONS[(e.key||"").toLowerCase()] || null;
+}
+
 export class InputManager {
   constructor(canvas){
     this.keys={w:false,a:false,s:false,d:false};
@@ -9,26 +46,29 @@ export class InputManager {
 
     // Клавиатура
     document.addEventListener("keydown",(e)=>{
-      const k=e.key.toLowerCase();
-      if(k in this.keys){ this.keys[k]=true; e.preventDefault(); }
-      if(k==="m") this.onMutePress?.();
-      if(k==="r") this.onRestartPress?.();
-      if(k==="escape") this.onPausePress?.();
+      const a=actionOf(e);
+      if(!a) return;
+      // Ход. preventDefault здесь не вежливость: стрелки и пробел иначе
+      // прокручивают страницу, а игра на портале живёт в чужом iframe.
+      if(MOVES.has(a)){ this.keys[a]=true; e.preventDefault(); return; }
+      if(a==="mute"){ this.onMutePress?.(); return; }
+      if(a==="restart"){ this.onRestartPress?.(); return; }
+      if(a==="pause"){ this.onPausePress?.(); return; }
       // Выброс спор. Пробел, потому что это единственное активное действие в
       // игре: стрельба здесь сама, прицел на мобильных тоже сам. Повтор от
       // зажатой клавиши (e.repeat) отсекаем здесь, а не перезарядкой: иначе
       // удержание пробела опустошало бы шкалу тремя выбросами подряд, и
       // «трата ресурса» превращалась бы в «слив по ошибке».
-      if((k===" "||k==="spacebar")&&!e.repeat){ e.preventDefault(); this.onBurstPress?.(); }
+      if(a==="burst"){ e.preventDefault(); if(!e.repeat) this.onBurstPress?.(); return; }
       // Прокачка. Меню больше не открывается само в момент уровня — момент
       // выбирает игрок, и «E» это его вторая дверь после кнопки в углу.
       // Повтор от зажатой клавиши отсекаем: меню и так остановит мир, а
       // второе нажатие поверх открытого меню ничего не значит.
-      if(k==="e"&&!e.repeat){ e.preventDefault(); this.onUpgradePress?.(); }
+      if(a==="upgrade"){ e.preventDefault(); if(!e.repeat) this.onUpgradePress?.(); }
     });
     document.addEventListener("keyup",(e)=>{
-      const k=e.key.toLowerCase();
-      if(k in this.keys){ this.keys[k]=false; e.preventDefault(); }
+      const a=actionOf(e);
+      if(a&&MOVES.has(a)){ this.keys[a]=false; e.preventDefault(); }
     });
     canvas.addEventListener("mousemove",(e)=>{
       const rect=canvas.getBoundingClientRect();

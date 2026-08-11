@@ -1,4 +1,5 @@
 import { CONFIG } from "../config.js";
+import { Store } from "../engine/store.js";
 
 // РЕКОРД ЗАБЕГА.
 //
@@ -15,7 +16,9 @@ import { CONFIG } from "../config.js";
 // сложность, и обмануть его нельзя: отсидеться в углу не выйдет, поток врагов
 // растёт сам. Уровень и убийства показываются рядом, но рекорд ставит время.
 //
-// localStorage может быть недоступен вовсе — в приватном окне, при жёстких
+// Хранилище — через Store (engine/store.js), а не напрямую: на площадке оно
+// подменяется на своё, потому что в чужом iframe localStorage может быть
+// недоступен вовсе — в приватном окне, при жёстких
 // настройках, внутри iframe. Игра от этого страдать не должна: рекорда просто
 // не будет, а забег пойдёт как шёл.
 
@@ -31,6 +34,11 @@ export class RecordSystem {
 
   key(){ return this.scope?KEY+"."+this.scope:KEY; }
 
+  // Хранилище подменили уже после первого чтения (площадка отдаёт своё
+  // промисом — см. Store.use): рекорд надо перечитать, иначе игрок увидит
+  // пустую строку рекорда там, где он на самом деле есть.
+  reload(){ this.best=this.load(); }
+
   // Смена сложности на стартовом экране. Рекорд перечитывается, prev
   // сбрасывается: «прошлый забег» другой сложности — это не прошлый забег.
   setScope(scope){
@@ -40,7 +48,7 @@ export class RecordSystem {
 
   read(key){
     try{
-      const raw=localStorage.getItem(key);
+      const raw=Store.getItem(key);
       if(!raw) return null;
       const b=JSON.parse(raw);
       return (typeof b?.time==="number")?b:null;
@@ -78,7 +86,7 @@ export class RecordSystem {
     if(beaten){
       this.prev=this.best;
       this.best={time:run.time,level:run.level,kills:run.kills,won:!!run.won};
-      try{ localStorage.setItem(this.key(),JSON.stringify(this.best)); }catch{}
+      Store.setItem(this.key(),JSON.stringify(this.best));
     } else {
       this.prev=this.best;
     }

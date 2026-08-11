@@ -1,4 +1,5 @@
 import { CONFIG } from "../config.js";
+import { Store } from "../engine/store.js";
 
 // МЕТА-ПРОГРЕССИЯ: то, что переносится ИЗ забега в забег.
 //
@@ -27,8 +28,14 @@ import { CONFIG } from "../config.js";
 const KEY="sporegame.meta";
 
 export class MetaSystem {
-  constructor(){
-    const s=this.load();
+  constructor(){ this.adopt(this.load()); }
+
+  // Хранилище подменили уже после первого чтения (площадка отдаёт своё
+  // промисом — см. Store.use): банк, персонажи и сложности читаются заново.
+  // Звать это можно только до забега — на стартовом экране.
+  reload(){ this.adopt(this.load()); }
+
+  adopt(s){
     this.bank=s?.bank||0;
     // Стартовый персонаж открыт всегда: список открытого не может быть пустым,
     // иначе играть будет некем.
@@ -91,14 +98,14 @@ export class MetaSystem {
 
   load(){
     try{
-      const raw=localStorage.getItem(KEY);
+      const raw=Store.getItem(KEY);
       return raw?JSON.parse(raw):null;
     }catch{ return null; }
   }
 
   save(){
     try{
-      localStorage.setItem(KEY,JSON.stringify({
+      Store.setItem(KEY,JSON.stringify({
         bank:this.bank, unlocked:[...this.unlocked], selected:this.selected,
         beaten:[...this.beaten], difficulty:this.difficulty
       }));

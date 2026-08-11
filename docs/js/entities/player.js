@@ -33,6 +33,16 @@ function angleDelta(a,b){
   return d;
 }
 
+// КАКИМИ ЛИСТАМИ РИСУЕТСЯ ПЕРСОНАЖ. Ключи загрузчика, а не пути к файлам.
+//
+// Все трое ходили одним спрайтом Алхимика: выбор персонажа менял числа и
+// стартовый ствол, но не то, кого игрок видит. Теперь запись персонажа может
+// назвать свои листы (`art` в CONFIG.characters.list.<id>), а чего он не
+// назвал — берётся у Алхимика. Откат нужен не для порядка: листы рисуются по
+// одному, и персонаж с готовым бегом, но ненарисованной смертью обязан
+// доиграть забег до конца, а не пропасть с экрана.
+const DEFAULT_ART={ walk:"playerWalk", idle:"playerIdle", death:"playerDeath" };
+
 export class Player extends Entity {
   // character — запись из CONFIG.characters.list. Ничего, кроме перекоса
   // характеристик и стартового ствола, персонаж не задаёт: остальное игрок
@@ -114,6 +124,10 @@ export class Player extends Entity {
     // теряет свою единственную ставку.
     this.secondWind=false;
     this.animTimer=0; this.animFrame=0;
+    // Дыхание стойки. Отдельный счётчик, а не общий с шагом: тот обнуляется
+    // каждый раз, когда игрок останавливается, — то есть цикл дыхания
+    // начинался бы заново после каждого шага и не читался бы вовсе.
+    this.idleTick=0;
     this.animSpeed=CONFIG.player.walkAnimSpeed||8;
     this.isMoving=false;
     // Ряд листа, который показываем сейчас, и запрет на смену ряда в
@@ -214,6 +228,7 @@ export class Player extends Entity {
     } else {
       if(this.faceHold>0) this.faceHold--;
       this.animTimer=0; this.animFrame=0;
+      this.idleTick++;
     }
   }
 
@@ -378,6 +393,18 @@ export class Player extends Entity {
   // Пока игрок идёт и лист бега загружен — берём его: у листа поз кадры это
   // переминание на месте, ногами оно ничего не сообщает. Стоим или листа нет —
   // лист поз. Ряд один и тот же в обоих: 0 вниз, 1 вправо, 2 влево, 3 вверх.
+  // Лист этого персонажа или лист Алхимика, если своего нет. Проверяется
+  // ЗАГРУЖЕННОСТЬ, а не наличие ключа: запись в конфиге есть у всех, файла
+  // может не быть ни одного.
+  art(renderer,kind){
+    const own=this.character?.art?.[kind];
+    const img=own&&renderer.loader?.getImage(own);
+    if(img&&img.width) return { img, key:own };
+    const fallback=DEFAULT_ART[kind];
+    const base=fallback&&renderer.loader?.getImage(fallback);
+    return (base&&base.width)?{ img:base, key:fallback }:null;
+  }
+
   bodyFrame(renderer){
     const P=CONFIG.player;
     // ОДНО ТЕЛО НА ВСЁ. Раньше стоящий игрок рисовался листом ПОЗ, а идущий —
@@ -396,7 +423,21 @@ export class Player extends Entity {
     // из бега один кадр (idleFrame) и стоять на нём: плащ закрывает ноги, и
     // поза читается как «стоит», а персонаж перестаёт подменяться на ходу.
     // Лист поз остаётся в игре запасным — на случай, если бега нет.
-    const walk=renderer.loader?.getImage("playerWalk");
+    // ЛИСТ СТОЙКИ, ЕСЛИ ОН НАРИСОВАН. Подпорка выше (один кадр листа бега)
+    // держалась ровно до его появления: стоящий персонаж не должен быть
+    // застывшим кадром шага, ему полагается дышать.
+    if(!this.isMoving){
+      const idle=this.art(renderer,"idle");
+      if(idle){
+        const cols=P.idleCols||1, rows=P.idleRows||1;
+        return { img:idle.img,
+                 fw:idle.img.width/cols, fh:idle.img.height/rows,
+                 col:Math.floor(this.idleTick/(P.idleAnimSpeed||16))%cols,
+                 size:P.walkDisplaySize, key:idle.key };
+      }
+    }
+    const walkArt=this.art(renderer,"walk");
+    const walk=walkArt&&walkArt.img;
     if(walk&&walk.width){
       // Размер кадра считается ИЗ САМОЙ КАРТИНКИ по числу колонок и рядов, а
       // не берётся из конфига числом. Лист рисует нейросеть, и его итоговое
@@ -406,7 +447,7 @@ export class Player extends Entity {
       return { img:walk,
                fw:walk.width/P.walkCols, fh:walk.height/P.walkRows,
                col:this.isMoving?this.animFrame%P.walkCols:(P.idleFrame??0),
-               size:P.walkDisplaySize, key:"playerWalk" };
+               size:P.walkDisplaySize, key:walkArt.key };
     }
     const img=renderer.loader?.getImage("player");
     if(!img) return null;
@@ -428,7 +469,8 @@ export class Player extends Entity {
 
     // Смерть перекрывает всё остальное: ни ходьбы, ни щита, ни моргания
     if(this.isDying){
-      const dImg=renderer.loader?.getImage("playerDeath");
+      const dArt=this.art(renderer,"death");
+      const dImg=dArt&&dArt.img;
       if(dImg){
         renderer.drawSpriteSheet(
           dImg, this.x, this.y,

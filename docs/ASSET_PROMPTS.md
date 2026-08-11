@@ -1494,3 +1494,348 @@ The 4 frames are a pulsing loop: the spines flare brighter and dim, spores
 drift outward.
 ```
 
+
+---
+
+## ПРОМОМАТЕРИАЛЫ ДЛЯ ПЛОЩАДКИ: ИКОНКА, ОБЛОЖКА, ЛОГОТИП
+
+Это единственные картинки в проекте, которые **не проходят через
+`tools/normalize.mjs`**: конвейер приводит всё к палитре и к «один пиксель
+картинки = одна мировая единица», а промо живёт не в игре, а в карточке
+магазина. Кладутся они в `docs/assets/` как есть.
+
+Правила площадки, которые здесь важнее художественного вкуса (см.
+`YANDEX.md`):
+
+- **скриншот в качестве иконки или обложки запрещён прямым пунктом.** То
+  есть `cover.png`, снятый прогоном боя, для карточки не годится вовсе —
+  нужен нарисованный ключевой арт;
+- **ни рамок, ни скруглённых углов** — их дорисует сама площадка;
+- **текст внутри картинки не должен быть обрезан краем**;
+- **название пишется ровно так же, как в игре**: «ГРИБНОЙ СУМРАК». Латиницей
+  нельзя — в игре она русская.
+
+**Кириллицу генераторы врут чаще всего.** Просить надо явной строкой в
+кавычках и заглавными, а после генерации ЧИТАТЬ буквы по одной: «Й» без
+краткой, «Ы» как «Ь!», лишняя «С» — обычный результат. Если после нескольких
+попыток надпись не выходит, правильный ход не воевать с моделью, а взять
+картинку БЕЗ текста и положить название сверху шрифтом игры.
+
+### Иконка 512x512 — лицо игры в списке
+
+Иконку видят в каталоге размером с ноготь, поэтому в ней ОДИН предмет
+крупно, без текста и без сцены. У этой игры такой предмет уже есть и он же
+стоит на экране смерти: противогаз, из которого растут грибы.
+
+```
+Pixel art game icon, 16-bit SNES era style, square 1:1 composition,
+1024x1024.
+
+Subject fills most of the frame: a battered gas mask seen from the front,
+its round glass lenses glowing bioluminescent teal #00d4aa from inside.
+Clusters of small fungal caps in fungal purple #6b2d5c grow out of the
+mask's straps and filter, a few teal spores drift around it.
+
+Colour palette, use only these: deep forest green #1a3d2e, near-black green
+#0d1f15, fungal purple #6b2d5c, toxic yellow #c4a000, bioluminescent teal
+#00d4aa, worn leather brown #5c3a21, gas-mask black #2a2a2a, spore grey
+#8a8a8a.
+
+Chunky readable pixels, hard edges, no anti-aliasing, no blur, strong
+silhouette that stays readable when the image is scaled down to 64x64.
+Dark background of near-black green with a soft teal glow behind the mask,
+no scene, no horizon, no other objects.
+
+No text, no letters, no logo, no watermark, no frame, no border, no rounded
+corners, no drop shadow outside the artwork.
+```
+
+Второй заход, если противогаз выйдет невнятным: тот же промпт, но subject —
+**одна светящаяся грибная шляпка** крупным планом, вид сверху, с кольцом
+спор. Читается на ногте лучше любого лица, но хуже говорит про жанр.
+
+### Обложка — сцена с названием
+
+Пропорции берутся из формы черновика (она же скажет точные числа), а
+генерировать надо ШИРЕ и БОЛЬШЕ, с запасом по краям: обрезать лишнее можно,
+дорисовать — нет. Название целиком внутри кадра, не впритык к краю.
+
+```
+Pixel art key art banner for a dark fungal survival game, 16-bit SNES era
+style, wide horizontal composition, 1920x1080, no frame, no border.
+
+Scene: a dead forest swallowed by giant glowing mushrooms at night. Huge
+caps in fungal purple #6b2d5c and bioluminescent teal #00d4aa light the fog
+from above, bare black trunks and roots frame the sides, spores drift as
+tiny bright specks. In the centre middle-ground, small and lit from behind,
+stands a lone survivor in a gas mask and a long coat, holding a glowing
+green vial — he is small enough that the forest dwarfs him.
+
+Big title text across the upper half, in Russian Cyrillic, spelled EXACTLY:
+"ГРИБНОЙ СУМРАК"
+Two lines, centred, chunky pixel letters carved from dark purple stone with
+warm golden edges and a violet glow, small mushroom caps growing on the tops
+of some letters. Every letter fully inside the frame, nothing cropped.
+
+Colour palette: deep forest green #1a3d2e, near-black green #0d1f15, fungal
+purple #6b2d5c, toxic yellow #c4a000, bioluminescent teal #00d4aa, worn
+leather brown #5c3a21.
+
+Chunky readable pixels, hard edges, no anti-aliasing, no modern soft glow
+blur. No UI, no health bars, no buttons, no watermark, no logos, no rounded
+corners.
+```
+
+### Логотип-надпись отдельным слоем
+
+Полезен дважды: на обложке его можно положить на сцену самому, а на
+стартовом экране он заменит набранное шрифтом название.
+
+```
+Pixel art game logo, 16-bit SNES era style, on a solid uniform pure magenta
+background #FF00FF, absolutely flat, nothing else in the image.
+
+The logo is Russian Cyrillic text, spelled EXACTLY, in two centred lines:
+"ГРИБНОЙ"
+"СУМРАК"
+Chunky pixel letters carved from dark purple stone #6b2d5c with warm golden
+#c4a000 bevelled edges and a soft violet outer glow. Small pale mushroom
+caps and thin mycelium threads grow out of the tops of a few letters.
+Letters are heavy, wide and readable, no thin strokes, no script, no serifs
+thinner than two pixels.
+
+No background scene, no frame, no border, no shadow on the background, no
+watermark. Do not draw a transparency checkerboard.
+```
+
+Магента здесь по той же причине, что и у спрайтов (пункт 2 выше): просить
+прозрачность бесполезно, а магента снимается скриптом `tools/cut_key.py`.
+
+### Правка готовой картинки вместо новой генерации
+
+Если баннер уже нарисован и нравится всем, кроме языка, дешевле не
+перегенерировать его, а попросить модель переписать надпись. Формулировка
+для редактирования по образцу:
+
+```
+Keep this image exactly as it is: same composition, same colours, same
+lighting, same mushrooms growing on the letters, same pixel art style.
+Change ONLY the lettering. Replace the English words with Russian Cyrillic
+text spelled EXACTLY, on two lines:
+"ГРИБНОЙ"
+"СУМРАК"
+Keep the same carved stone look, the same golden bevel and violet glow, the
+same mushroom caps sprouting from the letter tops. Do not add or remove
+anything else. Do not add a frame or rounded corners.
+```
+
+**Читать результат по буквам.** «ГРИБНОЙ СУМРАК» — четырнадцать знаков, и
+ошибка ровно в одном из них означает отказ на модерации по пункту про
+совпадение названия.
+
+---
+
+## ТРИ ПЕРСОНАЖА: ЛИСТЫ БЕГА, СТОЙКИ И СМЕРТИ
+
+### Что не так с текущим листом Алхимика
+
+Живой игрой: «когда игрок идёт наверх — одна моделька, когда стоит спиной —
+другая». Причина видна на самой картинке `alchemist_run.png` (256x256, кадр
+64): **это не один персонаж в четырёх ракурсах, а четыре разных рисунка.**
+Ряды 0–2 — тёмно-фиолетовый плащ с наплечниками и склянками, ряд 3 (спина) —
+светло-коричневый конус с капюшоном, без единой детали снаряжения и заметно
+шире остальных. Со спины героя узнают только по силуэту, а он и меняется.
+
+Лист поз `alchemist_purple.png` (1024x1024, кадр 256) рисует персонажа
+гораздо богаче — маска с хоботом, розовые склянки на поясе, — но это ДРУГАЯ
+фигура: приземистая и вчетверо плотнее по пикселю. Показывать её в 64
+пикселя означает выбрасывать три пикселя из четырёх, поэтому в игре она
+осталась только запасным вариантом.
+
+**Значит, задача не «дорисовать спину», а перерисовать лист целиком одной
+фигурой.** И заодно нарисовать лист стойки — движок его уже ждёт.
+
+### Что движок готов принять прямо сейчас
+
+Код на это уже написан, файлов нет. Появился файл — снимается комментарий с
+одной строки в `CONFIG.assets.images`, и всё:
+
+| лист | ключ | сетка | если файла нет |
+|---|---|---|---|
+| бег Алхимика | `playerWalk` | 4x4, кадр 64 | лист поз |
+| стойка (общая) | `playerIdle` | 4x4, кадр 64 | кадр 0 листа бега |
+| бег Егеря | `playerWalkRanger` | 4x4, кадр 64 | лист Алхимика |
+| стойка Егеря | `playerIdleRanger` | 4x4, кадр 64 | общая стойка |
+| смерть Егеря | `playerDeathRanger` | 4 кадра в ряд | смерть Алхимика |
+| бег Заражённого | `playerWalkInfected` | 4x4, кадр 64 | лист Алхимика |
+| стойка Заражённого | `playerIdleInfected` | 4x4, кадр 64 | общая стойка |
+| смерть Заражённого | `playerDeathInfected` | 4 кадра в ряд | смерть Алхимика |
+
+Откаты не для порядка: листы приходят по одному, и персонаж с готовым бегом,
+но ненарисованной смертью обязан доиграть забег, а не пропасть с экрана.
+
+**Порядок рядов один на всё:** 0 — вниз (на камеру), 1 — вправо, 2 — влево,
+3 — вверх (со спины). Сверять глазами по готовой картинке, а не по памяти: на
+этом проект уже горел, и персонаж бежал влево, а смотрел вправо.
+
+### Как это делать: один кадр моделью, четыре ряда — PixelLab
+
+Четыре согласованных направления и цикл шага диффузионные модели не держат:
+у них каждая клетка листа — самостоятельная картинка, и на четвёртой строке
+получается другой персонаж (ровно то, что случилось со спиной Алхимика).
+
+Поэтому конвейер такой:
+
+1. **GPT Image / Nano Banana рисует ОДИН кадр** — вид спереди, фигура целиком.
+   Это то, в чём они сильны: один персонаж, много деталей, точная палитра.
+2. **PixelLab разворачивает его в лист** — он для этого и стоит в проекте,
+   им же собран нынешний лист бега:
+
+```
+node tools/pixellab.mjs --out=player/ranger_run.png --size=64 \
+     --ref=player/alchemist_run.png "описание Егеря одной строкой"
+node tools/normalize.mjs player
+```
+
+`--ref` обязателен и указывает на СУЩЕСТВУЮЩИЙ кадр: так новый персонаж
+выходит родственником старому, а не отдельным существом из другой игры.
+Один ряд из четырёх регулярно выходит негодным — есть `--patch-row=N`,
+чтобы переснять его, не оплачивая остальные.
+
+### Кадр-референс: Алхимик (перерисовка)
+
+```
+[БАЗА СТИЛЯ]
+
+A single character sprite, front view, facing the camera, standing upright,
+64x64 pixels, the figure fills the frame from top to bottom.
+
+Subject: a plague-doctor alchemist survivor. Riveted black rubber gas mask
+with a short ribbed trunk filter and two round glass lenses glowing
+bioluminescent teal #00d4aa. Heavy brown leather hood over the mask, a long
+dark purple coat #6b2d5c that reaches the boots, worn leather straps across
+the chest. Two round flasks of glowing magenta liquid hang at the belt, a
+small backpack rig shows over the shoulders on both sides.
+
+The silhouette must stay recognisable from behind: the hood, the shoulder
+rig and the flasks all read as bumps on the outline. Bulky and slow-looking,
+wider at the shoulders than at the feet.
+
+No weapon in hand, arms hanging relaxed at the sides.
+```
+
+Полученный кадр — вход для PixelLab. Дальше два листа с одной и той же
+фигурой: `--out=player/alchemist_run.png` (шаг) и
+`--out=player/alchemist_idle.png` (дыхание на месте — плечи и плащ, ноги не
+двигаются).
+
+### Кадр-референс: Егерь
+
+Он быстрее на 20% и хрупче на треть, стреляет токсичной склянкой на дальнюю
+дистанцию. Всё это обязано читаться силуэтом: **узкий против широкого**.
+Игрок отличает персонажей не по описанию в меню, а по пятну на экране.
+
+```
+[БАЗА СТИЛЯ]
+
+A single character sprite, front view, facing the camera, standing upright,
+64x64 pixels, the figure fills the frame from top to bottom.
+
+Subject: a lean fast scout of the same fungal wasteland, clearly the same
+world and the same art as the hooded alchemist, but built for speed. Half-face
+rubber respirator over the mouth only, eyes visible above it and lit by a
+faint teal glow, a tight cloth wrap around the head instead of a heavy hood.
+Short worn jacket ending at the hip, no long coat, legs wrapped in leather
+strips and light boots. A bandolier of small toxic-yellow #c4a000 vials
+across the chest, a quiver of them on the back.
+
+Narrow shoulders, thin fast silhouette, noticeably slimmer and slightly
+taller than the bulky alchemist. Toxic yellow is his accent colour the way
+magenta is the alchemist's.
+
+No weapon in hand, arms hanging relaxed at the sides.
+```
+
+### Кадр-референс: Заражённый
+
+Он стартует с 40% спор, горит ими всю игру и разряжается вдвое чаще.
+Персонаж, который САМ наполовину стал грибом, — и это единственное, что о нём
+надо сказать картинкой.
+
+```
+[БАЗА СТИЛЯ]
+
+A single character sprite, front view, facing the camera, standing upright,
+64x64 pixels, the figure fills the frame from top to bottom.
+
+Subject: a survivor halfway turned into fungus, same world and same art as
+the hooded alchemist. His gas mask has fused with his face: the straps have
+grown into the skin and pale mycelium threads run out from under it across
+his neck. Clusters of small glowing bioluminescent teal #00d4aa mushroom caps
+erupt from his shoulders, back and forearms and light him from within, so his
+outline glows faintly teal. Torn ragged coat in fungal purple #6b2d5c, one
+sleeve gone, the bare arm covered in fungal growth instead of skin.
+
+Hunched posture, head low, uneven shoulders — the growths make him lopsided.
+He must read as sick and lit from inside, not as armoured.
+
+No weapon in hand, arms hanging relaxed at the sides.
+```
+
+### Если очень хочется листом сразу, без PixelLab
+
+Можно, но проверять придётся строже, чем рисовать. Требования к сетке —
+жёсткой формулировкой, и всё равно каждый ряд сверять с соседними:
+
+```
+[БАЗА СТИЛЯ]
+
+A sprite sheet on a strict 4x4 grid, 256x256 pixels total, every cell exactly
+64x64 pixels, cells touching with no gaps, no grid lines, no numbers, no
+labels, no borders around cells.
+
+THE SAME SINGLE CHARACTER in every one of the 16 cells: identical build,
+identical colours, identical gear, identical size. Only the viewing direction
+and the step of the walk change.
+
+Row 1 (top): walking towards the camera, four frames of one walk cycle.
+Row 2: walking to the RIGHT in three-quarter view, four frames.
+Row 3: walking to the LEFT in three-quarter view, four frames — a mirror of
+row 2, the same character.
+Row 4 (bottom): walking AWAY from the camera, seen from behind, four frames.
+In this row the hood, the shoulder rig and the flasks must still be visible
+as bumps on the silhouette — it is the same person seen from the back, not a
+plain cloak.
+
+Subject: [ОПИСАНИЕ ПЕРСОНАЖА ИЗ БЛОКА ВЫШЕ]
+
+The feet stay on the same baseline in all frames, the character does not
+change height or width between cells.
+```
+
+**Приёмка листа — три взгляда, и все три по картинке, а не по ощущению:**
+поставить четыре ряда рядом и сравнить ШИРИНУ плеч; проверить, что нижний ряд
+это тот же персонаж со спины (капюшон, рюкзак, склянки), а не безликий плащ;
+убедиться, что ряд 2 и ряд 3 — зеркало друг друга, а не два разных рисунка.
+Именно эти три проверки и не были сделаны в прошлый раз.
+
+### Смерть
+
+Лист смерти — ОДИН ряд из четырёх кадров, персонаж лицом вправо (движок
+зеркалит его сам по последнему направлению взгляда). Пока своих листов у
+Егеря и Заражённого нет, оба умирают анимацией Алхимика — это работает, но
+видно: у Егеря нет длинного плаща, а у Заражённого другой силуэт.
+
+```
+[БАЗА СТИЛЯ]
+
+A single horizontal strip of 4 frames, each cell 64x64 pixels, evenly spaced,
+no gaps, no borders. The same character in all four, facing RIGHT.
+
+Subject: [ОПИСАНИЕ ПЕРСОНАЖА ИЗ БЛОКА ВЫШЕ]
+
+The four frames are one death: frame 1 staggering, hand to the chest; frame 2
+falling to one knee; frame 3 collapsing forward; frame 4 lying still on the
+ground while pale spores rise from the body. The character stays on the same
+baseline and does not change size between frames.
+```
