@@ -117,8 +117,11 @@ const TRACKS={
 // плата: музыка в этом жанре держит темп сильнее половины визуальных правок.
 // Игру она не задерживает — загрузчик не блокирует запуск, а до прихода файла
 // звучит синтез.
-const MUSIC_FILES={ run:"music_run", boss:"music_boss", death:"music_death",
-                    victory:"music_victory" };
+// У ЗАБЕГА НЕ ОДИН ТРЕК, А СПИСОК. Забег идёт пятнадцать минут, и один трек
+// за это время проходит по кругу шесть раз — слышно даже невнимательному уху.
+// Список тасуется, поэтому значение имеет не порядок, а суммарная длина.
+const MUSIC_FILES={ run:["music_run","music_run2"], boss:"music_boss",
+                    death:"music_death", victory:"music_victory" };
 
 // Треки, у которых НЕТ подмены темой забега. Обычный трек, файла которого не
 // оказалось, играет тему забега — это лучше, чем тишина, и лучше, чем скачок
@@ -230,6 +233,64 @@ export class AudioManager {
     if(changed||this.onSynth) this.applyMusic();
   }
 
+  // КАКОЙ ФАЙЛ ИЗ СПИСКА ИГРАТЬ.
+  //
+  // Порядок случайный, а не по списку, и это не украшательство: забег всегда
+  // начинается одинаково, и при фиксированном порядке первые две минуты
+  // КАЖДОГО забега звучали бы одним и тем же треком. При десятке забегов
+  // подряд это надоедает быстрее, чем один трек, идущий по кругу.
+  //
+  // Подряд один и тот же не повторяется: иначе случайность из двух треков
+  // раз в два раза даёт ровно то, от чего мы уходили.
+  //
+  // Незагруженные пропускаются. Список забега отложен целиком, кроме первого
+  // файла (CONFIG.assets.deferSounds), и до прогрева второго трека в списке
+  // просто нет — играет первый, как раньше.
+  // ГОТОВ ЛИ ФАЙЛ НА САМОМ ДЕЛЕ. getSound отдаёт элемент <audio> и для
+  // отложенного трека — он создан, но ещё ничего не скачал (preload="none").
+  // Первая версия плейлиста проверяла именно так и считала готовым то, чего
+  // нет: игра выбирала пустой элемент и вместо музыки наступала тишина.
+  // readyState>=2 значит «данные для текущей позиции есть».
+  ready(key){
+    const el=this.loader?.getSound(key);
+    return !!el && (el.readyState>=2 || el.duration>0);
+  }
+
+  pickKey(spec){
+    if(!Array.isArray(spec)) return spec;
+    const ready=spec.filter(k=>this.ready(k));
+    if(!ready.length) return spec[0];
+    const fresh=ready.filter(k=>k!==this.lastRunKey);
+    const pool=fresh.length?fresh:ready;
+    const key=pool[Math.floor(Math.random()*pool.length)];
+    this.lastRunKey=key;
+    return key;
+  }
+
+  // ОТЛОЖЕННЫЙ ТРЕК ДОГРУЗИЛСЯ УЖЕ ВО ВРЕМЯ ЗАБЕГА. К этому моменту первый
+  // идёт ПО КРУГУ — на старте он был единственным готовым, — а значит события
+  // `ended` не случится никогда и плейлист не начнётся вовсе. Снимаем
+  // зацикливание: трек доиграет до конца и уступит следующему.
+  // Зовётся из main сразу после прогрева отложенных звуков.
+  refreshPlaylist(){
+    const spec=MUSIC_FILES[this.wanted];
+    if(!Array.isArray(spec)||!this.currentMusic||!this.currentMusic.loop) return;
+    if(spec.filter(k=>this.ready(k)).length<2) return;
+    this.currentMusic.loop=false;
+    this.currentMusic.onended=()=>this.nextInPlaylist();
+  }
+
+  // Трек из списка доиграл — берём следующий. Зовётся из playMusic по
+  // событию `ended`, то есть только у незацикленных файлов.
+  //
+  // Проверка `wanted` обязательна: пока трек доигрывал, игра могла уже уйти
+  // на босса или в меню, и без неё тема забега воскресала бы поверх них.
+  nextInPlaylist(){
+    if(this.wanted!=="run") return;
+    this.currentMusic=null;      // иначе playMusic решит, что уже играет нужное
+    this.applyMusic();
+  }
+
   // Что играть на самом деле: файл, если он загружен, иначе синтез.
   //
   // У трека без своего файла берётся файл забега. Это не лень: переход от
@@ -244,12 +305,12 @@ export class AudioManager {
     // Откат идёт по ЗАГРУЖЕННОСТИ файла, а не по наличию имени в таблице.
     // MUSIC_FILES.boss существует всегда, файла под ним может не быть — и
     // проверка «есть ли имя» пропускала боссовый трек в синтез.
-    let key=MUSIC_FILES[name];
+    let key=this.pickKey(MUSIC_FILES[name]);
     if(!key||!this.loader?.getSound(key)){
       // Своего файла нет: у обычного трека подменяем темой забега, у трека
       // смерти — молчим (см. NO_FALLBACK)
       if(NO_FALLBACK.has(name)){ this.stopMusicLoop(); this.stopMusic(true); this.onSynth=false; return; }
-      key=MUSIC_FILES.run;
+      key=this.pickKey(MUSIC_FILES.run);
     }
     if(this.loader?.getSound(key)){
       this.stopMusicLoop();
@@ -260,7 +321,13 @@ export class AudioManager {
       // Проверить музыку иначе нельзя — звукового устройства у headless-
       // браузера нет, — и указатель, который врёт, хуже отсутствующего.
       this.track=name;
-      this.playMusic(key,MUSIC_LOOP[name]!==false);
+      // ЗАЦИКЛИВАТЬ ИЛИ ПЕРЕКЛЮЧАТЬ. Пока в списке загружен один файл, он
+      // играет по кругу — ровно как было до плейлиста. Как только загружен
+      // второй, зацикливание снимается: конец трека и есть сигнал взять
+      // следующий. Иначе первый крутился бы вечно и второй не зазвучал бы.
+      const spec=MUSIC_FILES[name];
+      const many=Array.isArray(spec)&&spec.filter(k=>this.ready(k)).length>1;
+      this.playMusic(key, many ? false : MUSIC_LOOP[name]!==false);
       return;
     }
     // Файла нет или ещё не пришёл — играет синтез, и мы помним, что ждём
@@ -423,6 +490,10 @@ export class AudioManager {
     const audio=this.loader.getSound(key); if(!audio||this.currentMusic===audio) return;
     this.stopMusic();
     audio.loop=loop;
+    // Обработчик вешается ЗАНОВО на каждый запуск и снимается у незацикленных
+    // в stopMusic. Элементы <audio> переиспользуются загрузчиком, и оставшийся
+    // от прошлого забега обработчик дёргал бы плейлист из чужого состояния.
+    audio.onended = loop ? null : ()=>this.nextInPlaylist();
     audio.playsInline=true;
     this.routeThroughContext(audio);
     audio.volume=this.muted?0:this.musicVolume;
@@ -471,6 +542,10 @@ export class AudioManager {
   // начала темы, иначе первый же рестарт стартует с середины.
   stopMusic(reset=false){
     if(!this.currentMusic) return;
+    // Сначала снимаем обработчик конца, потом останавливаем. Иначе уход в
+    // меню или на босса ровно в момент, когда трек забега доигрывает, вызвал
+    // бы плейлист и воскресил тему забега поверх нового экрана.
+    this.currentMusic.onended=null;
     this.currentMusic.pause();
     if(reset) this.currentMusic.currentTime=0;
     this.currentMusic=null;

@@ -125,6 +125,7 @@ node tools/build_yandex.mjs --check   # только проверки, ниче�
 | файл | источник |
 |---|---|
 | `music_run` | [Night Prowler](https://opengameart.org/content/night-prowler) |
+| `music_run2` | [The Hunt](https://opengameart.org/content/the-hunt) |
 | `music_boss` | [Boss Battle Theme](https://opengameart.org/content/boss-battle-theme) |
 | `music_death` | [A Wonderful Nightmare](https://opengameart.org/content/a-wonderful-nightmare) |
 | `music_victory` | [Victory Fanfare](https://opengameart.org/content/victory-fanfare) |
