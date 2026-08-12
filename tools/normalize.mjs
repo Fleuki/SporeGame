@@ -138,11 +138,19 @@ function quantize(img,alphaMode,ground=false){
   return img;
 }
 
+// ИСХОДНИКИ ГЕНЕРАЦИИ В ИГРУ НЕ ЕДУТ. Файл с хвостом `_src` — это образец,
+// с которого рисовался лист (у Улья это кадр 1696x2528 весом в мегабайт).
+// Конвейер обходит assets-raw целиком и пишет в docs ВСЁ, что найдёт, а
+// у картинки без записи в CONFIG нет размера кадра — она уезжала в игру как
+// есть. Два таких файла занимали два мегабайта в архиве для площадки, то есть
+// пятую часть игры, и не показывались ни разу.
+const SKIP=/_src\.png$/i;
+
 function walk(dir,acc=[]){
   for(const e of readdirSync(dir,{withFileTypes:true})){
     const p=join(dir,e.name);
     if(e.isDirectory()) walk(p,acc);
-    else if(e.name.endsWith(".png")) acc.push(p);
+    else if(e.name.endsWith(".png")&&!SKIP.test(e.name)) acc.push(p);
   }
   return acc;
 }
