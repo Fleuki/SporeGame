@@ -297,7 +297,10 @@ function init(){
   // Персонаж берётся из меты в момент создания игрока, а не запоминается
   // отдельно: рестарт по «R» обязан выдать того же, кого выбрали на стартовом
   // экране, а смена выбора — нового с ближайшего забега.
-  player=new Player(0,0,meta.current());
+  // Постоянная прокачка приходит ЧИСЛАМИ и застывает здесь же, в конструкторе:
+  // купленное на стартовом экране применяется со следующего забега, а не
+  // посреди идущего.
+  player=new Player(0,0,meta.current(),meta.bonus());
   // Игрок сам не знает про камеру и звук — обратную связь на урон вешаем здесь
   player.onHurt=(amount,kind)=>{
     if(kind==="shield"){ audio.sfx("shield"); return; }
@@ -917,6 +920,7 @@ function draw(){
   drawByDepth();                  // деревья, враги и игрок — по глубине
   for(const p of projectiles) p.draw(renderer);
   battle.drawShots(renderer);     // облака спор трубачей
+  battle.drawRings(renderer);     // споровые кольца финала — поверх толпы
   particles.draw(renderer);
   battle.drawEffects(renderer);   // взрывы поверх всего
   renderer.end();
@@ -1060,6 +1064,7 @@ if(new URLSearchParams(location.search).has("debug")){
 // до нажатия «Играть» прячем — показывать шкалы поверх названия незачем.
 function startRun(){
   document.getElementById("startScreen").classList.add("hidden");
+  showLab(false);
   // Панель звука могла остаться открытой со стартового экрана: в бою она
   // висела бы поверх кадра, ничего при этом не останавливая
   showSettings(false);
@@ -1156,11 +1161,59 @@ function showDiff(){
   }
 }
 
+// ЛАБОРАТОРИЯ: постоянная прокачка за банк.
+//
+// Открывается кнопкой со стартового экрана и живёт поверх него — стартовый
+// экран остаётся под ней, потому что после покупки игрок обычно сразу жмёт
+// «Играть», и возвращать его некуда.
+function showLab(on){
+  document.getElementById("labMenu").classList.toggle("hidden",!on);
+  if(on) syncLab();
+}
+
+function syncLab(){
+  document.getElementById("labCoins").textContent=meta.bank;
+  const list=document.getElementById("labList");
+  list.innerHTML="";
+  for(const row of meta.labRows()){
+    const div=document.createElement("div");
+    div.className="lab-row"+(row.maxed?" maxed":(row.affordable?"":" poor"));
+    const dots=Array.from({length:row.def.levels},(_,i)=>
+      '<i class="'+(i<row.level?"on":"")+'"></i>').join("");
+    div.innerHTML=
+      '<img class="ico" src="assets/images/ui/icon_up_'+row.def.icon+'.png" alt="">'+
+      '<div class="body">'+
+        '<div class="title">'+row.def.name+'</div>'+
+        '<div class="desc">'+row.def.desc+'</div>'+
+        '<div class="dots">'+dots+'</div>'+
+      '</div>'+
+      (row.maxed
+        ? '<div class="done">ВСЁ</div>'
+        : '<div class="cost"><img src="assets/images/drops/drop_coin.png" alt="">'+row.cost+'</div>');
+    div.onclick=()=>{
+      const ok=meta.buyLab(row.key);
+      // Отказ звучит. Молчащая карточка читается как «игра не заметила
+      // нажатие», и игрок жмёт её ещё трижды вместо того, чтобы копить.
+      audio.sfx(ok?"levelup":"hit",ok?1:0.4);
+      if(!ok) return;
+      syncLab(); showMeta();
+      // Игрок за стартовым экраном пересобирается: иначе купленная прибавка
+      // применилась бы только со следующего запуска игры, а фон показывал бы
+      // прежнего героя.
+      if(!started) init();
+    };
+    list.appendChild(div);
+  }
+}
+
 function showMeta(){
   const box=document.getElementById("metaBox");
   box.classList.toggle("hidden",!meta.isVisible());
   if(!meta.isVisible()) return;
   document.getElementById("bankCoins").textContent=meta.bank;
+  // Кнопка лаборатории показывается вместе с банком: пустая лаборатория при
+  // нулевом счёте сообщала бы только о том, что играть ещё рано.
+  document.getElementById("labBtn").classList.toggle("hidden",!meta.isVisible());
   const list=document.getElementById("charList");
   list.innerHTML="";
   for(const row of meta.roster()){
@@ -1215,6 +1268,8 @@ document.getElementById("settingsClose").onclick=()=>{
   if(paused) togglePause(false); else showSettings(false);
 };
 document.getElementById("soundBtn").onclick=()=>showSettings(true);
+document.getElementById("labBtn").onclick=()=>showLab(true);
+document.getElementById("labClose").onclick=()=>showLab(false);
 // Та же трата с пальца. Подсказку «ПРОБЕЛ» на сенсорном экране прячем: клавиши
 // там нет, а подпись к несуществующей кнопке — то же ложное обещание.
 if(input.isMobile) document.body.classList.add("touch");

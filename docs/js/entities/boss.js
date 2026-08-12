@@ -20,6 +20,20 @@ export class Boss extends Enemy {
     this.tentacleTimer=0; this.pulseTimer=0;
     // Замах ударной волны: -1 — не замахивается, иначе кадры от начала
     this.shockWind=-1;
+    // Споровое кольцо: тот же приём — -1 значит «не замахивается».
+    this.ringWind=-1; this.ringTimer=0; this.ringGapAngle=0;
+  }
+
+  // ЯДРО ОТКРЫТО. Оглушённый босс получает больше урона — если его запись в
+  // конфиге про это знает. Множителя нет — ведёт себя как раньше: правило
+  // живёт в записи босса, а не в проверке на его имя.
+  //
+  // Через takeDamage проходят выстрелы, взрывы и выброс спор; урон по времени
+  // (лужи, грибница) идёт мимо, прямо в hp. Так и задумано: окно награждает
+  // за то, что игрок в него ЦЕЛИТСЯ, а не за оставленное заранее пятно.
+  takeDamage(amount,angle=null,force=0){
+    const k=(this.isStunned&&this.def.coreOpenMult)||1;
+    return super.takeDamage(amount*k,angle,force);
   }
 
   // Фаза = сколько HP уже снято. Считается ВСЕГДА по четырём ступеням, а не
@@ -79,7 +93,12 @@ export class Boss extends Enemy {
         // «ярость» делает её слабее. Первый прогон это и показал — выводок
         // на третьей фазе вышел вдвое меньше, чем на второй.
         this.isStunned=true; this.stunTimer=Math.round(C.sneezeCooldown*this.rate());
-        this.sneezeTimer=0; events.push({type:"sneeze",boss:this}); return;
+        this.sneezeTimer=0;
+        events.push({type:"sneeze",boss:this});
+        // Окно объявляется вслух ровно там, где начинается. Молча открытое
+        // ядро — это то же самое, что закрытое: игрок в него не целится.
+        if(C.coreOpenMult) events.push({type:"core_open",boss:this});
+        return;
       }
       if(this.timer%this.every(120)===0){
         events.push({type:"spawn_minions",boss:this,
@@ -87,6 +106,30 @@ export class Boss extends Enemy {
           // С поздней фазы выводок появляется вокруг ИГРОКА: отойти от него
           // больше нельзя, надо прорываться
           encircle:this.phase>=(C.encirclePhase??99)});
+      }
+    }
+
+    // СПОРОВОЕ КОЛЬЦО. Стоит ПОСЛЕ чиха и выводка намеренно: пока босс
+    // оглушён, ветка выше уходит в return, и кольцо во время оглушения не
+    // выходит. Одно действие за раз — правило всего этого файла.
+    if(this.abilities.includes("spore_ring")){
+      const C=this.def;
+      if(this.ringWind>=0){
+        if(++this.ringWind>=C.ringWindup){
+          this.ringWind=-1;
+          events.push({type:"spore_ring",boss:this,gap:this.ringGapAngle,
+                       // Второе кольцо с поздней фазы идёт следом и со своим
+                       // поворотом дыр: два одинаковых кольца подряд
+                       // проходятся одним и тем же шагом, то есть ничего не
+                       // добавляют.
+                       second:this.phase>=(C.ringDoublePhase??99)});
+        }
+        return;
+      }
+      this.ringTimer++;
+      if(this.ringTimer>=this.every(C.ringInterval)){
+        this.ringTimer=0; this.ringWind=0;
+        this.ringGapAngle=Math.random()*Math.PI*2;
       }
     }
 
@@ -176,6 +219,35 @@ export class Boss extends Enemy {
       ctx.globalAlpha=0.25+k*0.5;
       ctx.strokeStyle="#ff5566"; ctx.lineWidth=2+k*2;
       ctx.beginPath(); ctx.arc(this.x,this.y,C.shockRadius*k,0,Math.PI*2); ctx.stroke();
+      ctx.restore();
+    }
+
+    // ЗАМАХ СПОРОВОГО КОЛЬЦА. Показывает не только «сейчас ударит», но и ГДЕ
+    // БУДУТ ДЫРЫ: кольцо рисуется с теми же разрывами, что и сама волна, —
+    // иначе читать в нём нечего и остаётся угадывать.
+    if(this.ringWind>=0){
+      const C=this.def, k=this.ringWind/C.ringWindup, ctx=renderer.ctx;
+      const g=C.ringGap*0.5, a0=this.ringGapAngle;
+      ctx.save();
+      ctx.globalAlpha=0.2+k*0.55;
+      ctx.strokeStyle="#ff5566"; ctx.lineWidth=2+k*3;
+      for(const base of [a0,a0+Math.PI]){
+        ctx.beginPath();
+        ctx.arc(this.x,this.y,this.radius+18+k*46,base+g,base+Math.PI-g);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    // ЯДРО ОТКРЫТО — пока босс оглушён. Отдельная подсветка, а не только
+    // искры: искры сверху говорят «оглушён», а кольцо у самого тела говорит
+    // «бей сюда», и это разные сообщения.
+    if(this.isStunned&&this.def.coreOpenMult){
+      const ctx=renderer.ctx, pulse=0.5+Math.sin(this.life*0.22)*0.5;
+      ctx.save();
+      ctx.globalAlpha=0.25+pulse*0.35;
+      ctx.strokeStyle="#7dffca"; ctx.lineWidth=2+pulse*2;
+      ctx.beginPath(); ctx.arc(this.x,this.y,this.radius*1.15,0,Math.PI*2); ctx.stroke();
       ctx.restore();
     }
 

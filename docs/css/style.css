@@ -669,6 +669,67 @@ body.touch .key { display: none; }
    действие — «игра встала, выбирай», — и два разных оформления заставляли бы
    разбираться заново там, где всё уже знакомо. Отличают лавку три вещи:
    золото вместо бирюзы, ценник на каждой карточке и две кнопки внизу. */
+/* ЛАБОРАТОРИЯ. Тот же корпус, что у лавки, и это не лень: игрок уже умеет
+   читать этот экран — рамка, кошелёк в заголовке, карточки с ценой. Второй
+   магазин с другой вёрсткой пришлось бы изучать заново.
+
+   Разница ровно одна и она в подзаголовке: здесь покупается НАВСЕГДА. Ради
+   этого же ряды идут столбиком, а не сеткой: в лавке четыре товара выбирают
+   один раз и быстро, а тут пять веток, у каждой ступени, и читать их надо
+   по одной. */
+#labMenu {
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%,-50%);
+  width: max-content; max-width: 94vw; max-height: 92dvh; overflow-y: auto;
+  background: rgba(16,12,6,0.96);
+  border: 34px solid transparent;
+  border-image: url("../assets/images/ui/frame_panel.png") 64 round;
+  padding: 4px 14px 14px;
+  text-align: center;
+  /* Выше стартового экрана (300) и вровень с панелью звука (320): обе
+     всплывают НАД ним, а не вместо него — после покупки игрок обычно сразу
+     жмёт «Играть», и возвращать его некуда. */
+  z-index: 320;
+}
+#labMenu h2 {
+  color: #ffd24a; margin-bottom: 4px;
+  text-shadow: 0 0 10px rgba(255,210,74,0.55);
+  display: flex; align-items: center; justify-content: center; gap: 14px;
+}
+#labMenu .purse { display: inline-flex; align-items: center; gap: 5px; font-size: 17px; }
+#labMenu .lab-note { color: #8fa79b; font-size: 12px; margin-bottom: 12px; }
+#labList { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+.lab-row {
+  display: flex; align-items: center; gap: 10px;
+  width: 330px; max-width: 88vw; padding: 8px 10px;
+  background: linear-gradient(180deg, #3a2f14 0%, #201a0c 100%);
+  border: 1px solid #ffd24a;
+  text-align: left; cursor: pointer; pointer-events: auto;
+  transition: transform 0.12s, box-shadow 0.12s;
+}
+.lab-row:hover { transform: translateY(-1px); box-shadow: 0 0 12px rgba(255,210,74,0.3); }
+.lab-row .ico { width: 30px; height: 30px; image-rendering: pixelated; flex: none; }
+.lab-row .body { flex: 1; min-width: 0; }
+.lab-row .title { color: #fff; font-size: 13px; }
+.lab-row .desc { color: #a8bcb2; font-size: 11px; }
+/* Ступени точками — тем же приёмом, что уровни карточек прокачки: число
+   рядом с названием читается как ещё одна цена, а точки видно боковым
+   зрением. */
+.lab-row .dots { display: flex; gap: 3px; margin-top: 4px; }
+.lab-row .dots i { width: 12px; height: 4px; background: #4a4d4c; }
+.lab-row .dots i.on { background: #ffd24a; box-shadow: 0 0 5px rgba(255,210,74,0.6); }
+.lab-row .cost {
+  display: inline-flex; align-items: center; gap: 4px;
+  color: #ffd24a; font-size: 15px; flex: none;
+}
+.lab-row .cost img { width: 15px; height: 15px; image-rendering: pixelated; }
+/* Не хватает денег — карточка гаснет, но остаётся нажимаемой: отказ обязан
+   ЗВУЧАТЬ, а не молчать (то же решение, что у кнопки выброса). */
+.lab-row.poor { opacity: 0.45; }
+.lab-row.maxed { opacity: 0.75; border-color: #4a4d4c; cursor: default; }
+.lab-row.maxed:hover { transform: none; box-shadow: none; }
+.lab-row .done { color: #00d4aa; font-size: 12px; flex: none; }
+
 #shopMenu {
   position: absolute; top: 50%; left: 50%;
   transform: translate(-50%,-50%);

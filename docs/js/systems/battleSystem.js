@@ -29,6 +29,8 @@ export class BattleSystem {
     this.effects=[];      // одноразовые анимации взрывов
     this.enemyShots=[];   // облака спор, выпущенные трубачами
     this.fields=[];       // живые грибницы: пятна урона, оставшиеся на земле
+    // Споровые кольца финального босса: расходящиеся волны с двумя разрывами
+    this.rings=[];
     // ОТЛОЖЕННЫЕ ВЗРЫВЫ. Пока в игре он один — второй взрыв элитного Плодового
     // Тела, — но список общий нарочно: «удар по площади с видимым отсчётом»
     // это ровно то, чем уже пользуются Сердцевина и трубач, и заводить под
@@ -48,7 +50,7 @@ export class BattleSystem {
 
   reset(){
     this.effects.length=0; this.enemyShots.length=0;
-    this.fields.length=0; this.pending.length=0;
+    this.fields.length=0; this.pending.length=0; this.rings.length=0;
     this.kills=0; this.hitStop=0;
   }
 
@@ -148,6 +150,79 @@ export class BattleSystem {
       life:f.life, maxLife:f.life,
       color:f.color||"#a8ff6a"
     });
+  }
+
+  // --- СПОРОВЫЕ КОЛЬЦА -------------------------------------------------
+  //
+  // Волна расходится от босса и бьёт того, кто оказался на её пути. Устроена
+  // как ОДНА полоса, а не как набор снарядов: снарядами кольцо в шестьсот
+  // единиц радиусом — это сотни объектов на кадр ради формы, которую можно
+  // задать двумя числами.
+  spawnRing(boss,gap,delay){
+    const C=boss.def;
+    this.rings.push({
+      x:boss.x, y:boss.y, r:boss.radius*0.8,
+      speed:C.ringSpeed??3, maxR:C.ringMaxRadius??600,
+      gap:gap, gapW:(C.ringGap??1.1)*0.5,
+      damage:C.ringDamage??24, delay:delay||0, hit:false, life:0
+    });
+  }
+
+  updateRings(dt,player){
+    for(let i=this.rings.length-1;i>=0;i--){
+      const g=this.rings[i];
+      if(g.delay>0){ g.delay--; continue; }
+      g.life++;
+      const prev=g.r;
+      g.r+=g.speed;
+      if(g.r>g.maxR){ this.rings.splice(i,1); continue; }
+      if(g.hit) continue;
+      // Попадание считается по ПЕРЕСЕЧЕНИЮ за кадр, а не по «расстояние равно
+      // радиусу»: кольцо идёт по три единицы за кадр, и точное равенство не
+      // случится никогда — игрок проходил бы сквозь волну насквозь.
+      const d=Math.hypot(player.x-g.x,player.y-g.y);
+      if(d<prev-player.radius||d>g.r+player.radius) continue;
+      // В разрыв — значит мимо. Разрывов два, напротив друг друга.
+      const a=Math.atan2(player.y-g.y,player.x-g.x);
+      const inGap=[g.gap,g.gap+Math.PI].some(base=>{
+        let dd=Math.abs(((a-base+Math.PI*3)%(Math.PI*2))-Math.PI);
+        return dd>Math.PI-g.gapW;
+      });
+      g.hit=true;                       // кольцо бьёт ОДИН раз, а не каждый кадр
+      if(inGap) continue;
+      player.takeDamage(g.damage);
+      player.sporeLevel+=6;
+      this.particles?.emit(player.x,player.y,"#ff5566",14,2,6);
+    }
+  }
+
+  // Рисуется поверх мира, но под интерфейсом: волна должна читаться сквозь
+  // толпу — она и есть то, что игрок обязан увидеть.
+  drawRings(renderer){
+    const ctx=renderer.ctx;
+    for(const g of this.rings){
+      if(g.delay>0) continue;
+      const fade=Math.min(1,(g.maxR-g.r)/120);
+      ctx.save();
+      ctx.globalAlpha=0.75*fade;
+      ctx.strokeStyle="#ff5566"; ctx.lineWidth=7;
+      ctx.shadowColor="#ff5566"; ctx.shadowBlur=14;
+      for(const base of [g.gap,g.gap+Math.PI]){
+        ctx.beginPath();
+        ctx.arc(g.x,g.y,g.r,base+g.gapW,base+Math.PI-g.gapW);
+        ctx.stroke();
+      }
+      // Тёмное ядро внутри полосы — тем же приёмом, что у снаряда трубача:
+      // в свалке из двадцати тел форма читается раньше цвета.
+      ctx.globalAlpha=0.5*fade;
+      ctx.strokeStyle="#3a0d10"; ctx.lineWidth=2; ctx.shadowBlur=0;
+      for(const base of [g.gap,g.gap+Math.PI]){
+        ctx.beginPath();
+        ctx.arc(g.x,g.y,g.r,base+g.gapW,base+Math.PI-g.gapW);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
   }
 
   updateFields(dt){
@@ -282,6 +357,7 @@ export class BattleSystem {
     this.updateProjectiles(projectiles,enemies,player,camera);
     this.updateEnemyShots(player,camera);
     this.updateFields(dt);
+    this.updateRings(dt,player);
     this.updatePending(player,camera);
     this.updateEffects();
 
@@ -334,6 +410,20 @@ export class BattleSystem {
       this.particles.emit(b.x,b.y,"#ff8899",26,2,7);
       this.audio?.sfx("boom");
       camera?.shake(CONFIG.feel.shakeBoss*0.8,18);
+    } else if(ev.type==="core_open"){
+      // Окно уязвимости объявляется словом и звуком: без этого игрок его не
+      // замечает и продолжает кайтить, а награда за внимание не работает.
+      this.particles.emitText(b.x,b.y-b.radius-52,"ЯДРО ОТКРЫТО","#7dffca",14);
+      this.particles.emitRing(b.x,b.y,"#7dffca",b.radius*0.8,b.radius*1.6,14,2.2);
+      this.audio?.sfx("shield");
+    } else if(ev.type==="spore_ring"){
+      const C=b.def;
+      this.spawnRing(b,ev.gap,0);
+      // Второе кольцо идёт следом со сдвинутыми дырами: два одинаковых
+      // проходятся одним шагом и ничего не добавляют.
+      if(ev.second) this.spawnRing(b,ev.gap+1.05,26);
+      this.audio?.sfx("boom");
+      camera?.shake(CONFIG.feel.shakeBoss*0.5,14);
     } else if(ev.type==="boss_phase"){
       // Переход фазы обязан звучать и выглядеть: игрок должен связать «стало
       // тяжелее» со своим же уроном, а не списать это на невезение

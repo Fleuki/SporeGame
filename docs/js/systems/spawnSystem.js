@@ -140,7 +140,10 @@ export class SpawnSystem {
   // толпе, что была все пятнадцать минут.
   inFinal(){ return this.finalSpawned; }
 
-  tryFinal(enemies){
+  // player нужен ради одного: толщина финального босса считается от уровня
+  // игрока (см. ниже). Аргумент необязательный — без него финал выходит
+  // базовым, и это честное поведение для любого вызова из прогона.
+  tryFinal(enemies,player=null){
     const F=CONFIG.spawn.final;
     if(!F||this.finalSpawned) return null;
     if(!this.finalWarned&&this.time>=F.at-(F.warnAt||0)){
@@ -162,7 +165,30 @@ export class SpawnSystem {
     const p=this.camera.pointOutside(CONFIG.spawn.bossSpawnMargin);
     const boss=new Boss(p.x,p.y,F.boss);
     boss.isFinal=true;
-    boss.maxHp*=(F.hpMult||1)*(this.diff.finalHpMult||1); boss.hp=boss.maxHp;
+    // ФИНАЛ РОС МЕДЛЕННЕЕ РЯДОВОГО БОССА, И ЭТО БЫЛА ДЫРА В КОДЕ, А НЕ В
+    // БАЛАНСЕ. tryBoss умножает здоровье на время забега (bossHpPerMin), а
+    // здесь эта строка просто отсутствовала: на 15:00 множитель равен 2.96,
+    // то есть рядовой Улей, выйди он в ту же секунду, имел бы 5920 HP, а
+    // финальный — 4800. Последний бой игры был слабее очередного.
+    //
+    // Живой игрой: «последнего босса убил буквально за 1-2 секунды».
+    const byTime=1+Math.max(0,this.time-CONFIG.spawn.bossEvery)/60*CONFIG.spawn.bossHpPerMin;
+    // ЧЕМ СИЛЬНЕЕ ИГРОК ПРИШЁЛ К ФИНАЛУ, ТЕМ ТОЛЩЕ ФИНАЛ.
+    //
+    // Без этого финал нельзя настроить вообще: разброс силы игроков к 15-й
+    // минуте — больше чем десятикратный. Замер: бот, бравший первую попавшуюся
+    // карточку, бьёт 208 единиц в секунду, а живой игрок с добитыми ветками и
+    // выкупленной лавкой — около трёх тысяч. Один и тот же босс для первого
+    // это семь минут долбёжки, для второго — полторы секунды.
+    //
+    // Считается по УРОВНЮ, а не по урону: уровень — это то, что игрок набрал
+    // сам, его нельзя случайно получить и по нему видно, насколько далеко он
+    // зашёл. Ниже порога прибавки нет вовсе — новичок, доползший до финала на
+    // пятнадцатом уровне, дерётся с базовым боссом.
+    const lv=Math.max(0,(player?.level||1)-(F.levelFrom||15));
+    const byLevel=Math.min(F.levelCap||2, 1+lv*(F.levelStep||0.05));
+    boss.maxHp*=(F.hpMult||1)*byTime*byLevel*(this.diff.finalHpMult||1);
+    boss.hp=boss.maxHp;
     boss.damage*=this.scale().damage*(F.damageMult||1);
     return {type:"boss",boss,final:true,name:F.name};
   }
@@ -172,7 +198,7 @@ export class SpawnSystem {
     this.time+=dt;
 
     // Финал важнее всего остального: он и есть конец забега
-    const fin=this.tryFinal(enemies);
+    const fin=this.tryFinal(enemies,player);
     if(fin) return fin;
     if(this.finalSpawned) return null;
 

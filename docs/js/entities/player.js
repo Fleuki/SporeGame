@@ -49,18 +49,25 @@ export class Player extends Entity {
   // набирает сам за забег, и так и должно быть. Аргумент необязательный —
   // без него получается Алхимик, то есть ровно тот игрок, что был до
   // появления выбора.
-  constructor(x,y,character=null){
+  // bonus — постоянная прокачка за банк (MetaSystem.bonus). Приходит
+  // ЧИСЛАМИ, а не ссылкой на мету: игрок не должен знать, откуда они, а
+  // правила забега обязаны застыть в момент его начала — покупка на
+  // стартовом экране не может усилить уже идущий бой.
+  constructor(x,y,character=null,bonus=null){
     super(x,y,CONFIG.player.radius);
     const C=character||CONFIG.characters.list[CONFIG.characters.starter];
+    const B=bonus||{hp:1,dmg:1,rate:1,speed:1,loot:0};
     this.character=C;
-    this.speed=CONFIG.player.speed*(C.speedMult??1);
-    this.maxHp=Math.round(CONFIG.player.maxHp*(C.hpMult??1));
+    this.speed=CONFIG.player.speed*(C.speedMult??1)*(B.speed??1);
+    this.maxHp=Math.round(CONFIG.player.maxHp*(C.hpMult??1)*(B.hp??1));
     this.hp=this.maxHp; this.xp=0; this.level=1; this.xpToNext=14;
-    this.damage=CONFIG.player.damage*(C.dmgMult??1);
+    this.damage=CONFIG.player.damage*(C.dmgMult??1)*(B.dmg??1);
     // Общий множитель перезарядки ВСЕХ стволов: 1 — как в конфиге, меньше —
     // быстрее. Карточка «Ускоренный экстракт» умножает именно его, а каждый
     // ствол сверху крутит ещё и свой (Weapon.rateMult).
-    this.rateMult=1;
+    // Перезарядка: мета умножает тот же множитель, что и карточка «Ускоренный
+    // экстракт». Меньше единицы — чаще стреляет.
+    this.rateMult=B.rate??1;
     // Стволы стреляют одновременно, каждый по своему таймеру.
     // Первый задаёт персонаж, остальные выдаются карточками прокачки.
     this.weapons=[new Weapon(CONFIG.weapons[C.weapon]||CONFIG.weapons.antidote)];
@@ -81,7 +88,7 @@ export class Player extends Entity {
     // навсегда превращался в пустую карточку вопреки описанию.
     this.hasShield=false; this.shieldActive=false; this.shieldCd=0;
     // Прибавка к радиусу притяжения лута от карточек «Магнит мицелия»
-    this.lootRadius=0;
+    this.lootRadius=B.loot||0;
     this.regen=0; this.xpMult=1;
     // Кадры, оставшиеся до возобновления регенерации. Ставится в takeDamage,
     // тикает в update: реген работает только вне боя (см. update).
