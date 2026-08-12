@@ -166,6 +166,14 @@ const LIVELINESS_JS = `(() => {
 const CANDIDATES = 7;
 
 async function pickBest(page, shot) {
+  // У выброса кандидатов быть не может: это ОДНО событие длиной в пятую долю
+  // секунды, и «пожить» между кандидатами означало бы дождаться, когда оно
+  // кончится. Момент здесь выбран заранее, снимаем как есть.
+  if (shot.scene === "burst") {
+    return { buf: await page.screenshot(),
+             stats: await page.evaluate(() => window.GAME.stats()),
+             score: 0, covered: 0 };
+  }
   let best = null;
   for (let i = 0; i < CANDIDATES; i++) {
     const live = await page.evaluate(LIVELINESS_JS);
@@ -260,13 +268,22 @@ for (const shot of SHOTS) {
   if (shot.scene === "burst") {
     // Выброс спор живёт доли секунды. Останавливаем мир НА УДАРЕ: кадр
     // рисуется как в бою, а не как на паузе.
+    //
+    // Но ловить надо НЕ первый кадр эффекта. Выброс рисуется кругом в 330
+    // единиц с центром на игроке: в первом кадре круг сплошной и герой в нём
+    // тонет — ровно та жалоба, из-за которой переснимали. К третьему кадру
+    // круг расходится и редеет, и герой виден внутри расширяющегося кольца:
+    // и способность показана, и персонаж на месте.
+    // Лист в 4 кадра при speed 3 — это 12 кадров игры, около 200 мс на весь
+    // эффект; 150 мс приходятся примерно на его середину.
     await page.evaluate(() => {
       const g = window.GAME;
       g.player.sporeLevel = 95;
-      g.config.feel.hitStopCrit = 90;
       g.burst();
     });
-    await page.waitForTimeout(120);
+    await page.waitForTimeout(150);
+    await page.evaluate(() => { window.GAME.config.feel.hitStopCrit = 90; });
+    await page.waitForTimeout(60);
   }
   if (shot.scene === "fight") {
     await page.evaluate(() => { window.GAME.config.feel.hitStopCrit = 90; });
