@@ -413,10 +413,22 @@ body.touch .key { display: none; }
    между ними и есть масштаб рисунка рамки. Менять их надо парой.
    repeat: round — стороны повторяются целым числом раз, поэтому грибы по
    краям не режутся пополам. */
+/* ПРО max-height/overflow У ВСЕХ ВСПЛЫВАЮЩИХ ПАНЕЛЕЙ НИЖЕ.
+   Панель стоит по центру через `top:50% + translate(-50%,-50%)`, а это тот же
+   капкан, что и `justify-content:center` у стартового экрана: содержимое выше
+   окна вылезает В ОБЕ стороны, и то, что ушло вверх, не достать ничем.
+   Поэтому у каждой панели свой потолок высоты и своя прокрутка — иначе
+   следующая добавленная строка молча срежет ВЕРХ, а не низ, и выглядеть это
+   будет как испорченная картинка, а не как нехватка места.
+   dvh, а не vh: на телефоне vh считается по экрану без панелей браузера. */
 #upgradeMenu {
   position: absolute; top: 50%; left: 50%;
   transform: translate(-50%,-50%);
   width: max-content; max-width: 96vw;
+  max-height: 92dvh; overflow-y: auto;
+  /* body запрещает жесты целиком — вертикальный возвращаем поимённо,
+     иначе прокрутка есть, но пальцем не работает */
+  touch-action: pan-y;
   background: rgba(8,16,12,0.95);
   border: 34px solid transparent;
   border-image: url("../assets/images/ui/frame_panel.png") 64 round;
@@ -521,16 +533,22 @@ body.touch .key { display: none; }
    Она нарисована СО СМЕЩЕНИЕМ ВЛЕВО, а правая треть намеренно оставлена
    тёмной и пустой — под текст. Поэтому текст и прижат вправо, а не стоит
    по центру: по центру он ложился бы прямо на грибы. */
+/* Экран итогов лечится тем же приёмом, что и стартовый: он тоже флекс-колонка
+   и тоже рос со временем — рекорд, убитые, монеты, открытая сложность, банк,
+   две кнопки. Автополя вместо justify-content, иначе верх недостижим. */
 #gameOverScreen {
   position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  overflow-y: auto; touch-action: pan-y;
   background: linear-gradient(rgba(6,14,10,0.45), rgba(6,14,10,0.7)),
               url("../assets/images/ui/screen_death.png") center/cover no-repeat;
   display: flex; flex-direction: column;
-  justify-content: center; align-items: flex-end;
+  justify-content: flex-start; align-items: flex-end;
   padding-right: 6vw;
   text-align: right;
   z-index: 200; color: #ff3333;
 }
+#gameOverScreen > :first-child { margin-top: auto; }
+#gameOverScreen > :last-child { margin-bottom: auto; }
 #gameOverScreen h1 { font-size: 48px; text-shadow: 0 0 20px rgba(255,51,51,0.5), 0 2px 6px #000; margin-bottom: 16px; }
 /* ПОБЕДА НА ТОМ ЖЕ ЭКРАНЕ. Иллюстрация здесь — противогаз, проросший грибами,
    то есть картинка проигрыша: под заголовком «СУМРАК РАССЕЯН» она отменяла бы
@@ -551,7 +569,10 @@ body.touch .key { display: none; }
 @media (max-aspect-ratio: 5/4) {
   #gameOverScreen {
     align-items: center; text-align: center; padding-right: 0;
-    justify-content: center; padding-bottom: 30vh;
+    /* 30vh отводилось противогазу внизу картинки. dvh, а не vh: на телефоне
+       vh считает по экрану без панелей браузера, и отступ выходил больше
+       задуманного ровно на их высоту. */
+    padding-bottom: 30dvh;
     background: linear-gradient(rgba(6,14,10,0.35), rgba(6,14,10,0.55)),
                 url("../assets/images/ui/screen_death.png") center bottom / 100% auto no-repeat,
                 #0d1f15;
@@ -641,6 +662,7 @@ body.touch .key { display: none; }
   position: absolute; top: 50%; left: 50%;
   transform: translate(-50%,-50%);
   width: max-content; max-width: 92vw;
+  max-height: 92dvh; overflow-y: auto; touch-action: pan-y;
   background: rgba(8,16,12,0.96);
   border: 34px solid transparent;
   border-image: url("../assets/images/ui/frame_panel.png") 64 round;
@@ -704,7 +726,8 @@ body.touch .key { display: none; }
 #labMenu {
   position: absolute; top: 50%; left: 50%;
   transform: translate(-50%,-50%);
-  width: max-content; max-width: 94vw; max-height: 92dvh; overflow-y: auto;
+  width: max-content; max-width: 94vw;
+  max-height: 92dvh; overflow-y: auto; touch-action: pan-y;
   background: rgba(16,12,6,0.96);
   border: 34px solid transparent;
   border-image: url("../assets/images/ui/frame_panel.png") 64 round;
@@ -758,6 +781,7 @@ body.touch .key { display: none; }
   position: absolute; top: 50%; left: 50%;
   transform: translate(-50%,-50%);
   width: max-content; max-width: 96vw;
+  max-height: 92dvh; overflow-y: auto; touch-action: pan-y;
   background: rgba(16,12,6,0.95);
   border: 34px solid transparent;
   border-image: url("../assets/images/ui/frame_panel.png") 64 round;
@@ -972,6 +996,19 @@ body.touch .key { display: none; }
 @media (max-width: 560px) and (min-height: 621px) {
   #emblem { width: min(26vh, 190px); }
   #startScreen h1 { margin-top: 6px; }
+}
+/* РЕЗНАЯ РАМКА НА НИЗКОМ ЭКРАНЕ. У всех всплывающих панелей рамка задана
+   через `border: 34px` с картинкой — это 68 пикселей высоты, съеденных ещё до
+   первой строки текста. На экране в 300 пикселей это почти четверть. Замер
+   показал, что лавка уходит за край ровно на 23–25 пикселей: рамка и есть
+   почти вся эта разница. Ужимаем её до 20 — узор остаётся, `round` просто
+   укладывает его мельче. */
+@media (max-height: 620px) {
+  #upgradeMenu, #shopMenu, #settingsPanel, #labMenu { border-width: 20px; }
+  #gameOverScreen h1 { font-size: 30px; margin-bottom: 8px; }
+  #gameOverScreen p { font-size: 15px; margin-bottom: 5px; }
+  #gameOverScreen .hint { font-size: 13px; margin-top: 10px; }
+  #gameOverScreen .big-btn { margin-top: 10px; min-height: 40px; }
 }
 /* Телефон лёжа: экран низкий, столбик из карточек в него уже не влезет */
 @media (max-height: 500px) {
