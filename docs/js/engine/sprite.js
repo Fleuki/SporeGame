@@ -11,7 +11,9 @@
 //   dirRows      — {up,right,down,left}: свой ряд на каждое направление
 //   phaseRows    — ряд выбирается снаружи (например по остатку HP босса)
 
-export function dirFromAngle(angle){
+// Не экспортируется: наружу нужен только SpriteAnim, а направление —
+// его внутренняя кухня. Экспорт тут был бы обещанием, которого никто не ждёт.
+function dirFromAngle(angle){
   // 0 — вправо, ось Y направлена вниз
   if(angle>=-Math.PI/4 && angle<Math.PI/4) return "right";
   if(angle>=Math.PI/4 && angle<3*Math.PI/4) return "down";
