@@ -453,7 +453,7 @@ export class MapSystem {
       : 0;
     renderer.drawProp(def.image,d.x,d.y,d.w,d.w*img.height/frameW,
       { flip:def.flat?false:d.flip, glow:def.glow, glowBlur:def.glowBlur,
-        flat:def.flat, frames:def.frames, frame });
+        flat:def.flat, frames:def.frames, frame, shadow:def.shadow });
   }
 
   // --- экранный слой ---------------------------------------------------
