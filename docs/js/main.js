@@ -920,6 +920,7 @@ function draw(){
   drawByDepth();                  // деревья, враги и игрок — по глубине
   for(const p of projectiles) p.draw(renderer);
   battle.drawShots(renderer);     // облака спор трубачей
+  battle.drawRings(renderer);     // споровые кольца финала — поверх толпы
   particles.draw(renderer);
   battle.drawEffects(renderer);   // взрывы поверх всего
   renderer.end();
