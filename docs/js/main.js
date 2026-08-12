@@ -561,7 +561,10 @@ function checkBiome(dt){
 // объявление и заведено.
 function showBanner(text){
   const el=document.getElementById("pushBanner");
-  el.firstElementChild.textContent=text;
+  // Точка-разделитель приклеивается к предыдущему слову неразрывным пробелом.
+  // На узком экране надпись переносится (иначе её обрезало бы краем), и без
+  // этого «·» повисала в начале новой строки, читаясь как опечатка.
+  el.firstElementChild.textContent=text.replace(/ · /g," · ");
   el.classList.add("hidden");
   void el.offsetWidth;              // перезапуск анимации
   el.classList.remove("hidden");
