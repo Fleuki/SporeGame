@@ -1005,6 +1005,27 @@ body.touch .key { display: none; }
    укладывает его мельче. */
 @media (max-height: 620px) {
   #upgradeMenu, #shopMenu, #settingsPanel, #labMenu { border-width: 20px; }
+  /* ЛАБОРАТОРИЯ ЛЁЖА: ПЯТЬ СТРОК В СТОЛБИК НЕ ВЛЕЗАЛИ. Живой игрой: «в
+     лаборатории при горизонтальном положении телефона не видно цену, сколько
+     монет стоит прокачка». Панель прокручивалась — то есть формально всё было
+     доступно, — но на телефоне это не читается: строки просто обрываются, и
+     выглядит это как испорченная панель, а не как список, который надо
+     пролистать. Прокрутка хороша как страховка, а не как способ показать
+     основное.
+     Ставим в две колонки — тем же приёмом, что уже применён к товарам лавки
+     на узком экране. Пять строк ложатся в три ряда вместо пяти. */
+  #labList { display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+             width: min(86vw, 640px); }
+  .lab-row { width: auto; max-width: none; padding: 5px 8px; gap: 7px; }
+  .lab-row .ico { width: 24px; height: 24px; }
+  .lab-row .title { font-size: 12px; }
+  .lab-row .desc { font-size: 10px; }
+  .lab-row .cost { font-size: 13px; }
+  .lab-row .dots { margin-top: 3px; }
+  #labMenu .lab-note { font-size: 11px; margin-bottom: 7px; }
+  #labMenu h2 { font-size: 17px; }
+  #labList { margin-bottom: 8px; }
+  #labMenu .big-btn { margin-top: 6px; min-height: 34px; }
   #gameOverScreen h1 { font-size: 30px; margin-bottom: 8px; }
   #gameOverScreen p { font-size: 15px; margin-bottom: 5px; }
   #gameOverScreen .hint { font-size: 13px; margin-top: 10px; }

@@ -413,7 +413,9 @@ export class BattleSystem {
     } else if(ev.type==="core_open"){
       // Окно уязвимости объявляется словом и звуком: без этого игрок его не
       // замечает и продолжает кайтить, а награда за внимание не работает.
-      this.particles.emitText(b.x,b.y-b.radius-52,"ЯДРО ОТКРЫТО","#7dffca",14);
+      // От labelTop(), а не от радиуса: см. объяснение у метода в boss.js —
+      // от радиуса выкрик стартовал внутри купола и всплывал сквозь имя.
+      this.particles.emitText(b.x,b.labelTop()-54,"ЯДРО ОТКРЫТО","#7dffca",14);
       this.particles.emitRing(b.x,b.y,"#7dffca",b.radius*0.8,b.radius*1.6,14,2.2);
       this.audio?.sfx("shield");
     } else if(ev.type==="spore_ring"){
@@ -430,7 +432,10 @@ export class BattleSystem {
       this.audio?.sfx("boss");
       camera?.shake(CONFIG.feel.shakeBoss*0.7,20);
       this.particles.emitRing(b.x,b.y,"#ffd24a",b.radius,b.radius*3.2,20,3);
-      this.particles.emitText(b.x,b.y-b.radius-32,"ЯРОСТЬ "+ev.phase,"#ffd24a",16);
+      // -34: имя босса сидит на -20, полоса здоровья на -14. Выкрик обязан
+      // стартовать ВЫШЕ них, потому что он всплывает — иначе он проходит
+      // сквозь подпись, что и было видно живой игрой.
+      this.particles.emitText(b.x,b.labelTop()-34,"ЯРОСТЬ "+ev.phase,"#ffd24a",16);
       this.requestHitStop(CONFIG.feel.hitStopCrit*2);
     } else if(ev.type==="summon_tentacle"){
       // Щупальце вырастает в случайной точке видимой области, а не в

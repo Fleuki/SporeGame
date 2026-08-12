@@ -41,7 +41,7 @@
 
 import { chromium } from "playwright";
 import { spawn } from "node:child_process";
-import { mkdirSync, existsSync } from "node:fs";
+import { mkdirSync, existsSync, writeFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -119,6 +119,85 @@ async function play(page, seconds) {
   }
 }
 
+// ВЫБОР КАДРА ЗАМЕРОМ, А НЕ «ЧТО ПОПАЛОСЬ».
+//
+// Первая версия снимала один кадр в заданную секунду — и раз через раз давала
+// негодный для карточки снимок: полупустая тёмная арена, враги разбрелись по
+// углам, у босса имя утонуло в облаке спор. Это не придирка к красоте:
+// требования площадки прямо запрещают «затемнение» и «одноцветные кадры», а
+// закрытую надпись модерация читает как обрезанный текст.
+//
+// Поэтому снимается НЕСКОЛЬКО кадров-кандидатов, и каждый получает оценку:
+//
+//   живость — доля пикселей ярче фона. Тёмный полупустой кадр даёт единицы
+//             процентов, плотный бой — десятки. Ровно то, что запрещено
+//             требованиями, и ровно то, что легко посчитать;
+//   враги   — сколько их на экране: карточка должна показывать поток, а не
+//             прогулку;
+//   босс    — для сцены с боссом ещё и НАСКОЛЬКО ОН БЛИЗКО К ЦЕНТРУ. У края
+//             его подпись обрезается краем кадра, а это отдельный пункт
+//             отказа.
+//
+// Порог 46 подобран по кадрам этой игры: фон арены (#0d1f15 и его оттенки)
+// лежит ниже, любой спрайт, выстрел или свечение — выше.
+//
+// Считается ПРЯМО В СТРАНИЦЕ, по холсту через getImageData, а не разбором
+// готового PNG в узле. Первая версия декодировала снимок здесь — и одна
+// сцена занимала минуту вместо секунды: восемь сцен по пять кандидатов это
+// сорок разборов картинки в два мегапикселя чистым JS. Холст же отдаёт
+// пиксели готовыми.
+const LIVELINESS_JS = `(() => {
+  const c = document.querySelector("canvas");
+  const g = c.getContext("2d");
+  // Каждый восьмой пиксель по обеим осям: доля яркого на такой сетке
+  // отличается от точной на доли процента, а стоит в шестьдесят раз дешевле.
+  const d = g.getImageData(0, 0, c.width, c.height).data;
+  let bright = 0, seen = 0;
+  for (let i = 0; i < d.length; i += 4 * 8) {
+    if (d[i] * 0.299 + d[i+1] * 0.587 + d[i+2] * 0.114 > 46) bright++;
+    seen++;
+  }
+  return bright / seen;
+})()`;
+
+const CANDIDATES = 5;
+
+async function pickBest(page, shot) {
+  let best = null;
+  for (let i = 0; i < CANDIDATES; i++) {
+    const live = await page.evaluate(LIVELINESS_JS);
+    const stats = await page.evaluate(() => window.GAME.stats());
+    const bossOff = shot.scene !== "boss" ? 0 : await page.evaluate(() => {
+      const g = window.GAME;
+      const b = g.enemies.find(e => e.maxHp > 400 && !e.dead);
+      if (!b || !g.camera) return 1;
+      // 0 — босс ровно в центре кадра, 1 — у самого края
+      const dx = Math.abs((b.x - g.camera.x) / g.camera.w - 0.5) * 2;
+      const dy = Math.abs((b.y - g.camera.y) / g.camera.h - 0.5) * 2;
+      return Math.max(dx, dy);
+    });
+    // Живость — главное; враги добавляют немного; уехавший к краю босс
+    // штрафуется сильно, потому что его подпись режется краем кадра.
+    const score = live * 100
+                + Math.min(stats.onScreen ?? 0, 20) * 0.35
+                - bossOff * 12;
+    // Снимок делается только если кандидат лучший: сам screenshot() —
+    // самая дорогая операция здесь, и снимать все пять незачем.
+    if (!best || score > best.score) best = { buf: await page.screenshot(), stats, score, bossOff };
+    if (i < CANDIDATES - 1) {
+      // Между кандидатами мир должен ПОЖИТЬ, иначе пять снимков одного кадра
+      await page.evaluate(() => { window.GAME.config.feel.hitStopCrit = 6; });
+      await page.waitForTimeout(700);
+      await page.evaluate(() => {
+        const p = window.GAME.player; p.hp = p.maxHp = 100000;
+        window.GAME.config.feel.hitStopCrit = 90;
+      });
+      await page.waitForTimeout(150);
+    }
+  }
+  return best;
+}
+
 for (const shot of SHOTS) {
   if (only && !shot.name.includes(only)) continue;
   const page = await browser.newPage(shot.mode);
@@ -173,11 +252,13 @@ for (const shot of SHOTS) {
   }
 
   const file = join(OUT, shot.name + ".png");
-  await page.screenshot({ path: file });
-  const stats = await page.evaluate(() => window.GAME.stats());
+  const best = await pickBest(page, shot);
+  writeFileSync(file, best.buf);
+  const stats = best.stats;
   console.log(`${shot.name.padEnd(22)} ${shot.mode.viewport.width}x${shot.mode.viewport.height}` +
               `  время ${Math.floor(stats.time / 60)}:${String(Math.floor(stats.time % 60)).padStart(2, "0")}` +
               `  врагов на экране ${stats.onScreen ?? "?"}` +
+              `  живость ${(best.score).toFixed(1)}` +
               (errors.length ? `  ОШИБКИ: ${errors.join("; ")}` : ""));
   await page.close();
 }

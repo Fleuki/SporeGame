@@ -923,6 +923,10 @@ function draw(){
   battle.drawRings(renderer);     // споровые кольца финала — поверх толпы
   particles.draw(renderer);
   battle.drawEffects(renderer);   // взрывы поверх всего
+  // Имя и полоса босса — интерфейс, а не часть мира: их не должно закрывать
+  // ничем. Своё же облако спор Материнской Капли ложилось прямо на имя, и в
+  // кадре оставалось «Мат…апля» — см. Boss.drawLabel.
+  for(const e of enemies) e.drawLabel?.(renderer);
   renderer.end();
 
   // --- экранный слой: интерфейс и джойстик не ездят вместе с миром ---
