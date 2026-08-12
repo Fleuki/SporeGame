@@ -26,9 +26,23 @@ const SRC = path.join(ROOT, "docs");
 const OUT = path.join(ROOT, "build", "yandex");
 const ZIP = path.join(ROOT, "build", "gribnoy-sumrak-yandex.zip");
 
-// SDK ПОДКЛЮЧАЕТСЯ ОТСЮДА. В документации площадки встречается ещё адрес
-// `yandex.ru/games/sdk.js` — он отдаёт 404, проверено запросом. Живой — этот.
-const SDK_TAG = `<script src="https://yandex.ru/games/sdk/v2"></script>`;
+// SDK ПОДКЛЮЧАЕТСЯ ОТНОСИТЕЛЬНЫМ ПУТЁМ. Это не мелочь и не вкусовщина:
+// консоль вернула игру с отказом «не встроено или некорректно встроено SDK».
+//
+// Здесь стоял абсолютный `https://yandex.ru/games/sdk/v2`. Он ЖИВОЙ — запрос
+// отдаёт 200 и настоящий скрипт, — и выбран был потому, что документированный
+// `yandex.ru/games/sdk.js` отвечает 404 (тоже проверено запросом, отдаёт HTML
+// страницы каталога). Ошибка была в другом выводе: раз живой, значит годится.
+//
+// Не годится. Архив, залитый через Консоль, отдаётся С ДОМЕНА ПЛОЩАДКИ, и
+// документация требует для этого случая именно относительный путь. `/sdk.js`
+// снаружи 404 не потому, что его нет, а потому, что снаружи мы стучимся не в
+// тот домен: на своём хостинге площадка отдаёт его сама.
+//
+// Правило, которое из этого следует: проверять адрес запросом ИЗВНЕ можно
+// только для абсолютных ссылок. Относительный путь проверяется единственным
+// способом — заливкой.
+const SDK_TAG = `<script src="/sdk.js"></script>`;
 
 // Что в архив не едет. Документы — это переписка проекта с самим собой:
 // площадке они не нужны, а лежать в открытом доступе рядом с игрой им незачем.
@@ -73,14 +87,19 @@ if (total > LIMIT) problems.push(`распакованный размер ${(tot
 const textFiles = files.filter(f => /\.(html|js|css|webmanifest|json)$/i.test(f.rel));
 for (const f of textFiles) {
   const body = await readFile(f.full, "utf8");
-  for (const m of body.matchAll(/(?:src|href)\s*=\s*["'](\/[^"'\/][^"']*)["']/g))
+  for (const m of body.matchAll(/(?:src|href)\s*=\s*["'](\/[^"'\/][^"']*)["']/g)) {
+    // ЕДИНСТВЕННОЕ ИСКЛЮЧЕНИЕ — сам SDK площадки. Он и обязан идти от корня
+    // домена: его отдаёт хостинг площадки, а не наш архив. Все остальные
+    // ссылки от слэша ведут в никуда, потому проверка и стоит.
+    if (m[1] === "/sdk.js") continue;
     problems.push(`${f.rel}: абсолютный путь ${m[1]}`);
+  }
   for (const m of body.matchAll(/https?:\/\/[^"'\s)]+/g)) {
     const url = m[0];
     // Ссылки наружу площадка запрещает: разрешено только то, что ведёт к ней
     // самой. Схемы разметки (w3.org) и адрес самого SDK — не ссылки для
     // игрока, они никуда не ведут.
-    if (/w3\.org|yandex\.ru\/games\/sdk/.test(url)) continue;
+    if (/w3\.org/.test(url)) continue;
     problems.push(`${f.rel}: внешняя ссылка ${url}`);
   }
 }
@@ -112,7 +131,7 @@ for (const f of files) {
 // скрипта.
 const indexPath = path.join(OUT, "index.html");
 let html = await readFile(indexPath, "utf8");
-if (!html.includes("games/sdk")) {
+if (!html.includes("sdk.js")) {
   const anchor = "</head>";
   html = html.replace(anchor, `  <!-- SDK Яндекс Игр. Тега нет в docs/index.html намеренно: там игра\n       открывается со своего адреса, где этих функций нет вовсе.\n       Вписывается сборкой — tools/build_yandex.mjs. -->\n  ${SDK_TAG}\n${anchor}`);
   await writeFile(indexPath, html);
