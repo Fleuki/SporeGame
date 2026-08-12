@@ -203,7 +203,7 @@ export class SpawnSystem {
     if(this.finalSpawned) return null;
 
     // Босс идёт вне очереди и вне затишья: он и есть главное событие забега
-    const boss=this.tryBoss(enemies);
+    const boss=this.tryBoss(enemies,player);
     if(boss) return boss;
 
     if(this.time<CONFIG.spawn.graceTime) return null;
@@ -237,7 +237,10 @@ export class SpawnSystem {
     return null;
   }
 
-  tryBoss(enemies){
+  // player нужен только для прибавки по уровню. Необязательный: без него
+  // босс выходит базовым, и это правильное поведение по умолчанию — так же
+  // устроен tryFinal.
+  tryBoss(enemies,player=null){
     const S=CONFIG.spawn;
     if(this.time<(this.bossesSpawned+1)*S.bossEvery) return null;
     if(enemies.some(e=>e instanceof Boss&&!e.dead)) return null;
@@ -256,8 +259,13 @@ export class SpawnSystem {
     const p=this.camera.pointOutside(S.bossSpawnMargin);
     const boss=new Boss(p.x,p.y,type);
     // Босс четвёртой минуты и босс двадцатой — это разные бои
-    const k=1+Math.max(0,this.time-S.bossEvery)/60*S.bossHpPerMin;
-    boss.maxHp*=k; boss.hp=boss.maxHp; boss.damage*=this.scale().damage;
+    const byTime=1+Math.max(0,this.time-S.bossEvery)/60*S.bossHpPerMin;
+    // …а босс у сильного игрока и у слабого — тоже разные бои. Раньше этой
+    // строки здесь не было, и рядовой босс рос только от времени: одинаково
+    // и для добившего все ветки, и для взявшего четыре случайные карточки.
+    const lv=Math.max(0,(player?.level||1)-(S.bossLevelFrom||8));
+    const byLevel=Math.min(S.bossLevelCap||1.9,1+lv*(S.bossLevelStep||0.05));
+    boss.maxHp*=byTime*byLevel; boss.hp=boss.maxHp; boss.damage*=this.scale().damage;
     return {type:"boss",boss};
   }
 
