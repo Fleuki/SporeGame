@@ -76,7 +76,12 @@ export class InputManager {
       this.mouse.x=Math.max(0,Math.min(canvas.width,(e.clientX-rect.left)*sx));
       this.mouse.y=Math.max(0,Math.min(canvas.height,(e.clientY-rect.top)*sy));
     });
-    canvas.addEventListener("contextmenu",(e)=>e.preventDefault());
+    // Контекстное меню гасится НА ВСЁМ ОКНЕ, а не только на холсте. Поверх
+    // холста лежит HUD — шкалы, кнопки выброса и прокачки, всплывающие
+    // панели, — и правый клик или долгий тап по ним до холста не доходит.
+    // Площадка проверяет это отдельным пунктом (§ 1.6), и проверяет она
+    // «в игровой области», а не «по канвасу».
+    window.addEventListener("contextmenu",(e)=>e.preventDefault());
 
     // TOUCH. Джойстик появляется ТАМ, ГДЕ ПАЛЕЦ КОСНУЛСЯ ЭКРАНА, в любой его
     // точке. Раньше он ловил касания только на левой половине холста, и
