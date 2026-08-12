@@ -160,13 +160,31 @@ const LIVELINESS_JS = `(() => {
   return bright / seen;
 })()`;
 
-const CANDIDATES = 5;
+// Семь, а не пять: кандидатов надо столько, чтобы среди них нашёлся хотя бы
+// один БЕЗ облака спор поверх героя. На плотных секундах забега облака летят
+// почти непрерывно, и из пяти подряд подходящих могло не оказаться вовсе.
+const CANDIDATES = 7;
 
 async function pickBest(page, shot) {
   let best = null;
   for (let i = 0; i < CANDIDATES; i++) {
     const live = await page.evaluate(LIVELINESS_JS);
     const stats = await page.evaluate(() => window.GAME.stats());
+    // ИГРОКА ДОЛЖНО БЫТЬ ВИДНО. Трубачи стреляют полупрозрачными облаками
+    // спор, и на снимке они ложились прямо поверх героя: в кадре оставалось
+    // фиолетовое пятно, а самого героя было не найти. Живой игрой это ничему
+    // не мешает — облако движется, — но снимок ловит один момент.
+    // Возвращается величина ПЕРЕКРЫТИЯ: больше нуля — накрыт.
+    const covered = await page.evaluate(() => {
+      const g = window.GAME, p = g.player;
+      let worst = 0;
+      for (const s of (g.battle?.enemyShots || [])) {
+        // 1.15 — тот же множитель, с которым облако рисуется (см. EnemyShot.draw)
+        const over = (s.radius * 1.15 + p.radius) - Math.hypot(s.x - p.x, s.y - p.y);
+        if (over > worst) worst = over;
+      }
+      return worst;
+    });
     const bossOff = shot.scene !== "boss" ? 0 : await page.evaluate(() => {
       const g = window.GAME;
       const b = g.enemies.find(e => e.maxHp > 400 && !e.dead);
@@ -178,12 +196,16 @@ async function pickBest(page, shot) {
     });
     // Живость — главное; враги добавляют немного; уехавший к краю босс
     // штрафуется сильно, потому что его подпись режется краем кадра.
+    // Штраф за накрытого героя ЖЁСТКИЙ и с запасом: любой кадр, где героя
+    // видно, обязан побеждать любой, где его не видно, какой бы плотный бой
+    // на втором ни шёл. Ради этого он и сделан больше всей остальной оценки.
     const score = live * 100
                 + Math.min(stats.onScreen ?? 0, 20) * 0.35
-                - bossOff * 12;
+                - bossOff * 12
+                - (covered > 0 ? 60 : 0);
     // Снимок делается только если кандидат лучший: сам screenshot() —
     // самая дорогая операция здесь, и снимать все пять незачем.
-    if (!best || score > best.score) best = { buf: await page.screenshot(), stats, score, bossOff };
+    if (!best || score > best.score) best = { buf: await page.screenshot(), stats, score, covered };
     if (i < CANDIDATES - 1) {
       // Между кандидатами мир должен ПОЖИТЬ, иначе пять снимков одного кадра
       await page.evaluate(() => { window.GAME.config.feel.hitStopCrit = 6; });
@@ -258,7 +280,8 @@ for (const shot of SHOTS) {
   console.log(`${shot.name.padEnd(22)} ${shot.mode.viewport.width}x${shot.mode.viewport.height}` +
               `  время ${Math.floor(stats.time / 60)}:${String(Math.floor(stats.time % 60)).padStart(2, "0")}` +
               `  врагов на экране ${stats.onScreen ?? "?"}` +
-              `  живость ${(best.score).toFixed(1)}` +
+              `  оценка ${(best.score).toFixed(1)}` +
+              (best.covered > 0 ? "  ⚠ ГЕРОЙ ПОД ОБЛАКОМ" : "") +
               (errors.length ? `  ОШИБКИ: ${errors.join("; ")}` : ""));
   await page.close();
 }
