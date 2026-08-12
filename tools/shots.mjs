@@ -160,13 +160,39 @@ const LIVELINESS_JS = `(() => {
   return bright / seen;
 })()`;
 
-const CANDIDATES = 5;
+// Семь, а не пять: кандидатов надо столько, чтобы среди них нашёлся хотя бы
+// один БЕЗ облака спор поверх героя. На плотных секундах забега облака летят
+// почти непрерывно, и из пяти подряд подходящих могло не оказаться вовсе.
+const CANDIDATES = 7;
 
 async function pickBest(page, shot) {
+  // У выброса кандидатов быть не может: это ОДНО событие длиной в пятую долю
+  // секунды, и «пожить» между кандидатами означало бы дождаться, когда оно
+  // кончится. Момент здесь выбран заранее, снимаем как есть.
+  if (shot.scene === "burst") {
+    return { buf: await page.screenshot(),
+             stats: await page.evaluate(() => window.GAME.stats()),
+             score: 0, covered: 0 };
+  }
   let best = null;
   for (let i = 0; i < CANDIDATES; i++) {
     const live = await page.evaluate(LIVELINESS_JS);
     const stats = await page.evaluate(() => window.GAME.stats());
+    // ИГРОКА ДОЛЖНО БЫТЬ ВИДНО. Трубачи стреляют полупрозрачными облаками
+    // спор, и на снимке они ложились прямо поверх героя: в кадре оставалось
+    // фиолетовое пятно, а самого героя было не найти. Живой игрой это ничему
+    // не мешает — облако движется, — но снимок ловит один момент.
+    // Возвращается величина ПЕРЕКРЫТИЯ: больше нуля — накрыт.
+    const covered = await page.evaluate(() => {
+      const g = window.GAME, p = g.player;
+      let worst = 0;
+      for (const s of (g.battle?.enemyShots || [])) {
+        // 1.15 — тот же множитель, с которым облако рисуется (см. EnemyShot.draw)
+        const over = (s.radius * 1.15 + p.radius) - Math.hypot(s.x - p.x, s.y - p.y);
+        if (over > worst) worst = over;
+      }
+      return worst;
+    });
     const bossOff = shot.scene !== "boss" ? 0 : await page.evaluate(() => {
       const g = window.GAME;
       const b = g.enemies.find(e => e.maxHp > 400 && !e.dead);
@@ -178,12 +204,16 @@ async function pickBest(page, shot) {
     });
     // Живость — главное; враги добавляют немного; уехавший к краю босс
     // штрафуется сильно, потому что его подпись режется краем кадра.
+    // Штраф за накрытого героя ЖЁСТКИЙ и с запасом: любой кадр, где героя
+    // видно, обязан побеждать любой, где его не видно, какой бы плотный бой
+    // на втором ни шёл. Ради этого он и сделан больше всей остальной оценки.
     const score = live * 100
                 + Math.min(stats.onScreen ?? 0, 20) * 0.35
-                - bossOff * 12;
+                - bossOff * 12
+                - (covered > 0 ? 60 : 0);
     // Снимок делается только если кандидат лучший: сам screenshot() —
     // самая дорогая операция здесь, и снимать все пять незачем.
-    if (!best || score > best.score) best = { buf: await page.screenshot(), stats, score, bossOff };
+    if (!best || score > best.score) best = { buf: await page.screenshot(), stats, score, covered };
     if (i < CANDIDATES - 1) {
       // Между кандидатами мир должен ПОЖИТЬ, иначе пять снимков одного кадра
       await page.evaluate(() => { window.GAME.config.feel.hitStopCrit = 6; });
@@ -238,13 +268,31 @@ for (const shot of SHOTS) {
   if (shot.scene === "burst") {
     // Выброс спор живёт доли секунды. Останавливаем мир НА УДАРЕ: кадр
     // рисуется как в бою, а не как на паузе.
+    //
+    // Но ловить надо НЕ первый кадр эффекта. Выброс рисуется кругом в 330
+    // единиц с центром на игроке: в первом кадре круг сплошной и герой в нём
+    // тонет — ровно та жалоба, из-за которой переснимали. К третьему кадру
+    // круг расходится и редеет, и герой виден внутри расширяющегося кольца:
+    // и способность показана, и персонаж на месте.
+    // Ловится это НЕ выжиданием миллисекунд, а РАСТЯГИВАНИЕМ эффекта.
+    // Родной лист — 4 кадра при speed 3, то есть 50 мс на кадр и 200 мс на
+    // всё. Снимок делается дольше, чем длится кадр, и попытка «подождать 150
+    // мс и щёлкнуть» промахнулась: эффект успевал кончиться, и в снимке
+    // оставался обычный бой без выброса.
+    // speed 12 растягивает кадр до 200 мс, и середина эффекта живёт целую
+    // секунду — промахнуться уже нечем. Рисунок при этом ТОТ ЖЕ: меняется
+    // только скорость перелистывания, то есть снимок честен.
     await page.evaluate(() => {
       const g = window.GAME;
       g.player.sporeLevel = 95;
-      g.config.feel.hitStopCrit = 90;
+      g.config.sporeSystem.burst.fx.speed = 12;
       g.burst();
     });
-    await page.waitForTimeout(120);
+    // При speed 12 кадры листа идут по 200 мс: 0 — сплошной круг (герой в нём
+    // тонет), 1 — кольцо разошлось и ещё яркое, 2 — уже бледное. Нужен ровно
+    // первый, поэтому 300 мс — его середина. Проверено прогоном: на 480 мс
+    // эффект был в кадре 2 и на снимке почти не читался.
+    await page.waitForTimeout(300);
   }
   if (shot.scene === "fight") {
     await page.evaluate(() => { window.GAME.config.feel.hitStopCrit = 90; });
@@ -258,7 +306,8 @@ for (const shot of SHOTS) {
   console.log(`${shot.name.padEnd(22)} ${shot.mode.viewport.width}x${shot.mode.viewport.height}` +
               `  время ${Math.floor(stats.time / 60)}:${String(Math.floor(stats.time % 60)).padStart(2, "0")}` +
               `  врагов на экране ${stats.onScreen ?? "?"}` +
-              `  живость ${(best.score).toFixed(1)}` +
+              `  оценка ${(best.score).toFixed(1)}` +
+              (best.covered > 0 ? "  ⚠ ГЕРОЙ ПОД ОБЛАКОМ" : "") +
               (errors.length ? `  ОШИБКИ: ${errors.join("; ")}` : ""));
   await page.close();
 }
