@@ -186,11 +186,22 @@ async function pickBest(page, shot) {
     const covered = await page.evaluate(() => {
       const g = window.GAME, p = g.player;
       let worst = 0;
-      for (const s of (g.battle?.enemyShots || [])) {
-        // 1.15 — тот же множитель, с которым облако рисуется (см. EnemyShot.draw)
-        const over = (s.radius * 1.15 + p.radius) - Math.hypot(s.x - p.x, s.y - p.y);
+      const hit = (x, y, r) => {
+        const over = (r + p.radius) - Math.hypot(x - p.x, y - p.y);
         if (over > worst) worst = over;
+      };
+      // Облака трубачей: 1.15 — тот же множитель, с которым облако рисуется
+      for (const s of (g.battle?.enemyShots || [])) hit(s.x, s.y, s.radius * 1.15);
+      // ВСЁ ОСТАЛЬНОЕ, ЧТО РИСУЕТСЯ ПОВЕРХ. Первая версия смотрела только
+      // облака — и портретные кадры всё равно выходили с героем внутри
+      // фиолетового пятна: его закрывали взрывы, выбросы и растворяющиеся
+      // трупы, то есть battle.effects, и живые грибницы, то есть fields.
+      // Размер эффекта живёт в его def.display, у поля — в radius.
+      for (const e of (g.battle?.effects || [])) {
+        const r = (e.def?.display || 0) / 2;
+        if (r > 8) hit(e.x, e.y, r);
       }
+      for (const f of (g.battle?.fields || [])) hit(f.x, f.y, f.radius || 0);
       return worst;
     });
     const bossOff = shot.scene !== "boss" ? 0 : await page.evaluate(() => {
@@ -254,10 +265,23 @@ for (const shot of SHOTS) {
   if (shot.scene === "upgrade") {
     // Меню открывает игрок сам, поэтому копим уровень и жмём кнопку — ровно
     // так же, как это делает человек.
+    //
+    // ПОРЯДОК ЗДЕСЬ НЕ СЛУЧАЙНЫЙ, и на нём этот кадр уже срывался: снимок
+    // выходил обычным боем без меню, а понять это можно было только глазами.
+    // Присвоение `xp` уровня НЕ поднимает: он растёт только внутри addXp.
+    // Кнопку прокачки показывает игровой цикл кадром позже, и клик по ней
+    // до этого молча не срабатывает — Playwright не жмёт скрытое.
+    // Поэтому: поднять xp, дать циклу вздохнуть, позвать addXp, снова
+    // подождать, и только теперь жать.
     await page.evaluate(() => { const p = window.GAME.player; p.xp = p.xpToNext + 1; });
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(900);
+    await page.evaluate(() => window.GAME.player.addXp(window.GAME.player.xpToNext + 5));
+    await page.waitForTimeout(900);
     await page.click("#upgradeBtn").catch(() => {});
-    await page.waitForTimeout(700);
+    await page.waitForTimeout(800);
+    const open = await page.evaluate(() =>
+      document.getElementById("upgradeMenu").getBoundingClientRect().height > 0);
+    if (!open) console.log("  ⚠ меню прокачки не открылось — кадр снят без него");
   }
   if (shot.scene === "shop") {
     await page.evaluate(() => {
