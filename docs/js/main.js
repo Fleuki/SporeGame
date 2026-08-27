@@ -2,8 +2,9 @@ import { CONFIG } from "./config.js";
 import { Loop } from "./core/loop.js";
 import { Camera } from "./core/camera.js";
 import { AssetLoader } from "./engine/assetLoader.js";
-import { AudioManager } from "./engine/audio.js";
+import { SoundManager } from "./engine/audio.js";
 import { InputManager } from "./engine/input.js";
+import { lockScroll } from "./engine/noScroll.js";
 import { Renderer } from "./engine/renderer.js";
 import { Player } from "./entities/player.js";
 // Только чтобы отличить босса от рядового врага при выборе момента для лавки
@@ -21,6 +22,11 @@ import { MetaSystem } from "./systems/metaSystem.js";
 import { SettingsSystem } from "./systems/settingsSystem.js";
 import { Store } from "./engine/store.js";
 import { YandexPlatform } from "./platform/yandex.js";
+
+// ЗАПРЕТ БРАУЗЕРНОЙ ПРОКРУТКИ (п. 1.10.2) — ПЕРВОЙ СТРОКОЙ.
+// Раньше всего остального: обработчики должны стоять до того, как игрок
+// успеет что-нибудь потянуть, а ассеты грузятся секунды.
+lockScroll();
 
 const canvas=document.getElementById("gameCanvas");
 
@@ -68,7 +74,7 @@ function fitCanvas(){
 
 const fit=fitCanvas();
 const loader=new AssetLoader();
-const audio=new AudioManager(loader);
+const audio=new SoundManager(loader);
 const input=new InputManager(canvas);
 const camera=new Camera(fit.w,fit.h,fit.zoom);
 input.scaleTo(fit.w,fit.h);
@@ -163,7 +169,7 @@ document.addEventListener("visibilitychange",()=>{
   if(document.hidden){
     togglePause(true);
     // СВЁРНУТАЯ ИГРА НЕ ЗВУЧИТ. Это требование площадки, и оно же простая
-    // вежливость: кадры на свёрнутой вкладке не идут, а <audio> и синтез
+    // вежливость: кадры на свёрнутой вкладке не идут, а музыка и синтез
     // спокойно играют дальше — из свёрнутой вкладки в наушники.
     audio.suspend(true);
     platform.gameplayStop();
@@ -177,7 +183,13 @@ window.addEventListener("blur",()=>togglePause(true));
 
 // Ушли с прилавка — мир снова идёт. Отдельным колбэком, потому что закрыть
 // лавку может и кнопка «В БОЙ», и опустевший ассортимент.
-shop.onClose=()=>{ paused=false; syncHud(); };
+shop.onClose=()=>{
+  paused=false;
+  // Ушли с прилавка — геймплей снова идёт. Но только если забег вправду идёт:
+  // лавка закрывается и на экране итогов (shop.reset в endGame).
+  if(started&&!gameOver) platform.gameplayStart();
+  syncHud();
+};
 
 // ВЫБРОС СПОР — единственное активное действие игрока. Проверки состояния
 // стоят здесь, а не в BattleSystem: на паузе, в меню прокачки и в кадрах
@@ -194,20 +206,13 @@ function tryBurst(){
 }
 
 // Звук, отвалившийся уже после запуска, обязан вернуть игру к синтезу:
-// загрузчик отдаёт элемент сразу и об ошибке узнаёт позже (см. loadSound).
+// загрузчик не держит игру и об ошибке узнаёт позже (см. loadSound).
 loader.onSoundError=(key)=>audio.soundLost(key);
 
-(async()=>{
-  await loader.loadAll(CONFIG.assets);
-  // ИГРА ГОТОВА — площадка снимает свой экран загрузки. Раньше этого вызова
-  // нет ничего осмысленного: картинок нет, стартовый экран стоял бы пустым.
-  platform.ready();
-})();
-
-// SDK площадки поднимаем ОТДЕЛЬНО от ассетов и не ждём его нигде: ответит —
-// появятся реклама, отсчёт геймплея и своё хранилище; не ответит (свой адрес,
-// блокировщик, оборванная сеть) — игра идёт ровно так же.
-platform.boot();
+// Звук, отвалившийся или догрузившийся уже после запуска, обязан
+// переключить музыку: загрузчик приносит файл в фоне и сообщает об этом
+// колбэком (см. AssetLoader.requestSound).
+loader.onSoundReady=(key)=>audio.soundReady(key);
 
 // ХРАНИЛИЩЕ ПЛОЩАДКИ ПРИШЛО ПОЗЖЕ ПЕРВОГО ЧТЕНИЯ. Рекорд, банк и громкости
 // читаются на первом кадре — до SDK, — и на iPhone внутри чужого iframe это
@@ -257,6 +262,10 @@ let shopDue=false, nextShopAt=CONFIG.shop.every;
 // ним стоит неподвижно и работает фоном. До нажатия «Играть» симуляция не
 // идёт вообще — иначе игрок к моменту старта уже был бы обстрелян.
 let started=false;
+// ВВОД ЗАБЛОКИРОВАН ДО `LoadingAPI.ready()` (п. 1.19). Флаг сторожит кнопки
+// разметки, а клавиши и палец по холсту — `input.enabled` (см. engine/input.js).
+// Снимаются оба разом и ровно в одном месте: в boot(), строкой после ready().
+let inputEnabled=false;
 let runTime=0;   // секунды с начала забега, идут только пока игра не на паузе
 // Меню прокачки открывается не мгновенно: сначала должно дойти, что уровень
 // вообще взят. При паузе кадры не идут, поэтому иначе искры и надпись никто
@@ -352,6 +361,8 @@ window.addEventListener("upgradeChosen",(e)=>{
   }
   upgradeSystem.hideMenu();
   waitingForUpgrade=false; paused=false;
+  // Карточка взята, мир пошёл — геймплей снова идёт (см. openUpgradeMenu)
+  platform.gameplayStart();
   syncHud();
 });
 
@@ -480,6 +491,9 @@ function update(dt){
 function maybeOpenShop(){
   if(enemies.some(e=>!e.dead&&e instanceof Boss)) return false;
   shopDue=false; paused=true;
+  // Прилавок останавливает мир — для площадки это такая же пауза, как меню
+  // прокачки и Escape (п. 1.19.2)
+  platform.gameplayStop();
   shop.open(player);
   return true;
 }
@@ -639,6 +653,11 @@ function openUpgradeMenu(){
     return;
   }
   waitingForUpgrade=true; paused=true;
+  // МЕНЮ ПРОКАЧКИ — ЭТО ПАУЗА, и площадка обязана знать о ней так же, как об
+  // Escape: мир стоит, врагов нет, стрельбы нет. По этим вызовам она решает,
+  // можно ли показать рекламу, — а реклама поверх идущего боя запрещена
+  // (п. 1.19.2). Повторный вызов ничего не стоит: адаптер их отсеивает.
+  platform.gameplayStop();
   // Панель звука с паузы здесь мешала бы: два окна поверх одного мира
   showSettings(false);
   upgradeSystem.showMenu(upgradeSystem.generateCards(player),player);
@@ -1070,6 +1089,9 @@ if(new URLSearchParams(location.search).has("debug")){
 // чтобы за стартовым экраном стояла игра, а не чёрный прямоугольник. Но HUD
 // до нажатия «Играть» прячем — показывать шкалы поверх названия незачем.
 function startRun(){
+  // Кнопка «ИГРАТЬ» физически закрыта экраном загрузки, но проверка стоит и
+  // здесь: забег не должен начаться раньше, чем площадка услышала «готова».
+  if(!inputEnabled) return;
   document.getElementById("startScreen").classList.add("hidden");
   showLab(false);
   // Панель звука могла остаться открытой со стартового экрана: в бою она
@@ -1246,8 +1268,6 @@ function showMeta(){
     list.appendChild(div);
   }
 }
-showBest(); showMeta(); showDiff();
-
 document.getElementById("playBtn").onclick=startRun;
 // ПОЛЗУНКИ ГРОМКОСТИ. Пара «ползунок — цифра» на каждую громкость; сам список
 // собран здесь, чтобы syncSettings и обработчик ходили по одному и тому же.
@@ -1304,6 +1324,103 @@ document.getElementById("menuBtn").onclick=()=>{
 };
 
 const loop=new Loop(update,draw,CONFIG.maxFps);
-init();
-loop.start();
-console.log("Грибной Сумрак запущен! WASD/джойстик — движение, мышь/авто-прицел — стрельба, M — звук, R — рестарт");
+
+// === ЗАПУСК ИГРЫ =========================================================
+//
+// ПОРЯДОК ЗДЕСЬ — ЭТО ТРЕБОВАНИЕ ПЛОЩАДКИ, А НЕ ВКУС. Игра вернулась с
+// модерации с двумя замечаниями об одном и том же месте:
+//   «GameReady API работает некорректно... вызов осуществляется после того,
+//    как игра становится доступной для взаимодействия» (п. 1.19);
+//   «не реализовано автоматическое определение языка через SDK... вызов
+//    осуществляется после того, как игра становится доступной» (п. 2.14).
+//
+// Оба про одно: игра запускалась ВПЕРЁД площадки. Ассеты грузились сами по
+// себе, `platform.boot()` уходил вдогонку и никого не ждал, стартовый экран с
+// живой кнопкой «ИГРАТЬ» стоял с первой секунды — то есть игрок мог начать
+// забег раньше, чем SDK вообще ответил, и `ready()` вместе с языком приходили
+// в игру, в которую уже играют.
+//
+// Теперь порядок строгий и нарушить его нечем:
+//   1. SDK           — ждём ответа (со сторожем, см. ниже);
+//   2. ЯЗЫК          — до отрисовки любого интерфейса;
+//   3. АССЕТЫ        — картинки, шрифт, мир под стартовым экраном;
+//   4. ready()       — ровно один раз, игра готова;
+//   5. ВВОД И МЕНЮ   — только теперь, ни секундой раньше.
+//
+// До пятого шага поверх всего стоит #bootScreen, а InputManager.enabled=false:
+// нажать в игре нельзя ничего ни мышью, ни пальцем, ни с клавиатуры.
+
+// СТОРОЖ НА SDK. Ждать площадку — правильно, ждать её вечно — нельзя: со
+// своего адреса (GitHub Pages, страница с диска) SDK нет вовсе, а на самой
+// площадке он может не ответить из-за сети или блокировщика. Игра обязана
+// открыться в любом случае — просто без рекламы и хранилища площадки.
+const SDK_TIMEOUT=5000;
+const waitMs=(ms)=>new Promise(r=>setTimeout(r,ms));
+
+// ЯЗЫК ИНТЕРФЕЙСА (п. 2.14). Берётся у площадки и применяется ДО того, как
+// игрок увидит хоть один экран.
+//
+// Игра русскоязычная целиком и другого языка не знает — поэтому здесь нет
+// таблицы переводов, и это не недоделка, а то же решение, что и в черновике
+// («Игра переведена на: Русский»): заявлять язык, которого в игре нет,
+// запрещено отдельным пунктом критериев. Что делает эта функция: спрашивает
+// язык у SDK, ставит его документу и запоминает. Любой язык, кроме русского,
+// сводится к русскому — это честный ответ «мы говорим по-русски», а не
+// молчаливый хардкод.
+const LANGS=["ru"];
+function applyLanguage(lang){
+  const code=LANGS.includes(lang)?lang:"ru";
+  document.documentElement.lang=code;
+  // Отладочный доступ создаётся только по «?debug» — проверить, что язык
+  // вправду пришёл от площадки, иначе нечем.
+  if(window.GAME) window.GAME.lang=code;
+  return code;
+}
+
+async function boot(){
+  // 1. SDK. Ответит — будут реклама, отсчёт геймплея и хранилище площадки;
+  //    не ответит за SDK_TIMEOUT — игра пойдёт без них.
+  await Promise.race([platform.boot().catch(()=>false),waitMs(SDK_TIMEOUT)]);
+
+  // 2. ЯЗЫК — до первого показа интерфейса (п. 2.14).
+  applyLanguage(platform.lang);
+
+  // 3. АССЕТЫ. Музыка сюда не входит намеренно: загрузчик отдаёт её
+  //    обещанием сразу и тянет файл в фоне (см. AssetLoader.loadSound) —
+  //    четыре мегабайта трека не должны держать экран загрузки площадки.
+  await loader.loadAll(CONFIG.assets);
+
+  // Мир под стартовым экраном и цифры на нём. Всё это рисуется ДО ready():
+  // площадка снимает свой экран загрузки по нему, и снимать его положено с
+  // готового кадра, а не с чёрного прямоугольника.
+  init();
+  showBest(); showMeta(); showDiff();
+  loop.start();
+  draw();
+
+  // 4. ИГРА ГОТОВА. Ровно один раз и до того, как игрок сможет что-то нажать.
+  platform.ready();
+
+  // 5. ТОЛЬКО ТЕПЕРЬ — интерфейс и ввод.
+  document.getElementById("bootScreen").classList.add("hidden");
+  document.getElementById("startScreen").classList.remove("hidden");
+  input.enabled=true;
+  inputEnabled=true;
+
+  console.log("Грибной Сумрак запущен! WASD/джойстик — движение, мышь/авто-прицел — стрельба, M — звук, R — рестарт");
+}
+
+// Падать здесь нельзя ничему: игрок, оставшийся на экране загрузки, не увидит
+// ни ошибки, ни игры. Поэтому любая беда при запуске всё равно кончается
+// открытой игрой — пусть без части ассетов.
+boot().catch((e)=>{
+  console.error("Сбой запуска:",e);
+  try{
+    init();
+    loop.start();
+    platform.ready();
+    document.getElementById("bootScreen").classList.add("hidden");
+    document.getElementById("startScreen").classList.remove("hidden");
+    input.enabled=true; inputEnabled=true;
+  }catch(e2){ console.error(e2); }
+});

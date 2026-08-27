@@ -35,8 +35,23 @@ function actionOf(e){
   return CODE_ACTIONS[e.code] || KEY_ACTIONS[(e.key||"").toLowerCase()] || null;
 }
 
+// КЛАВИША, АДРЕСОВАННАЯ ПОЛЮ ВВОДА, ИГРЕ НЕ ПРИНАДЛЕЖИТ. Ползунки громкости
+// двигаются стрелками — а стрелки здесь означают «ход», и игра забирала их
+// себе вместе с preventDefault: ползунок под фокусом не двигался ни на шаг.
+function isField(el){
+  return el instanceof Element && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName);
+}
+
 export class InputManager {
   constructor(canvas){
+    // ВВОД ВЫКЛЮЧЕН, ПОКА ИГРА НЕ СКАЗАЛА ПЛОЩАДКЕ «Я ГОТОВА».
+    //
+    // Замечание с модерации: «GameReady API работает некорректно, вызов
+    // осуществляется после того, как игра становится доступной для
+    // взаимодействия» (п. 1.19). Прятать интерфейс мало: клавиши и палец по
+    // холсту работали бы и за экраном загрузки. Включает ввод boot() в
+    // main.js — строкой после `LoadingAPI.ready()`, и только там.
+    this.enabled=false;
     this.keys={w:false,a:false,s:false,d:false};
     this.mouse={x:0,y:0};
     this.canvas=canvas;
@@ -46,8 +61,12 @@ export class InputManager {
 
     // Клавиатура
     document.addEventListener("keydown",(e)=>{
+      if(isField(e.target)) return;
       const a=actionOf(e);
       if(!a) return;
+      // До готовности игры клавиша не делает ничего, но и странице не
+      // достаётся: прокрутка стрелками запрещена в любом состоянии (п. 1.10.2)
+      if(!this.enabled){ e.preventDefault(); return; }
       // Ход. preventDefault здесь не вежливость: стрелки и пробел иначе
       // прокручивают страницу, а игра на портале живёт в чужом iframe.
       if(MOVES.has(a)){ this.keys[a]=true; e.preventDefault(); return; }
@@ -67,10 +86,12 @@ export class InputManager {
       if(a==="upgrade"){ e.preventDefault(); if(!e.repeat) this.onUpgradePress?.(); }
     });
     document.addEventListener("keyup",(e)=>{
+      if(!this.enabled||isField(e.target)) return;
       const a=actionOf(e);
       if(a&&MOVES.has(a)){ this.keys[a]=false; e.preventDefault(); }
     });
     canvas.addEventListener("mousemove",(e)=>{
+      if(!this.enabled) return;
       const rect=canvas.getBoundingClientRect();
       const sx=canvas.width/rect.width, sy=canvas.height/rect.height;
       this.mouse.x=Math.max(0,Math.min(canvas.width,(e.clientX-rect.left)*sx));
@@ -93,7 +114,10 @@ export class InputManager {
       return { x:(t.clientX-rect.left)*sx, y:(t.clientY-rect.top)*sy };
     };
     canvas.addEventListener("touchstart",(e)=>{
+      // preventDefault ДО проверки готовности: палец по холсту не должен
+      // тянуть страницу даже на экране загрузки.
       e.preventDefault();
+      if(!this.enabled) return;
       if(this.touchId!==null) return;
       const t=e.changedTouches[0];
       if(!t) return;
@@ -105,6 +129,7 @@ export class InputManager {
     },{passive:false});
     canvas.addEventListener("touchmove",(e)=>{
       e.preventDefault();
+      if(!this.enabled) return;
       for(const t of e.changedTouches){
         if(t.identifier!==this.touchId) continue;
         const p=at(t);
