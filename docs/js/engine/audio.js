@@ -5,10 +5,14 @@
 // ощущения от боя как раз в звуке: щелчок выстрела, хруст попадания, всплеск
 // подобранного опыта.
 //
-// Файлов у нас нет, поэтому эффекты синтезируются через WebAudio прямо в
-// браузере: ничего не надо грузить и ничего не весит. Загрузка файлов при этом
-// никуда не делась — если в CONFIG.assets.sounds появятся треки, playMusic и
-// playSfx подхватят их.
+// Эффекты синтезируются через Web Audio прямо в браузере: ничего не надо
+// грузить и ничего не весит. Музыка — записанные треки, но играет она ТАМ ЖЕ,
+// в том же звуковом контексте, а не медиа-элементом.
+//
+// ВЕСЬ ЗВУК ИГРЫ ИДЁТ ЧЕРЕЗ WEB AUDIO API, И МЕДИА-ЭЛЕМЕНТОВ НЕТ НИ ОДНОГО.
+// Это не архитектурный вкус, а требование площадки (пп. 1.6.1.6 и 1.6.2.5):
+// любой audio- или video-тег поднимает системный плеер на десктопе и карточку в
+// шторке уведомлений на телефоне. Подробности — у playFile ниже.
 
 // Рецепт эффекта:
 //   type   — форма волны осциллятора (или noise: true — белый шум)
@@ -138,6 +142,20 @@ const NO_FALLBACK=new Set(["death","victory"]);
 // это конец, а музыка, идущая по кругу, превращает его в ожидание.
 const MUSIC_LOOP={ death:false, victory:false };
 
+// ЧАСТОТА, В КОТОРОЙ МУЗЫКА ЛЕЖИТ В ПАМЯТИ, ЗАНИЖЕНА НАРОЧНО.
+//
+// Файл на диске весит мегабайты, а РАСКОДИРОВАННЫЙ — десятки: восьмиминутная
+// тема забега в 44.1 кГц занимает 85 МБ оперативной памяти против 3.7 МБ на
+// диске. Пока музыка играла медиа-элементом, этого счёта не было вовсе —
+// браузер тянул файл потоком и в память клал секунды. Web Audio так не умеет:
+// AudioBufferSourceNode играет только целиком раскодированный буфер.
+//
+// Треки записаны в 64 кбит/с моно — кодировщик на таком потоке режет всё выше
+// 12-15 кГц, то есть в исходнике попросту нет ничего, что не поместилось бы в
+// 32 кГц (16 кГц по Найквисту). Декодирование в эту частоту не слышно ничем и
+// снимает четверть памяти; забег с боссом держит около 100 МБ вместо 137.
+const MUSIC_RATE=32000;
+
 // Частота ступени гаммы. Ступени идут дальше семи: 7 — это тоника октавой
 // выше, а не ошибка индекса.
 function noteHz(root,step){
@@ -145,17 +163,30 @@ function noteHz(root,step){
   return root*Math.pow(2,(SCALE[((step%SCALE.length)+SCALE.length)%SCALE.length]+oct*12)/12);
 }
 
-export class AudioManager {
+export class SoundManager {
   constructor(loader){
     // Музыка громче прежнего (0.4), эффекты тише (0.6): при трёх стволах
     // эффекты забивали трек целиком, и «музыки не слышно» было правдой
     this.loader=loader; this.musicVolume=0.52; this.sfxVolume=0.5;
-    this.currentMusic=null; this.muted=false;
+    // ДЕКОДИРУЕТ МУЗЫКУ ЗВУК, А НЕ ЗАГРУЗЧИК: звуковой контекст живёт здесь.
+    // Загрузчик приносит байты и зовёт эту функцию — см. AssetLoader.
+    if(loader) loader.decodeSound=(bytes)=>this.decode(bytes);
+    // ЧТО ИГРАЕТ ФАЙЛОМ. Раньше здесь лежал медиа-элемент — тот самый, из-за
+    // которого игра дважды вернулась с модерации (системный плеер на десктопе,
+    // карточка в шторке уведомлений на телефоне). Теперь это обычный узел
+    // звукового контекста, и никакого медиа-элемента в игре нет вовсе.
+    this.fileKey=null; this.fileSrc=null; this.fileLoop=true; this.fileStart=0;
+    // ГДЕ ОСТАНОВИЛСЯ КАЖДЫЙ ТРЕК. Узел одноразовый: остановленный источник
+    // не запустить снова, на его место создаётся новый. Значит место в треке
+    // приходится помнить самим — на этом держится правило «переключение трека
+    // не перематывает его в начало» (см. stopFile).
+    this.at=new Map();
+    this.muted=false;
     // Временная остановка по внешней причине — см. suspend(): сворачивание
     // вкладки, реклама, пауза. От muted отличается тем, что это НЕ решение
     // игрока и снимается само.
     this.suspended=false;
-    this.ctx=null; this.master=null; this.noise=null;
+    this.ctx=null; this.master=null; this.noise=null; this.fileGain=null;
     this.lastAt=new Map();
     // МУЗЫКА. wanted — какой трек должен играть; играть он начнёт, только
     // когда появится звуковой контекст, а до первого нажатия его нет вовсе.
@@ -205,15 +236,10 @@ export class AudioManager {
     if(this.ctx.state==="suspended") this.ctx.resume().catch(()=>{});
     // Просьба сыграть трек могла прийти раньше, чем появился контекст —
     // например, из того же нажатия «Играть», которое его и разбудило
-    if(this.wanted&&!this.musicTimer&&!this.currentMusic) this.applyMusic();
-    // Трек мог начаться до того, как появился контекст (тогда он играет мимо
-    // него и на телефоне попадает под переключатель «без звука»), а мог быть
-    // отклонён автоплеем. Оба случая чинятся здесь, потому что unlock зовётся
-    // из жеста пользователя — единственного места, где браузер это разрешает.
-    if(this.currentMusic){
-      this.routeThroughContext(this.currentMusic);
-      if(this.currentMusic.paused) this.tryPlay(this.currentMusic);
-    }
+    // ...в том числе трека ФАЙЛОМ: до этой секунды контекста не существовало,
+    // а играть буфер негде и нечем. Сейчас он есть — и applyMusic сам решит,
+    // что играть, файл или синтез.
+    if(this.wanted&&!this.musicTimer&&!this.fileSrc) this.applyMusic();
     return this.ctx;
   }
 
@@ -240,18 +266,25 @@ export class AudioManager {
     const name=this.wanted;
     // Тишина — это конец забега или меню, и следующий забег обязан начать
     // тему сначала: только здесь трек перематывается в ноль.
-    if(!name){ this.stopMusicLoop(); this.stopMusic(true); this.onSynth=false; return; }
+    if(!name){ this.stopMusicLoop(); this.stopFile(true); this.onSynth=false; return; }
     // Откат идёт по ЗАГРУЖЕННОСТИ файла, а не по наличию имени в таблице.
     // MUSIC_FILES.boss существует всегда, файла под ним может не быть — и
     // проверка «есть ли имя» пропускала боссовый трек в синтез.
     let key=MUSIC_FILES[name];
+    // Трек мог быть отложен и не качаться вовсе (CONFIG.assets.deferSounds) —
+    // тогда просьба сыграть его и есть тот момент, когда его пора принести.
+    // Повторные просьбы загрузчик отбрасывает сам.
+    if(key) this.loader?.requestSound?.(key);
     if(!key||!this.loader?.getSound(key)){
       // Своего файла нет: у обычного трека подменяем темой забега, у трека
       // смерти — молчим (см. NO_FALLBACK)
-      if(NO_FALLBACK.has(name)){ this.stopMusicLoop(); this.stopMusic(true); this.onSynth=false; return; }
+      if(NO_FALLBACK.has(name)){ this.stopMusicLoop(); this.stopFile(true); this.onSynth=false; return; }
       key=MUSIC_FILES.run;
+      this.loader?.requestSound?.(key);
     }
-    if(this.loader?.getSound(key)){
+    // Файл есть, но играть его пока негде: контекст создаётся только из жеста
+    // игрока. Тогда уходим в синтез и ждём unlock — он позовёт сюда снова.
+    if(this.loader?.getSound(key)&&this.ctx){
       this.stopMusicLoop();
       this.onSynth=false;
       // track ставится и здесь, а не только в синтезе. Это отладочный
@@ -260,11 +293,11 @@ export class AudioManager {
       // Проверить музыку иначе нельзя — звукового устройства у headless-
       // браузера нет, — и указатель, который врёт, хуже отсутствующего.
       this.track=name;
-      this.playMusic(key,MUSIC_LOOP[name]!==false);
+      this.playFile(key,MUSIC_LOOP[name]!==false);
       return;
     }
     // Файла нет или ещё не пришёл — играет синтез, и мы помним, что ждём
-    this.stopMusic();
+    this.stopFile();
     this.onSynth=true;
     if(!this.ctx||this.ctx.state!=="running") return;   // сыграем после unlock
     this.startMusicLoop();
@@ -392,71 +425,94 @@ export class AudioManager {
     src.onended=()=>{ try{ src.disconnect(); env.disconnect(); }catch(e){} };
   }
 
-  // --- файлы (на случай, если появятся треки) --------------------------
-  // ФАЙЛ ИГРАЕТ ЧЕРЕЗ WEB AUDIO, А НЕ САМ ПО СЕБЕ.
+  // --- музыкальные файлы --------------------------------------------
+  // ЗДЕСЬ БЫЛ HTMLAudioElement, И ИМЕННО ОН ВЕРНУЛ ИГРУ С МОДЕРАЦИИ ДВАЖДЫ.
   //
-  // На iPhone боковой переключатель «без звука» глушит <audio> целиком, а
-  // звук из AudioContext через него проходит. Игра на телефоне из-за этого
-  // выглядела так: эффекты (они синтезируются) слышно, музыки (она файл) нет
-  // вовсе, и при этом ничего не сломано — ни ошибки, ни предупреждения.
-  // Пропустив элемент через контекст, мы кладём музыку в тот же тракт, что и
-  // эффекты: одна дорога — одна судьба.
+  // Замечания дословно: «в десктопной версии игры отображается системный
+  // плеер» (п. 1.6.2.5) и «на мобильных устройствах плеер игры отображается в
+  // панели уведомлений» (п. 1.6.1.6). Причина у обоих одна и лечится не
+  // настройкой, а удалением: любой медиа-элемент — audio-тег, video-тег, конструктор
+  // Audio — регистрируется у операционной системы как проигрыватель. Ни
+  // `controls=false`, ни `playsInline`, ни `navigator.mediaSession` этого не
+  // отменяют: карточка в шторке появляется от самого факта воспроизведения.
   //
-  // Источник у элемента создаётся РОВНО ОДИН РАЗ (второй вызов бросает
-  // исключение), поэтому он запоминается на самом элементе.
-  routeThroughContext(el){
-    const ctx=this.ctx;
-    if(!ctx||el._routed) return;
-    try{
-      const src=ctx.createMediaElementSource(el);
-      if(!this.fileGain){
-        this.fileGain=ctx.createGain();
-        this.fileGain.gain.value=1;
-        this.fileGain.connect(this.master);   // «M» гасит и музыку тоже
-      }
-      src.connect(this.fileGain);
-      el._routed=true;
-    }catch(e){ /* не вышло — элемент играет сам, как раньше */ }
+  // Поэтому медиа-элементов в игре нет ВООБЩЕ НИ ОДНОГО, а музыка играет так
+  // же, как эффекты, — узлом звукового контекста. Заодно само собой ушло
+  // всё, что раньше приходилось чинить руками:
+  //   — маршрут через контекст (routeThroughContext) — теперь он единственный;
+  //   — переключатель «без звука» на iPhone, глушивший медиа-элемент мимо контекста;
+  //   — отказ автоплея с повтором по ближайшему касанию (tryPlay/armRetry):
+  //     буферу разрешение не нужно, его требует только сам контекст, и его
+  //     спрашивает unlock().
+  //
+  // Цена одна и она честная: буфер лежит в памяти целиком (см. MUSIC_RATE).
+
+  // ДЕКОДИРОВАНИЕ. Отдельный ОФФЛАЙНОВЫЙ контекст, а не игровой, по двум
+  // причинам: он существует до первого жеста игрока (то есть музыку можно
+  // готовить, пока человек читает стартовый экран), и он задаёт частоту, в
+  // которой буфер ляжет в память.
+  decodeCtx(){
+    if(this._dec!==undefined) return this._dec;
+    this._dec=null;
+    const OAC=window.OfflineAudioContext||window.webkitOfflineAudioContext;
+    if(OAC){ try{ this._dec=new OAC(1,1,MUSIC_RATE); }catch{ this._dec=null; } }
+    return this._dec;
   }
 
-  playMusic(key,loop=true){
-    const audio=this.loader.getSound(key); if(!audio||this.currentMusic===audio) return;
-    this.stopMusic();
-    audio.loop=loop;
-    audio.playsInline=true;
-    this.routeThroughContext(audio);
-    audio.volume=this.muted?0:this.musicVolume;
-    this.currentMusic=audio;
-    this.tryPlay(audio);
+  decode(bytes){
+    const ctx=this.decodeCtx()||this.ctx;
+    if(!ctx) return Promise.reject(new Error("нет контекста для декодирования"));
+    // Обещание отдают не все: Safari годами умела только колбэки, и вызов там
+    // возвращает undefined. Поддерживаем оба способа сразу.
+    return new Promise((resolve,reject)=>{
+      let pr;
+      try{ pr=ctx.decodeAudioData(bytes,resolve,reject); }
+      catch(e){ reject(e); return; }
+      if(pr&&pr.then) pr.then(resolve,reject);
+    });
   }
 
-  // Браузер имеет право ОТКАЗАТЬ в воспроизведении, и отказ приходит
-  // отклонённым промисом, а не исключением. Раньше он молча проглатывался —
-  // и был случай, когда это означало тишину до конца вкладки: файл на 3.8 МБ
-  // догружается уже ПОСЛЕ нажатия «Играть», просьба сыграть приходит из
-  // игрового цикла, то есть вне жеста пользователя, и Safari её отклоняет.
-  // Поэтому отказ запоминается и повторяется на ближайшем касании — там он
-  // снова внутри жеста и проходит.
-  tryPlay(el){
-    const pr=el.play();
-    if(!pr||!pr.catch) return;
-    pr.catch(()=>{ this.needsGesture=true; this.armRetry(); });
-  }
-
-  armRetry(){
-    if(this._retryArmed) return;
-    this._retryArmed=true;
-    const retry=()=>{
-      this.unlock();
-      const el=this.currentMusic;
-      if(el&&el.paused){ const pr=el.play(); if(pr&&pr.catch) pr.catch(()=>{}); }
-      if(!el||!el.paused){
-        this.needsGesture=false;
-        for(const ev of ["pointerdown","touchend","keydown"]) window.removeEventListener(ev,retry);
-        this._retryArmed=false;
-      }
+  // ЗАПУСТИТЬ ТРЕК ФАЙЛОМ. Источник одноразовый: остановленный узел не
+  // запустить заново, поэтому на каждый запуск создаётся новый, а место в
+  // треке берётся из this.at (см. stopFile).
+  playFile(key,loop=true){
+    const ctx=this.ctx, buf=this.loader?.getSound(key);
+    if(!ctx||!buf) return;
+    if(this.fileKey===key&&this.fileSrc) return;   // этот и так играет
+    this.stopFile();
+    if(!this.fileGain){
+      this.fileGain=ctx.createGain();
+      this.fileGain.connect(this.master);          // «M» гасит и музыку тоже
+    }
+    this.fileGain.gain.setValueAtTime(this.musicVolume,ctx.currentTime);
+    let off=this.at.get(key)||0;
+    // Трек мог доиграть до конца, пока его не было слышно: не зациклённый
+    // начинаем сначала, зациклённый — с того же места внутри круга.
+    if(off>=buf.duration) off=loop?off%buf.duration:0;
+    const src=ctx.createBufferSource();
+    src.buffer=buf; src.loop=loop;
+    src.connect(this.fileGain);
+    src.start(0,off);
+    src.onended=()=>{
+      // Трек кончился сам (такое бывает только у не зациклённых — тема смерти
+      // и тема победы). Следующий раз он обязан начаться сначала.
+      if(this.fileSrc!==src) return;
+      try{ src.disconnect(); }catch{}
+      this.fileSrc=null; this.fileKey=null; this.at.set(key,0);
     };
-    for(const ev of ["pointerdown","touchend","keydown"]) window.addEventListener(ev,retry,{passive:true});
+    this.fileSrc=src; this.fileKey=key; this.fileLoop=loop;
+    this.fileStart=ctx.currentTime-off;
+  }
+
+  // СКОЛЬКО ТРЕК УЖЕ ОТЫГРАЛ. Считается по часам контекста, а они замирают
+  // вместе с ним (suspend), — поэтому свёрнутая вкладка или рекламный ролик
+  // не «прокручивают» музыку в тишине.
+  musicTime(){
+    if(!this.fileSrc||!this.ctx) return 0;
+    const buf=this.fileSrc.buffer;
+    let t=this.ctx.currentTime-this.fileStart;
+    if(this.fileLoop&&buf&&buf.duration>0) t%=buf.duration;
+    return Math.max(0,t);
   }
 
   // ПЕРЕКЛЮЧЕНИЕ ТРЕКА НЕ ПЕРЕМАТЫВАЕТ ЕГО В НАЧАЛО. Пока трек был один, это
@@ -469,26 +525,46 @@ export class AudioManager {
   //
   // reset=true оставлен для конца забега: НОВЫЙ забег обязан начинаться с
   // начала темы, иначе первый же рестарт стартует с середины.
-  stopMusic(reset=false){
-    if(!this.currentMusic) return;
-    this.currentMusic.pause();
-    if(reset) this.currentMusic.currentTime=0;
-    this.currentMusic=null;
+  stopFile(reset=false){
+    const src=this.fileSrc, key=this.fileKey;
+    if(!src) return;
+    this.at.set(key,reset?0:this.musicTime());
+    this.fileSrc=null; this.fileKey=null;
+    src.onended=null;
+    try{ src.stop(); }catch{}
+    try{ src.disconnect(); }catch{}
   }
+
+  // Разовый звук файлом. Своих файлов у эффектов нет (все четыре записи —
+  // музыка), но правило то же: буфер, а не элемент.
   playSfx(key){
     if(this.muted) return;
-    const audio=this.loader.getSound(key);
-    if(!audio){ this.sfx(key); return; }   // файла нет — играем синтезом
-    const clone=audio.cloneNode(); clone.volume=this.sfxVolume; clone.play().catch(()=>{});
+    const buf=this.loader?.getSound(key);
+    const ctx=this.ctx;
+    if(!buf||!ctx||ctx.state!=="running"){ this.sfx(key); return; }   // нет файла — синтез
+    const g=ctx.createGain();
+    g.gain.value=this.sfxVolume;
+    g.connect(this.master);
+    const src=ctx.createBufferSource();
+    src.buffer=buf; src.connect(g); src.start(0);
+    src.onended=()=>{ try{ src.disconnect(); g.disconnect(); }catch{} };
   }
-  // ФАЙЛ ПРОПАЛ УЖЕ ПОСЛЕ ТОГО, КАК ЕГО СОЧЛИ ГОТОВЫМ. Загрузчик отдаёт
-  // звуковой элемент сразу и не ждёт загрузки (см. AssetLoader.loadSound), —
-  // значит ошибка сети или отсутствующий файл приходят позже, иногда уже
-  // посреди забега. Тогда трек надо пересобрать: applyMusic сам увидит, что
-  // файла больше нет, и включит синтез.
+
+  // ФАЙЛ ПРИШЁЛ УЖЕ ПОСЛЕ ТОГО, КАК ТРЕК ПОПРОСИЛИ. Пока он летел, играл
+  // синтез (или тишина на экране итогов) — теперь его пора вытеснить. Для
+  // забега это делает и без того ежекадровый music(), но экран итогов кадров
+  // не крутит: без этого колбэка тема смерти не заиграла бы никогда.
+  soundReady(key){
+    if(!this.wanted) return;
+    if(MUSIC_FILES[this.wanted]===key||MUSIC_FILES.run===key) this.applyMusic();
+  }
+
+  // ФАЙЛ ПРОПАЛ. Ошибка сети или отсутствующий файл приходят уже после того,
+  // как игра пошла, иногда посреди забега. Тогда трек надо пересобрать:
+  // applyMusic сам увидит, что буфера больше нет, и включит синтез.
   soundLost(key){
     if(MUSIC_FILES[this.wanted]===key||MUSIC_FILES.run===key){
-      this.stopMusic();
+      this.stopFile();
       this.applyMusic();
     }
   }
@@ -497,21 +573,22 @@ export class AudioManager {
   // помнит SettingsSystem, а здесь остаётся только применение.
   //
   // Музыка правится в двух местах сразу, и это не дублирование: играть может
-  // либо файл (<audio>.volume), либо синтез (musicGain) — какой именно, знает
-  // applyMusic, а ползунку до этого дела быть не должно.
+  // либо файл (fileGain), либо синтез (musicGain) — какой именно, знает
+  // applyMusic, а ползунку до этого дела быть не должно. Оба узла висят под
+  // master, поэтому выключение звука по «M» их не касается.
   setVolumes(music,sfx){
     if(typeof music==="number") this.musicVolume=Math.min(1,Math.max(0,music));
     if(typeof sfx==="number") this.sfxVolume=Math.min(1,Math.max(0,sfx));
-    if(this.currentMusic) this.currentMusic.volume=this.muted?0:this.musicVolume;
-    if(this.musicGain&&this.ctx){
-      // setTargetAtTime, а не присваивание: скачок громкости слышен щелчком
-      this.musicGain.gain.setTargetAtTime(this.muted?0:this.musicVolume,this.ctx.currentTime,0.05);
+    if(!this.ctx) return;
+    // setTargetAtTime, а не присваивание: скачок громкости слышен щелчком
+    for(const g of [this.musicGain,this.fileGain]){
+      if(g) g.gain.setTargetAtTime(this.musicVolume,this.ctx.currentTime,0.05);
     }
   }
 
   toggleMute(){
     this.muted=!this.muted;
-    if(this.currentMusic) this.currentMusic.volume=this.muted?0:this.musicVolume;
+    // Одной ручкой на всё: и файл, и синтез, и эффекты идут через master.
     if(this.master) this.master.gain.value=this.muted?0:1;
     return this.muted;
   }
@@ -526,25 +603,21 @@ export class AudioManager {
   //     и музыка игры поверх него читается как поломка);
   //   — игра на паузе.
   //
-  // Останавливаются ОБА источника: файл (<audio>) и синтез (AudioContext).
-  // Глушить только громкость нельзя — звук, играющий в ноль, продолжает
-  // расходовать батарею и, что важнее, продолжает ИДТИ: вернувшись через
-  // минуту, игрок попал бы в середину трека.
+  // ОСТАНАВЛИВАЕТСЯ ОДИН КОНТЕКСТ — И В НЁМ ВСЁ СРАЗУ. Пока музыка была
+  // файлом, её приходилось глушить отдельно от синтеза: медиа-элемент играл
+  // мимо контекста и переживал его усыпление. Теперь источник один, и вместе
+  // с контекстом замирают и трек, и отложенные ноты, и часы, по которым
+  // считается место в треке (см. musicTime) — вернувшись через минуту, игрок
+  // попадает ровно туда, где остановился.
   //
-  // Возврат мягкий: файл просят играть ровно тогда, когда он и должен, а
-  // отказ автоплея (после сворачивания браузер вправе не пустить) уже умеет
-  // подождать ближайшего касания — см. tryPlay/armRetry.
+  // Глушить только громкость нельзя: звук, играющий в ноль, продолжает
+  // расходовать батарею и продолжает ИДТИ.
   suspend(on){
     if(this.suspended===!!on) return;
     this.suspended=!!on;
-    if(on){
-      if(this.currentMusic&&!this.currentMusic.paused) this.currentMusic.pause();
-      // Синтез: контекст усыпляем целиком — вместе с ним замолкают и
-      // отложенные ноты, которые иначе выстрелили бы очередью при возврате.
-      try{ if(this.ctx&&this.ctx.state==="running") this.ctx.suspend(); }catch{}
-      return;
-    }
-    try{ if(this.ctx&&this.ctx.state==="suspended") this.ctx.resume(); }catch{}
-    if(this.currentMusic&&this.currentMusic.paused) this.tryPlay(this.currentMusic);
+    try{
+      if(on){ if(this.ctx&&this.ctx.state==="running") this.ctx.suspend(); }
+      else if(this.ctx&&this.ctx.state==="suspended") this.ctx.resume();
+    }catch{}
   }
 }

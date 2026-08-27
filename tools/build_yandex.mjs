@@ -94,6 +94,19 @@ for (const f of textFiles) {
     if (m[1] === "/sdk.js") continue;
     problems.push(`${f.rel}: абсолютный путь ${m[1]}`);
   }
+  // 4a. МЕДИА-ЭЛЕМЕНТЫ. Игра возвращалась с модерации дважды из-за них
+  //     (пп. 1.6.2.5 и 1.6.1.6): любой audio-тег, video-тег, конструктор Audio поднимает
+  //     системный плеер на десктопе и карточку в шторке уведомлений на
+  //     телефоне. Весь звук обязан идти через Web Audio API — и это ровно та
+  //     проверка, которую руками забывают.
+  for (const m of body.matchAll(/<(?:audio|video)\b|new\s+Audio\s*\(|createMediaElementSource|navigator\.mediaSession/gi)) {
+    // Строка, объясняющая, почему медиа-элементов быть не должно, сама по себе
+    // не медиа-элемент: комментарии пропускаем.
+    const nl = body.lastIndexOf("\n", m.index) + 1;
+    const line = body.slice(nl, body.indexOf("\n", m.index) + 1 || body.length);
+    if (/^\s*(\/\/|\*|\/\*|<!--)/.test(line)) continue;
+    problems.push(`${f.rel}: медиа-элемент «${m[0]}» — весь звук обязан идти через Web Audio API`);
+  }
   for (const m of body.matchAll(/https?:\/\/[^"'\s)]+/g)) {
     const url = m[0];
     // Ссылки наружу площадка запрещает: разрешено только то, что ведёт к ней
@@ -102,6 +115,16 @@ for (const f of textFiles) {
     if (/w3\.org/.test(url)) continue;
     problems.push(`${f.rel}: внешняя ссылка ${url}`);
   }
+}
+
+// 5. СТАРТОВЫЙ ЭКРАН НЕ ДОЛЖЕН БЫТЬ ВИДЕН ДО `LoadingAPI.ready()` (п. 1.19).
+//    Статически проверить можно только это: экран загрузки в разметке есть, а
+//    стартовый спрятан классом. Сам порядок вызовов проверяется прогоном —
+//    см. YANDEX.md, раздел «Чем это проверять».
+{
+  const html = await readFile(path.join(SRC, "index.html"), "utf8");
+  if (!/id="bootScreen"/.test(html)) problems.push("index.html: нет экрана загрузки (#bootScreen) — интерфейс окажется доступен до ready()");
+  if (!/<div id="startScreen" class="hidden">/.test(html)) problems.push("index.html: стартовый экран не спрятан классом hidden — он покажется до ready()");
 }
 
 console.log(`Файлов: ${files.length}, распакованный размер: ${(total / 1048576).toFixed(1)} МБ (потолок 100 МБ)`);
