@@ -35,10 +35,23 @@ export class YandexPlatform {
   // первого показа интерфейса (п. 2.14), — но ждёт со сторожем: молчащий SDK
   // (свой адрес, блокировщик, оборванная сеть) не должен запирать игру на
   // экране загрузки. Сторож в boot() (main.js).
+  //
+  // ИНИЦИАЛИЗАЦИЮ ЗАПУСКАЕТ НЕ ЭТОТ МОДУЛЬ, А САМА СТРАНИЦА — прямо в <head>,
+  // сразу за тегом SDK (см. index.html). Здесь только ЗАБИРАЕТСЯ готовый
+  // промис, и разница не стилистическая: игра — это модуль из 32 файлов, и
+  // `YaGames.init()`, вызванный отсюда, ждал загрузки их всех. Замер: почти
+  // секунда до вызова на 60 мс сетевой задержки, на мобильном интернете —
+  // секунды, и всё это время лоадер площадки стоит в «W — ожидает
+  // инициализации». Это и есть «SDK встроено некорректно» (п. 1.1).
   async boot(){
-    if(typeof window==="undefined"||!window.YaGames) return false;
+    if(typeof window==="undefined") return false;
     try{
-      this.ysdk=await window.YaGames.init();
+      // Промис из <head>; если страницу собрали без него (чужая разметка,
+      // ручная правка), инициализируем сами — но уже с этой задержкой.
+      const pending=window.ysdkReady
+        || (window.YaGames&&window.YaGames.init ? window.YaGames.init() : null);
+      this.ysdk=pending?await pending:null;
+      if(!this.ysdk) return false;
       this.enabled=true;
       // ЯЗЫК БЕРЁТСЯ У ПЛОЩАДКИ, а не задаётся в коде — этого требуют
       // критерии модерации. Игра русскоязычная целиком и другого языка не
@@ -62,7 +75,10 @@ export class YandexPlatform {
       this.flushGameplay();
       return true;
     }catch(e){
-      // Молча. Упавший SDK — это не повод не дать поиграть.
+      // Игра идёт дальше — упавший SDK не повод не дать поиграть, — но в
+      // консоль это обязано попасть: «SDK не поднялся» ищут именно там, и
+      // проглоченная ошибка стоила отказа по п. 1.1.
+      console.warn("SDK Яндекс Игр не поднялся, игра идёт без него:",e);
       this.ysdk=null; this.enabled=false;
       return false;
     }
@@ -85,7 +101,10 @@ export class YandexPlatform {
   sendReady(){
     if(!this.enabled||!this.readyWanted||this.readySent) return;
     this.readySent=true;
-    try{ this.ysdk.features?.LoadingAPI?.ready?.(); }catch{}
+    try{
+      this.ysdk.features?.LoadingAPI?.ready?.();
+      console.info("SDK Яндекс Игр: LoadingAPI.ready()");
+    }catch(e){ console.warn("LoadingAPI.ready() не прошёл:",e); }
   }
 
   // ГЕЙМПЛЕЙ ИДЁТ / НЕ ИДЁТ. Площадка по этим двум вызовам понимает, играет
